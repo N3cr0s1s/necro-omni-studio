@@ -701,6 +701,9 @@ export function App(): ReactNode {
                   />
                 )
               }
+              {...(drag.snappedTo !== undefined
+                ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
+                : {})}
               onToggleSnap={() => setSnap((value) => !value)}
               onToggleRipple={() => setRipple((value) => !value)}
               onZoom={view.zoomAt}

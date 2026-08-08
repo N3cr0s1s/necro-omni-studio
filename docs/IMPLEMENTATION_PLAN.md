@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1874 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1878 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1914,3 +1914,14 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   decision — which track and which frame — is a pure exported function with its own
   tests, and what remains in the component is reading the payload and calling it.
   The same split now covers the marquee's geometry.
+
+- 2026-08-08: The snap indicator. Snapping has worked since M3 and
+  `snapSpanTranslation` has always reported **what** it caught — the drag hook
+  threw that away. Without it, a clip locking to a cut is indistinguishable from a
+  clip refusing to follow the pointer, and a user who cannot see what it caught
+  learns to distrust the feature and turns it off.
+
+  The line is **named** as well as drawn: "playhead" and "the end of that clip" are
+  different reasons for a clip to have jumped, and a bare line leaves the user to
+  work it out. Dashed, so it is never mistaken for the playhead it may be sitting
+  exactly on top of.

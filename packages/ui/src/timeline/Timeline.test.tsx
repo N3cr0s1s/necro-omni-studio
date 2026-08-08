@@ -346,6 +346,33 @@ describe('the marquee', () => {
   });
 });
 
+describe('the snap indicator', () => {
+  it('draws nothing when a drag has caught nothing', () => {
+    renderTimeline();
+    expect(document.querySelector('[data-snap-line]')).toBeNull();
+  });
+
+  it('draws a line where the drag snapped', () => {
+    // 400 frames at 4 f/px is 100 px in.
+    renderTimeline({ snapIndicator: { frame: frameIndex(400), kind: 'clip-end' } });
+    const line = document.querySelector('[data-snap-line]') as HTMLElement;
+
+    expect(line.style.left).toBe('100px');
+  });
+
+  it('names what it caught, since a bare line does not say why the clip jumped', () => {
+    renderTimeline({ snapIndicator: { frame: frameIndex(0), kind: 'playhead' } });
+    expect(screen.getByText('playhead')).toBeDefined();
+  });
+
+  it('is not the playhead, which it may be sitting exactly on top of', () => {
+    renderTimeline({ snapIndicator: { frame: frameIndex(400), kind: 'playhead' } });
+    const line = document.querySelector('[data-snap-line]') as HTMLElement;
+
+    expect(line.style.borderLeft).toContain('dashed');
+  });
+});
+
 describe('where a drop lands', () => {
   // Tested directly: jsdom has no `DragEvent`, so a drop cannot be dispatched at a React handler
   // there. What is left in the component is reading the payload and calling this.

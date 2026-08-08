@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef,
 import {
   type ClipId,
   type FrameIndex,
+  type Result,
   type TimelineDocument,
   type TrackId,
   frameIndex,
@@ -9,6 +10,7 @@ import {
 } from '@nos/core';
 import {
   type EditError,
+  type SnapCandidate,
   DEFAULT_SNAP_PIXELS,
   collectSnapCandidates,
   moveClip,
@@ -57,6 +59,13 @@ export interface ClipDrag {
   readonly document: TimelineDocument;
   readonly dragging: boolean;
   readonly rejection: string | undefined;
+  /**
+   * What the drag is currently locked to, if anything.
+   *
+   * Surfaced because snapping is otherwise indistinguishable from the clip refusing to follow the
+   * pointer. A user who cannot see *what* it caught learns to distrust the feature and turns it off.
+   */
+  readonly snappedTo: SnapCandidate | undefined;
   begin(kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>): void;
 }
 
@@ -75,6 +84,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
   const [drag, setDrag] = useState<DragState | undefined>(undefined);
   const [preview, setPreview] = useState<TimelineDocument | undefined>(undefined);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
+  const [snappedTo, setSnappedTo] = useState<SnapCandidate | undefined>(undefined);
 
   // Read inside the window listeners, which are attached once per gesture and must not close over a
   // stale document or zoom.
@@ -86,6 +96,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
       setDrag({ clip, kind, originX: event.clientX, document });
       setPreview(undefined);
       setRejection(undefined);
+      setSnappedTo(undefined);
     },
     [document],
   );
@@ -105,7 +116,8 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
       });
 
       if (result.ok) {
-        setPreview(result.value);
+        setPreview(result.value.document);
+        setSnappedTo(result.value.snappedTo);
         setRejection(undefined);
       } else {
         // The preview stops following the pointer and says why, rather than snapping the clip somewhere
@@ -117,6 +129,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
     function onUp(): void {
       const state = latest.current.drag;
       setDrag(undefined);
+      setSnappedTo(undefined);
       setPreview((current) => {
         if (current !== undefined && state !== undefined) {
           commit(labelFor(state.kind), current);
@@ -139,6 +152,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
     document: preview ?? document,
     dragging: drag !== undefined,
     rejection,
+    snappedTo,
     begin,
   };
 }
@@ -156,40 +170,51 @@ function labelFor(kind: DragKind): string {
  * accumulates rounding at every event, and a slow drag would end somewhere different from a fast one
  * covering the same distance.
  */
+interface DragOutcome {
+  readonly document: TimelineDocument;
+  readonly snappedTo: SnapCandidate | undefined;
+}
+
 function applyDrag(
   state: DragState,
   deltaFrames: number,
   context: { snapEnabled: boolean; viewport: TimelineViewport; playhead: FrameIndex },
-): ReturnType<typeof moveClip> {
+): Result<DragOutcome, EditError> {
   const located = locateClip(state.document, state.clip);
   if (located === undefined) return { ok: false, error: { kind: 'clip-not-found', clip: state.clip } };
 
   const { track, clip } = located;
 
   if (state.kind === 'trim-start') {
-    return trimClipStart(state.document, state.clip, deltaFrames);
+    return plain(trimClipStart(state.document, state.clip, deltaFrames));
   }
   if (state.kind === 'trim-end') {
-    return trimClipEnd(state.document, state.clip, deltaFrames);
+    return plain(trimClipEnd(state.document, state.clip, deltaFrames));
   }
   if (state.kind === 'slip') {
     // Dragging left pulls later material into the window, which is what the hand expects: the content
     // follows the pointer, not the source read position.
-    return slipClip(state.document, state.clip, -deltaFrames);
+    return plain(slipClip(state.document, state.clip, -deltaFrames));
   }
 
   const target = frameIndex(Math.max(0, clip.span.start + deltaFrames));
-  const start = context.snapEnabled
+  const snap = context.snapEnabled
     ? snapSpanTranslation(
         target,
         clip.span.duration,
         // The clip being dragged is ignored, or it would snap to its own edges and never move.
         collectSnapCandidates(state.document, context.playhead, { ignoreClips: [state.clip] }),
         snapThresholdFrames(DEFAULT_SNAP_PIXELS, context.viewport.framesPerPixel),
-      ).frame
-    : target;
+      )
+    : { frame: target };
 
-  return moveClip(state.document, state.clip, track.id as TrackId, start);
+  const moved = moveClip(state.document, state.clip, track.id as TrackId, snap.frame);
+  return moved.ok ? { ok: true, value: { document: moved.value, snappedTo: snap.snappedTo } } : moved;
+}
+
+/** An operation that cannot snap, in the shape the caller expects. */
+function plain(result: ReturnType<typeof trimClipStart>): Result<DragOutcome, EditError> {
+  return result.ok ? { ok: true, value: { document: result.value, snappedTo: undefined } } : result;
 }
 
 /** A rejection the user can act on, rather than a discriminant. */

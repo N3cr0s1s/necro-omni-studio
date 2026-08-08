@@ -92,6 +92,13 @@ export interface TimelineProps {
    * wherever the playhead happened to be — which is the whole reason to drag rather than double-click.
    */
   readonly onDropAsset?: (asset: string, track: TrackId, frame: FrameIndex) => void;
+  /**
+   * The frame a drag is currently snapped to, and what it caught.
+   *
+   * Drawn because snapping is otherwise indistinguishable from the clip refusing to follow the
+   * pointer — a user who cannot see what it caught learns to distrust it and turns it off.
+   */
+  readonly snapIndicator?: { readonly frame: FrameIndex; readonly kind: string };
   readonly onTrackMute?: (track: TrackId) => void;
   readonly onTrackSolo?: (track: TrackId) => void;
   readonly onTrackLock?: (track: TrackId) => void;
@@ -293,6 +300,10 @@ export function Timeline(props: TimelineProps): ReactNode {
               </Fragment>
             ))}
           </div>
+
+          {props.snapIndicator !== undefined && (
+            <SnapLine px={frameToPx(viewport, props.snapIndicator.frame)} kind={props.snapIndicator.kind} />
+          )}
 
           <Playhead px={frameToPx(viewport, playhead)} />
         </div>
@@ -662,6 +673,45 @@ function useMarquee(options: {
   }, [rect]);
 
   return { rect, begin };
+}
+
+/**
+ * The line a drag has snapped to.
+ *
+ * Named as well as drawn: "playhead" and "the end of that clip" are different reasons for a clip to
+ * have jumped, and a bare line leaves the user to work out which. Dashed, so it is never mistaken for
+ * the playhead it may be sitting exactly on top of.
+ */
+function SnapLine({ px, kind }: { readonly px: number; readonly kind: string }): ReactNode {
+  return (
+    <div
+      data-snap-line={kind}
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        left: px,
+        top: 0,
+        bottom: 0,
+        width: 0,
+        borderLeft: `1px dashed ${token.warn}`,
+        pointerEvents: 'none',
+        zIndex: 3,
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: 4,
+          font: token.textMeta,
+          color: token.warn,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {kind.replace(/-/g, ' ')}
+      </span>
+    </div>
+  );
 }
 
 /**
