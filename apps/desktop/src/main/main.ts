@@ -6,6 +6,7 @@ import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import {
   IPC,
   IPC_EVENTS,
+  PROVENANCE_SUFFIX,
   type BackendConfig,
   type BackendResponse,
   type FolderEntry,
@@ -357,6 +358,19 @@ function registerHandlers(): void {
       });
     },
   );
+
+  ipcMain.handle(IPC.writeProvenance, async (_event, asset: unknown, contents: unknown): Promise<void> => {
+    // The suffix is appended here rather than accepted from the renderer, which keeps this a way to
+    // annotate a file instead of a way to write one anywhere in the project.
+    const target = `${resolveInProject(requireProject(), requireString(asset))}${PROVENANCE_SUFFIX}`;
+    const { mkdir, writeFile, rename } = await import('node:fs/promises');
+    await mkdir(dirname(target), { recursive: true });
+    // Through a sibling and a rename, like every other write here: the folder watcher is live and a
+    // half-written record would be read by the browser as a broken one.
+    const temporary = `${target}.partial`;
+    await writeFile(temporary, requireString(contents), 'utf8');
+    await rename(temporary, target);
+  });
 
   ipcMain.handle(IPC.revealInFolder, async (_event, path: unknown): Promise<void> => {
     shell.showItemInFolder(resolveInProject(requireProject(), requireString(path)));

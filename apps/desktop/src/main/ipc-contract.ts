@@ -30,6 +30,8 @@ export const IPC = {
   clearRecovery: 'project:clear-recovery',
   /** Reads a project-relative text file, e.g. a manifest or a note. */
   readTextFile: 'project:read-text',
+  /** Records what generated an output, beside the output. */
+  writeProvenance: 'project:write-provenance',
   /** Writes a project-relative text file. */
   writeTextFile: 'project:write-text',
   /** Lists a project subtree. */
@@ -71,6 +73,17 @@ export const IPC_EVENTS = {
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
 
 import type { FileChange, WatcherStatus } from '@nos/media';
+
+/**
+ * Suffix appended to name a file's provenance record.
+ *
+ * Mirrors `PROVENANCE_SUFFIX` in `@nos/generators` rather than importing it: the main process runs
+ * unbundled, so a *value* import from a workspace package would have to resolve against built
+ * output. The same reasoning already governs the recovery filename in `project-folder.ts` and the
+ * debounce in `project-watcher.ts` — both are part of the on-disk layout, described on both sides.
+ * `ipc-contract.test.ts` asserts the two stay equal.
+ */
+export const PROVENANCE_SUFFIX = '.nos.json';
 
 export interface ProjectInfo {
   /** Absolute, and used only for display and for the recent list. */
@@ -145,6 +158,14 @@ export interface DesktopBridge {
   loadRecovery(): Promise<RecoverySnapshot | undefined>;
   clearRecovery(): Promise<void>;
   readTextFile(path: string): Promise<string | undefined>;
+  /**
+   * Writes a generated file's provenance record beside it.
+   *
+   * The *asset* is named, not the record: the main process appends the suffix itself, so this is a
+   * capability to annotate a file rather than a general licence to write anywhere in the project.
+   * Named methods over a generic write is the rule the whole bridge follows.
+   */
+  writeProvenance(asset: string, contents: string): Promise<void>;
   writeTextFile(path: string, contents: string): Promise<void>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
 

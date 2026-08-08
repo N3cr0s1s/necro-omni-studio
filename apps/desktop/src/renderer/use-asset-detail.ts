@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetPath } from '@nos/core';
+import { type AssetProvenance, parseProvenance, provenancePath } from '@nos/generators';
 import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 import { shouldProxy } from './use-proxies.js';
 
@@ -23,6 +24,13 @@ export interface AssetDetail {
   readonly hasProxy: boolean | undefined;
   readonly hasFilmstrip: boolean | undefined;
   readonly isGenerated: boolean;
+  /**
+   * What made this file, when it was made by a generator.
+   *
+   * Read rather than inferred: the file's name is a job id, so without the record beside it there is
+   * nothing to reconstruct a prompt or a seed from.
+   */
+  readonly provenance: AssetProvenance | undefined;
 }
 
 export interface AssetDetailOptions {
@@ -30,6 +38,8 @@ export interface AssetDetailOptions {
   readonly sidecar: SidecarInfo | undefined;
   /** Listing of `cache/`, so artifact presence needs no extra round trip. */
   readonly cacheEntries: readonly string[];
+  /** Reads a project file, for the provenance record beside a generated one. */
+  readonly readText?: (path: string) => Promise<string | undefined>;
 }
 
 /**
@@ -56,8 +66,34 @@ export function isGeneratedAsset(asset: AssetPath): boolean {
 }
 
 export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undefined {
-  const { asset, sidecar, cacheEntries } = options;
+  const { asset, sidecar, cacheEntries, readText } = options;
   const [probed, setProbed] = useState<Probed | undefined>(undefined);
+  const [provenance, setProvenance] = useState<AssetProvenance | undefined>(undefined);
+
+  // Looked for on every file, not only those under `generated/`: a generated clip the user moved or
+  // renamed keeps its record beside it, and refusing to read one because of where the file now sits
+  // would lose exactly the history this exists to keep.
+  useEffect(() => {
+    if (asset === undefined || readText === undefined) {
+      setProvenance(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setProvenance(undefined);
+
+    void readText(provenancePath(asset)).then((text) => {
+      if (cancelled || text === undefined) return;
+      const parsed = parseProvenance(text);
+      // A record written by an older version or edited by hand leaves the pane silent rather than
+      // broken: the file it describes is still perfectly usable.
+      if (parsed.ok) setProvenance(parsed.value);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [asset, readText]);
 
   // Probes are cached per asset for the session. A file's metadata changes only when the file does,
   // and the watcher already reports that — re-probing on every selection would run ffprobe each time
@@ -105,7 +141,10 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
         ? undefined
         : hasDerivation(cacheEntries, 'proxy', probed.hash),
     hasFilmstrip: probed === undefined ? undefined : hasDerivation(cacheEntries, 'filmstrip', probed.hash),
-    isGenerated: isGeneratedAsset(asset),
+    // Either the folder or a record says so. A generated file moved out of `generated/` is still
+    // generated, and the purple treatment follows the provenance rather than the path.
+    isGenerated: isGeneratedAsset(asset) || provenance !== undefined,
+    provenance,
   };
 }
 

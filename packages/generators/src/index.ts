@@ -13,6 +13,7 @@ export * from './queue/variant-plan.js';
 export * from './queue/gpu-semaphore.js';
 export * from './queue/job-queue.js';
 export * from './panel/asset-inputs.js';
+export * from './provenance/asset-provenance.js';
 export * from './staging/placeholder.js';
 export * from './staging/variant-selection.js';
 export * from './backends/mock-backend.js';

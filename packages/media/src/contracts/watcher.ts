@@ -94,7 +94,16 @@ const IGNORED_NAMES: readonly string[] = [
 ];
 
 const IGNORED_PREFIXES: readonly string[] = ['~$', '.#'];
-const IGNORED_SUFFIXES: readonly string[] = ['.tmp', '.part', '.crdownload', '.swp'];
+const IGNORED_SUFFIXES: readonly string[] = [
+  '.tmp',
+  '.part',
+  '.crdownload',
+  '.swp',
+  // A generated file's provenance record. Hidden because it is *about* the file beside it rather
+  // than a file in its own right: shown, it would double the length of `generated/` with rows
+  // nobody can do anything with, and the browser reads it into the detail panel instead.
+  '.nos.json',
+];
 
 /**
  * Whether a path should be hidden from the browser.

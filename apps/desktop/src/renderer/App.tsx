@@ -63,6 +63,7 @@ import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
+import { useProvenanceWriter } from './use-provenance-writer.js';
 import { useCacheStats } from './use-cache-stats.js';
 import { BrowserDetail } from './BrowserDetail.js';
 import { useClipDrag } from './use-clip-drag.js';
@@ -104,6 +105,18 @@ function emptyProject(name: string): TimelineDocument {
 /** The bridge, or `undefined` when the UI runs in a plain browser (the visual harness). */
 function bridge(): DesktopBridge | undefined {
   return (globalThis as { nos?: DesktopBridge }).nos;
+}
+
+/**
+ * Reads a project file, tolerating its absence.
+ *
+ * Module-level so its identity is stable: an inline arrow would be a new value every render, and the
+ * effect that reads a provenance record would then re-read on each one.
+ */
+async function readText(path: string): Promise<string | undefined> {
+  return bridge()
+    ?.readTextFile(path)
+    .catch(() => undefined);
 }
 
 export function App(): ReactNode {
@@ -460,7 +473,12 @@ export function App(): ReactNode {
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
   const cacheEntries = useCacheListing(bridge(), project?.root, proxies.ready + cache.fileCount);
-  const assetDetail = useAssetDetail({ asset: browserSelection, sidecar, cacheEntries });
+  const assetDetail = useAssetDetail({ asset: browserSelection, sidecar, cacheEntries, readText });
+
+  // Every generated file gets a record beside it, including the variants that were looked at and
+  // discarded — those stay on disk, and leaving them unlabelled would leave the folder full of
+  // exactly the anonymous files this exists to prevent.
+  useProvenanceWriter(runtime.snapshot, library.registry, bridge);
 
   /**
    * The non-error status line.

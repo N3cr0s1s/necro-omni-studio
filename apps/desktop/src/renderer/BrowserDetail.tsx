@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { provenanceRows } from '@nos/generators';
 import { AssetDetail, Button, Mono } from '@nos/ui';
 import { token } from '@nos/ui';
 import type { AssetDetail as AssetDetailValue } from './use-asset-detail.js';
@@ -18,6 +19,59 @@ export interface BrowserDetailProps {
   readonly cache: CacheStats;
 }
 
+/**
+ * What made the selected file.
+ *
+ * Shown only when there is a record, and it is the answer to the question a folder full of
+ * `ad0eb912-5bf6-4d40…` cannot answer: which generator, when, and with what prompt. The prompt gets
+ * room and wraps; everything else is a tight label/value pair, because a result is recognised by its
+ * prompt long before it is recognised by its step count.
+ */
+function Provenance({ asset }: { readonly asset: AssetDetailValue }): ReactNode {
+  const record = asset.provenance;
+  if (record === undefined) return null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: token.space2,
+        paddingTop: token.space3,
+        borderTop: `1px solid ${token.borderSubtle}`,
+        // Bounded and scrollable: a manifest may declare twenty parameters, and a panel that grew
+        // with the generator would push the cache line — which is always relevant — off the screen.
+        maxHeight: 168,
+        overflowY: 'auto',
+      }}
+    >
+      {provenanceRows(record).map((row) => (
+        <div
+          key={`${row.label}:${row.value}`}
+          style={{
+            display: 'flex',
+            gap: token.space2,
+            alignItems: row.long === true ? 'flex-start' : 'baseline',
+            flexDirection: row.long === true ? 'column' : 'row',
+          }}
+        >
+          <Mono tone={token.textFaint}>{row.label}</Mono>
+          <Mono
+            tone={row.long === true ? token.generatedText : token.textDim}
+            style={
+              row.long === true
+                ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }
+                : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+            }
+          >
+            {row.value}
+          </Mono>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
@@ -33,6 +87,8 @@ export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
           {...(asset.hasFilmstrip !== undefined ? { hasFilmstrip: asset.hasFilmstrip } : {})}
         />
       )}
+
+      {asset?.provenance !== undefined && <Provenance asset={asset} />}
 
       <div
         style={{
