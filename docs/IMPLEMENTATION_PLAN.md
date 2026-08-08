@@ -624,12 +624,29 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   two long texts differing past the truncation point otherwise collide, and a
   colliding key renders the wrong text from cache.
 
-### Verification harnesses (four of them now)
+### Verification harnesses (five of them now)
 
-`apps/desktop/exportcheck` is the newest and the only one that drives the whole application:
-`node apps/desktop/exportcheck/run.mjs` launches the shell, lets it reopen a fixture project, exports,
-and reads the delivered mp4 back with ffmpeg. It exists because the export dropping every title was
-invisible to every unit test — each side was correct alone, and only the seam was wrong.
+Two of them drive the whole application. `apps/desktop/exportcheck` launches the shell, lets it reopen
+a fixture project, exports, and reads the delivered mp4 back with ffmpeg — it exists because the export
+dropping every title was invisible to every unit test, each side being correct alone and only the seam
+wrong. `apps/desktop/perfcheck` writes a **200-clip** project, zooms out until all of it is on screen,
+and drags a clip for sixty frames while watching the main thread. It covers the half of §8 nothing
+measured: `@nos/smoke` guards the document and the plan builders, but what a user feels is React
+rendering two hundred clips under a moving pointer.
+
+**Measured, so it does not have to be argued about again:** a pointer move costs ~12 ms of the 16 ms
+budget at 200 clips fully zoomed out, with **zero long tasks**. The timeline meets §8.
+
+Two lessons from getting there, both about the measurement rather than the code:
+
+- **Frame intervals measure the display, not the application.** A p95 of 17 ms read as a budget breach
+  until the idle frame turned out to be 8 ms — the screen runs at ~123 Hz, so 17 ms was two ordinary
+  frames. Assert on long tasks and on cost per interaction; never on rAF gaps, and never against the
+  refresh rate, which would make the same code pass on one machine and fail on another.
+- **Memoizing `ClipBody` is a pessimization.** Skipping the 199 clips that do not move sounds obviously
+  right and measures ~5% *slower*, because every clip's `geometry` is recomputed each render and the
+  props genuinely differ, so the comparison never skips and only adds work. Do not try it again without
+  first making the drag preview preserve clip identity — and without a number showing it helps.
 
 Each covers a property that cannot be checked in Vitest, and each exits non-zero
 so it can gate a release:
@@ -639,6 +656,7 @@ so it can gate a release:
 | Compositor pixels (17)  | `cd packages/compositor && npm run glcheck:serve` | `npm run glcheck`                         |
 | Text rasterizer (19)    | `cd packages/text && npx vite --port 5201`        | `node packages/text/rastercheck/run.mjs`  |
 | UI layout (screenshots) | `cd packages/ui && npx vite`                      | Playwright screenshot, compare to mockups |
+| Timeline at 200 clips   | none — writes its own project                     | `node apps/desktop/perfcheck/run.mjs`     |
 
 ### Effect and keyframe UI rules (keep these)
 
