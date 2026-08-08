@@ -1,0 +1,20 @@
+{
+  "name": "@nos/smoke",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end smoke tests and performance guards. Test-only: ships nothing.",
+  "dependencies": {
+    "@nos/audio": "*",
+    "@nos/compositor": "*",
+    "@nos/core": "*",
+    "@nos/editing": "*",
+    "@nos/effects": "*",
+    "@nos/export": "*",
+    "@nos/generators": "*",
+    "@nos/masks": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

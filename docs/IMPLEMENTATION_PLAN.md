@@ -186,19 +186,26 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       against a real WebGL2 driver**, including a transposition check.
 
 ### Phase 10 — Hardening
-- [ ] End-to-end smoke test (mock backend)
-- [ ] Performance guard: timeline interaction budget
-- [ ] Full typecheck + test suite green
+- [x] End-to-end smoke test in `@nos/smoke`: the shipped library is discovered,
+      a generator runs on the mock backend, a variant is picked, its output lands
+      as a clip with provenance, the compositor plans it, the mixer hears it, the
+      export planner sizes it, and the project round-trips. Crosses **package
+      boundaries** — which is where the bugs each package's own tests cannot see
+      live. It found one: batched runs collapsed three variants into one.
+- [x] Performance guard: render and mix planning, a clip move, a split and an
+      undo, all inside the spec's 16 ms interaction budget on a 2000-clip
+      project — each timing check paired with the structural assertion that
+      explains why it holds, so a regression points at the cause.
+- [x] Full typecheck + test suite green
 
 ## Current status
 
-**Phases 1–9 complete (M1–M11). The generator framework works end to end: five
+**Phases 1–10 complete (M1–M11 plus hardening). The generator framework works end to end: five
 manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
-`mask` sampler with the whole path verified on a real driver. Remaining:
-Phase 10 hardening.**
-**1282 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+`mask` sampler with the whole path verified on a real driver.**
+**1304 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -209,8 +216,7 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 `@nos/backend-comfyui`, `@nos/masks`, `@nos/ui` (tokens + components),
 `apps/sidecar` (Python). Generator library in `generators/`.
 
-Next: Phase 10 hardening — an end-to-end smoke test over the mock backend, a
-timeline performance guard, and a final full-suite pass. The Electron shell
+Next: the Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -978,3 +984,22 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   concrete, actionable reason rather than hidden — the same rule the generator
   registry follows, because SAM 2 is an optional install and its absence has to be
   legible instead of looking like a missing feature.
+
+- 2026-08-08: Phase 10, hardening. The end-to-end smoke test earns its place
+  immediately: it caught that `buildSelection` produced **one** candidate per
+  *run*, while the spec's own audio manifest is batched — three variants arrive
+  as one submit with three outputs. The panel would have shown a single variant
+  and left the other two in `generated/` with no way to reach them. Every
+  package's own tests passed throughout; only a test crossing the queue, the
+  manifest and the staging model could see it.
+
+  That is the argument for the smoke test in one sentence, and the reason its
+  assertions are written as *seams* rather than as behaviour: a backend output
+  becomes a clip the compositor will draw, the clip the editing layer moved is the
+  clip the mix plan hears, and the whole thing survives the project file.
+
+  The performance guard pairs every wall-clock threshold with a structural
+  assertion — plan size proportional to the frame rather than the document,
+  untouched tracks kept by reference — because a timing check alone is noisy on a
+  loaded machine and says nothing about *why* it regressed. On a 2000-clip project
+  the structural claims are what fail first.

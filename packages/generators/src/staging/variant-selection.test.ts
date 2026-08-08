@@ -68,8 +68,22 @@ function run(id: string, overrides: Partial<JobRun> = {}): JobRun {
 const done = (id: string, seed: number, file: string): JobRun =>
   run(id, {
     seed,
+    seeds: [seed],
     status: 'complete',
     outputs: [{ key: '57', type: 'audio', path: assetPath(`generated/${file}`) }],
+  });
+
+/** One submit carrying several seeds — the shape a manifest with a `batch` block produces. */
+const batched = (id: string, seeds: readonly number[], files: readonly string[]): JobRun =>
+  run(id, {
+    seed: seeds[0] ?? 0,
+    seeds,
+    status: 'complete',
+    outputs: files.map((file) => ({
+      key: '57',
+      type: 'audio' as const,
+      path: assetPath(`generated/${file}`),
+    })),
   });
 
 const selectionOf = (runs: readonly JobRun[], current?: string) =>
@@ -136,6 +150,82 @@ describe('building a selection', () => {
   it('carries progress and stage through, so a pending candidate can show them', () => {
     const selection = selectionOf([run('r1', { status: 'running', progress: 0.4, stage: 'sampling' })]);
     expect(selection.candidates[0]).toMatchObject({ progress: 0.4, stage: 'sampling' });
+  });
+});
+
+describe('batched runs', () => {
+  it('expands one submit into a candidate per variant', () => {
+    // The spec's own audio manifest declares `batch`, so three variants arrive as **one** run with three
+    // outputs. Treating that as one candidate would show one variant where three were generated, and the
+    // other two would sit in `generated/` unreachable.
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])],
+      manifest,
+    });
+
+    expect(selection.totalCount).toBe(3);
+    expect(selection.readyCount).toBe(3);
+    expect(selection.candidates.map((candidate) => candidate.ordinal)).toEqual([1, 2, 3]);
+  });
+
+  it('pairs each variant with the seed that produced it', () => {
+    // The seed is what makes a variant reproducible; reporting the batch's first seed for all three
+    // would make two of them impossible to recreate.
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])],
+      manifest,
+    });
+
+    expect(selection.candidates.map((candidate) => candidate.seed)).toEqual([11, 22, 33]);
+  });
+
+  it('shows one pending candidate while the submit is still running', () => {
+    // Nothing to expand yet: three identical "generating" chips for one submit would misreport what is
+    // actually in flight.
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [run('r1', { status: 'running', seeds: [11, 22, 33] })],
+      manifest,
+    });
+
+    expect(selection.totalCount).toBe(1);
+    expect(selection.pending).toBe(true);
+  });
+
+  it('numbers candidates continuously across several runs', () => {
+    const selection = buildSelection({
+      group: { ...group, runs: [jobRunId('r1'), jobRunId('r2')] },
+      runs: [batched('r1', [1, 2], ['a.flac', 'b.flac']), done('r2', 3, 'c.flac')],
+      manifest,
+    });
+    expect(selection.candidates.map((candidate) => candidate.ordinal)).toEqual([1, 2, 3]);
+  });
+
+  it('ignores a companion file that is not an alternative', () => {
+    // A graph may save a waveform beside the audio; counting it as a variant would offer the user a PNG
+    // to insert on an audio track.
+    const withCompanion = run('r1', {
+      seed: 11,
+      seeds: [11, 22],
+      status: 'complete',
+      outputs: [
+        { key: '57', type: 'audio', path: assetPath('generated/a.flac') },
+        { key: '57', type: 'audio', path: assetPath('generated/b.flac') },
+        { key: '80', type: 'image', path: assetPath('generated/wave.png') },
+      ],
+    });
+
+    const selection = buildSelection({
+      group: { ...group, runs: [jobRunId('r1')] },
+      runs: [withCompanion],
+      manifest,
+    });
+    expect(selection.totalCount).toBe(2);
   });
 });
 

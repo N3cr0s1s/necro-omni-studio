@@ -68,11 +68,11 @@ export function buildSelection(request: SelectionRequest): VariantSelection {
   const byId = new Map(request.runs.map((run) => [run.id, run]));
 
   const candidates: VariantCandidate[] = [];
-  group.runs.forEach((runId, index) => {
+  for (const runId of group.runs) {
     const run = byId.get(runId);
-    if (run === undefined) return;
-    candidates.push(toCandidate(run, index + 1, manifest));
-  });
+    if (run === undefined) continue;
+    for (const candidate of candidatesOf(run, candidates.length, manifest)) candidates.push(candidate);
+  }
 
   const ready = candidates.filter((candidate) => candidate.ready);
   const kept = ready.find((candidate) => candidate.run === request.current);
@@ -98,19 +98,60 @@ function isPending(status: RunStatus): boolean {
   return status === 'queued' || status === 'waiting-for-gpu' || status === 'running';
 }
 
-function toCandidate(run: JobRun, ordinal: number, manifest: GeneratorManifest): VariantCandidate {
-  const output = primaryOutput(run.outputs, manifest);
-  return {
+/**
+ * The candidates one run contributes.
+ *
+ * Usually one — but a **batched** run is a single submit carrying several seeds, and the spec's own audio
+ * manifest is batched by default. Treating a run as one candidate would show one variant where three were
+ * generated, and the two extra files would sit in `generated/` with no way to reach them.
+ *
+ * So a completed run expands to one candidate per variant output, paired with the seed at the same index.
+ * A run that has not completed contributes a single pending candidate: there is nothing to expand yet, and
+ * showing three identical "generating" chips for one submit would misreport what is happening.
+ */
+function candidatesOf(
+  run: JobRun,
+  offset: number,
+  manifest: GeneratorManifest,
+): readonly VariantCandidate[] {
+  const shared = {
     run: run.id,
-    ordinal,
-    seed: run.seed,
     status: run.status,
-    ready: run.status === 'complete' && output !== undefined,
-    ...(output !== undefined ? { output } : {}),
     ...(run.progress !== undefined ? { progress: run.progress } : {}),
     ...(run.stage !== undefined ? { stage: run.stage } : {}),
     ...(run.error !== undefined ? { error: run.error } : {}),
   };
+
+  const outputs = variantOutputs(run.outputs, manifest);
+  if (run.status !== 'complete' || outputs.length === 0) {
+    return [{ ...shared, ordinal: offset + 1, seed: run.seed, ready: false }];
+  }
+
+  return outputs.map((output, index) => ({
+    ...shared,
+    ordinal: offset + index + 1,
+    // A sequential run reports its own seed; only a batched one indexes into the submit's seed list.
+    // Indexing unconditionally would report a batch's first seed for every ordinary run whose `seeds`
+    // array disagreed with `seed`, and the seed is what makes a result reproducible.
+    seed: run.seeds.length > 1 ? (run.seeds[index] ?? run.seed) : run.seed,
+    ready: true,
+    output,
+  }));
+}
+
+/**
+ * The outputs of a run that are variants of each other.
+ *
+ * A graph may save a preview beside what it produced, so this keeps only the outputs matching the
+ * manifest's primary declaration — everything else is a companion file, not an alternative.
+ */
+function variantOutputs(
+  outputs: readonly BackendOutput[],
+  manifest: GeneratorManifest,
+): readonly BackendOutput[] {
+  const primary = primaryOutput(outputs, manifest);
+  if (primary === undefined) return [];
+  return outputs.filter((output) => output.key === primary.key && output.type === primary.type);
 }
 
 /**
