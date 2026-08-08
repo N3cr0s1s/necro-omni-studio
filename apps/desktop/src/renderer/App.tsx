@@ -1629,6 +1629,7 @@ export function App(): ReactNode {
             tab={rightTab}
             onTabChange={setRightTab}
             recalled={recalled}
+            effectProblems={effects.problems}
             onRenameClip={renameClip}
             renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
             document={document}

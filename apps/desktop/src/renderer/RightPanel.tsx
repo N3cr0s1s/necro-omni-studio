@@ -131,6 +131,8 @@ export interface RightPanelProps {
   readonly onRenameClip?: ((clip: ClipId, name: string) => void) | undefined;
   /** Opens the clip's name field, for a rename asked for from the timeline's context menu. */
   readonly renamingClip?: boolean | undefined;
+  /** Files in the project's `effects/` folder that could not be loaded at all. */
+  readonly effectProblems?: readonly LibraryProblem[] | undefined;
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
@@ -196,6 +198,7 @@ function InspectorTab({
   onReject,
   onRenameClip,
   renamingClip,
+  effectProblems,
 }: RightPanelProps): ReactNode {
   return (
     <div className="flex flex-col">
@@ -216,6 +219,7 @@ function InspectorTab({
         onReject={onReject}
         {...(maskChoices !== undefined ? { masks: maskChoices } : {})}
         {...(onRenameClip !== undefined ? { onRename: onRenameClip } : {})}
+        {...(effectProblems !== undefined ? { effectProblems } : {})}
         renaming={renamingClip}
       />
 

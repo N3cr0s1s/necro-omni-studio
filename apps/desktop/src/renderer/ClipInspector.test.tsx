@@ -552,3 +552,53 @@ describe('transition parameters', () => {
     }
   });
 });
+
+/**
+ * Effects the project could not load.
+ *
+ * Distinct from an effect the registry rejected, which the picker already lists disabled with its
+ * reason. These are files that never reached the registry — unreadable, or not JSON — so without
+ * saying so the application skips them in silence, which is the failure the spec is most explicit
+ * about: a tool that quietly is not there costs hours.
+ */
+describe('effects that could not be loaded', () => {
+  const openPicker = async (problems: readonly { file: string; detail: string }[]) => {
+    const user = userEvent.setup();
+    render(
+      <ClipInspector
+        document={single()}
+        clip="c1"
+        effects={effects}
+        playhead={0}
+        onChange={vi.fn()}
+        effectProblems={problems}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Add effect from registry/i }));
+  };
+
+  it('names the file and says what was wrong with it', async () => {
+    await openPicker([{ file: 'vignette.json', detail: 'is not valid JSON' }]);
+    expect(screen.getByText(/vignette\.json: is not valid JSON/)).toBeTruthy();
+  });
+
+  it('lists every one, since a folder can hold more than one mistake', async () => {
+    await openPicker([
+      { file: 'a.json', detail: 'could not be read' },
+      { file: 'b.json', detail: 'is not valid JSON' },
+    ]);
+    expect(screen.getByText(/a\.json/)).toBeTruthy();
+    expect(screen.getByText(/b\.json/)).toBeTruthy();
+  });
+
+  it('says nothing when the folder loaded cleanly', async () => {
+    await openPicker([]);
+    expect(screen.queryByText(/could not be read|not valid JSON/)).toBeNull();
+  });
+
+  it('still offers the effects that did load', async () => {
+    // One bad file must not take the others with it — the same rule the loader follows.
+    await openPicker([{ file: 'broken.json', detail: 'is not valid JSON' }]);
+    expect(screen.getByRole('button', { name: 'Film Grain' })).toBeTruthy();
+  });
+});

@@ -25,7 +25,7 @@ import {
   transitionsOf,
 } from '@nos/editing';
 import type { MaskId } from '@nos/core';
-import { DiamondIcon, PlusIcon, WandSparklesIcon, XIcon } from 'lucide-react';
+import { DiamondIcon, PlusIcon, TriangleAlertIcon, WandSparklesIcon, XIcon } from 'lucide-react';
 import { type EffectStackEntry, EditableName, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldTitle } from '@nos/ui/components/ui/field';
@@ -37,6 +37,7 @@ import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
 import { ClipTiming } from './ClipTiming.js';
+import type { LibraryProblem } from './use-generator-library.js';
 import { TransformInspector } from './TransformInspector.js';
 
 /**
@@ -81,6 +82,8 @@ export interface ClipInspectorProps {
    * differently would be worse than one.
    */
   readonly renaming?: boolean | undefined;
+  /** Files in `effects/` that could not be loaded at all, so the picker can say so. */
+  readonly effectProblems?: readonly LibraryProblem[] | undefined;
 }
 
 /** One bindable mask, as the inspector needs to show it. */
@@ -101,6 +104,7 @@ export function ClipInspector({
   masks,
   onRename,
   renaming,
+  effectProblems,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -186,6 +190,7 @@ export function ClipInspector({
       {adding && (
         <EffectPicker
           effects={effects}
+          problems={effectProblems ?? []}
           onPick={(effectId) => {
             setAdding(false);
             const manifest = effects.manifestFor(effectId as never);
@@ -404,9 +409,19 @@ export const DEFAULT_TRANSITION_FRAMES = 12;
  */
 function EffectPicker({
   effects,
+  problems,
   onPick,
 }: {
   readonly effects: EffectRegistry;
+  /**
+   * Files in the project's `effects/` folder that never reached the registry.
+   *
+   * Distinct from an entry with a bad status, which the list below already shows disabled with its
+   * reason. These are files that could not be read or were not JSON at all, so the registry never saw
+   * them — and without this they are skipped in silence, which is the failure the spec is most
+   * explicit about: a tool that quietly is not there costs hours.
+   */
+  readonly problems: readonly LibraryProblem[];
   readonly onPick: (effect: string) => void;
 }): ReactNode {
   // Every entry, not only the usable ones. An effect that vanished from this list because its shader
@@ -419,6 +434,17 @@ function EffectPicker({
         <WandSparklesIcon className="size-3.5 text-muted-foreground" />
         <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Add effect</span>
       </div>
+      {problems.map((problem) => (
+        <p
+          key={problem.file}
+          className="flex items-start gap-1.5 font-mono text-xs text-destructive"
+          title="This file is in the project´s effects/ folder but could not be loaded"
+        >
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+          {`${problem.file}: ${problem.detail}`}
+        </p>
+      ))}
+
       {available.map((entry, index) => (
         <Button
           key={entry.id ?? `invalid-${index}`}
