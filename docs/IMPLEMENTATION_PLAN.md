@@ -311,7 +311,9 @@ empty queue and an idle GPU. The socket adapter woke only on a `message`, so a b
 parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
 its source dies**, or the job waits forever and reports nothing.
 
-Four fields found this way and closed since: `Transition.params` — the compositor read it and the
+Five fields found this way and closed since: `track.gain` and `track.pan` — the mix plan multiplied
+one into every clip on the track and combined the other with each clip's, and both sat at unity and
+centre for the life of every project — `Transition.params` — the compositor read it and the
 built-in wipe declares a `softness`, so every wipe sat at the manifest default — `marker.label` and `marker.color` — drawn by the ruler,
 round-tripped by `project.json`, settable by nothing, with every marker defaulting to a label saying the
 timecode the ruler already states beside it — `clip.label` — the engine could rename a clip and the user
@@ -742,6 +744,16 @@ so it can gate a release:
   it means a fresh install has a working menu.
 
 ### Audio rules (keep these)
+
+- A **track**'s level is a plain number; a **clip**'s is an `AnimatableNumber`. A track is
+  the constant its clips are heard through, so the panel must not offer to keyframe one —
+  a control for something the document cannot store is worse than no control.
+- Faders **clamp**, they do not refuse. The useful behaviour at the end of the travel is
+  to stop, and a rejection there is a dialog in the middle of a drag. A non-finite value
+  floors: `Number('')` is 0, and a cleared field must not quietly become silence.
+- A clip's level and its track's belong beside each other. A level is read *against*
+  something, and "this clip is at −3, what is the track doing to it?" is unanswerable
+  with the two numbers a metre apart.
 
 - The mix plan covers a **time range**, not a frame. Web Audio schedules ahead of a
   hardware clock; per-frame scheduling produces an audible seam at every boundary.
