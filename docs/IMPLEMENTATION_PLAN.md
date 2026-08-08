@@ -311,7 +311,9 @@ empty queue and an idle GPU. The socket adapter woke only on a `message`, so a b
 parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
 its source dies**, or the job waits forever and reports nothing.
 
-Two fields found this way and closed since: `clip.label` — the engine could rename a clip and the user
+Three fields found this way and closed since: `marker.label` and `marker.color` — drawn by the ruler,
+round-tripped by `project.json`, settable by nothing, with every marker defaulting to a label saying the
+timecode the ruler already states beside it — `clip.label` — the engine could rename a clip and the user
 could not, so three kept variants of one generator shared a single name — and `track.collapsed`, which
 round-tripped through `project.json` while nothing could set it or drew anything differently for it.
 The sweep that finds them is one line: for each exported operation, count references outside its own
@@ -751,6 +753,14 @@ so it can gate a release:
   **latches** until reset — the user will not be looking at the instant it happened.
 
 ### Timeline UI rules (keep these)
+
+- A change to something that carries several fields takes a **change object**, not a
+  whole value: `undefined` means leave it, `null` means clear it. `updateMarker(…, {
+  label })` must not wipe a colour it never thought about, and clearing removes the
+  field rather than storing a `null` that `project.json` reads back as a value.
+- A marker's single click **seeks** — that is what a place is for. Editing it is behind
+  a double-click, because the flag is eight pixels wide and the cheap action has to
+  stay cheap.
 
 - A track's drawn height comes from `laneHeight`, never from `track.height` directly.
   Five things need the answer — header, lane, clips, and the two running offsets for
