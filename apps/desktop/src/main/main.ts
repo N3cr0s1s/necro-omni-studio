@@ -196,6 +196,34 @@ function registerHandlers(): void {
 
   ipcMain.handle(IPC.backendConfig, (): BackendConfig => backendConfig());
 
+  ipcMain.handle(
+    IPC.exportFrames,
+    async (_event, path: unknown, frames: unknown): Promise<BackendResponse> => {
+      // A relative sidecar path, like every other renderer-supplied path: a full URL here would let the
+      // renderer post the frame buffer to any host.
+      const target = requireBackendPath(path);
+      if (!(frames instanceof ArrayBuffer) && !ArrayBuffer.isView(frames)) {
+        throw new TypeError('expected frame bytes');
+      }
+      const body = frames instanceof ArrayBuffer ? frames : (frames as ArrayBufferView).buffer;
+
+      if (!session.info.available) {
+        return { ok: false, status: 0, body: 'the media sidecar is not running' };
+      }
+
+      try {
+        const response = await fetch(`${session.info.baseUrl}${target}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/octet-stream', 'x-nos-token': session.info.token },
+          body: body as ArrayBuffer,
+        });
+        return { ok: response.ok, status: response.status, body: await response.text() };
+      } catch (error) {
+        return { ok: false, status: 0, body: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
+
   ipcMain.handle(IPC.backendFetch, async (_event, path: unknown, init: unknown): Promise<BackendResponse> => {
     const options = (init ?? {}) as { method?: string; body?: string; contentType?: string };
     return callBackend(requireBackendPath(path), {

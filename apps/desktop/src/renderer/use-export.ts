@@ -18,7 +18,7 @@ import {
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { createMediaTextures } from './media-textures.js';
-import type { SidecarInfo } from '../main/ipc-contract.js';
+import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 
 /**
  * Running an export.
@@ -29,12 +29,16 @@ import type { SidecarInfo } from '../main/ipc-contract.js';
  *
  * Three decisions worth stating.
  *
- * **Frames are batched, and one batch is always in flight.** A 1080p RGBA frame is 8 MB, so a request
- * per frame would spend the export in overhead; but *waiting* for each batch is worse. Instrumenting a
- * run settled it — decode 3%, render 1%, readback 3%, **upload 78%** — because rendering stopped dead
- * while ffmpeg consumed the previous batch. One upload in flight keeps the ordering ffmpeg requires
- * while overlapping it with the next batch's render, and awaiting the previous upload before starting
- * the next is still the backpressure that stops the renderer buffering the whole export in memory.
+ * **Frames are batched, one batch is always in flight, and they leave through the main process.** A
+ * 1080p RGBA frame is 8 MB, so a request per frame would spend the export in overhead. Instrumenting a
+ * run showed where the time actually went — decode 3%, render 1%, readback 3%, **upload 78%** — and a
+ * direct comparison found the cause: a 16 MB body posted from a page took about 1.3 s, while the same
+ * body from `curl` took 0.02 s. Chromium copies a large request body across its network-service
+ * boundary. So the bytes go over IPC to the main process, which posts them with Node's client.
+ *
+ * One upload stays in flight, which keeps the ordering ffmpeg's stdin requires while overlapping it
+ * with the next batch's render; awaiting the previous upload before starting the next is still the
+ * backpressure that stops the renderer buffering the whole export in memory.
  *
  * **Every seek is waited for.** A skipped layer in a preview is a momentary blank; in a delivered file
  * it is a missing shot. The preview and the export share one decoder precisely so this is the only
@@ -221,15 +225,9 @@ async function run(
       if (previous !== undefined) await previous;
 
       const uploadStart = performance.now();
-      const response = await call(`/export/${jobId}/frames`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/octet-stream' },
-        // The underlying buffer rather than the view: `fetch` takes an `ArrayBuffer` directly, and
-        // wrapping sixteen megabytes in a Blob first would copy it for nothing.
-        body: body.buffer as ArrayBuffer,
-      });
+      const response = await sendFrames(`/export/${jobId}/frames`, body, sidecar);
       spent.uploadMs += performance.now() - uploadStart;
-      if (!response.ok) throw new Error(`the encoder rejected a batch: ${await response.text()}`);
+      if (!response.ok) throw new Error(`the encoder rejected a batch: ${response.body}`);
     })();
   }
 
@@ -300,6 +298,31 @@ async function run(
     compositor.dispose();
     media.dispose();
   }
+}
+
+/**
+ * Sends a frame batch.
+ *
+ * Through the desktop bridge when there is one, which is the fast path and the reason the export is not
+ * upload-bound any more. The direct `fetch` remains for the visual harness, which runs the same code in
+ * a plain browser with no main process to route through.
+ */
+async function sendFrames(
+  path: string,
+  body: Uint8Array,
+  sidecar: SidecarInfo,
+): Promise<{ readonly ok: boolean; readonly body: string }> {
+  const api = (globalThis as { nos?: { exportFrames?: DesktopBridge['exportFrames'] } }).nos;
+  if (api?.exportFrames !== undefined) {
+    return api.exportFrames(path, body.buffer as ArrayBuffer);
+  }
+
+  const response = await fetch(`${sidecar.baseUrl}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream', 'x-nos-token': sidecar.token },
+    body: body.buffer as ArrayBuffer,
+  });
+  return { ok: response.ok, body: response.ok ? '' : await response.text() };
 }
 
 /** Authenticated calls to the sidecar. The token is a header everywhere except the media endpoint. */
