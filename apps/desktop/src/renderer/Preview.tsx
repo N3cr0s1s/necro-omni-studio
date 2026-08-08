@@ -132,19 +132,30 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset }: Preview
         background: 'var(--nos-bg-canvas)',
       }}
     >
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', placeItems: 'center', padding: 12 }}>
+      {/*
+        The canvas is taken out of flow and pinned to this box, and the picture is letterboxed inside
+        it by `object-fit` — which a canvas honours like any other replaced element. The framing stays
+        honest, which matters more here than anywhere: a preview that misreports framing is worse than
+        no preview at all. The drawing buffer is sized from the project resolution above and never
+        from the layout, so there is nothing for the two to disagree about.
+
+        It is pinned rather than sized because of what it replaces. `aspect-ratio` with `max-width` and
+        `max-height` overflowed this box by up to 149 px and painted over the status line below it —
+        "the preview is covered". The percentage heights that were meant to hold it in fell back to the
+        intrinsic ratio, because a percentage height inside an auto-sized grid row is cyclic and
+        resolves to `auto`. An absolutely positioned box has a definite containing block and cannot
+        overflow its parent or disturb a sibling, so the fault is unavailable rather than corrected.
+      */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <canvas
           ref={canvasRef}
           aria-label="Preview"
           style={{
-            // `max-width` and `max-height` constrain independently, so a 16:9 canvas in a 2:1 box gets
-            // squashed rather than letterboxed. `aspect-ratio` is what keeps the framing honest — and a
-            // preview that misreports framing is worse than no preview in an editor.
-            aspectRatio: `${doc.resolution.width} / ${doc.resolution.height}`,
-            maxWidth: '100%',
-            maxHeight: '100%',
-            width: 'auto',
-            height: 'auto',
+            position: 'absolute',
+            inset: 12,
+            width: 'calc(100% - 24px)',
+            height: 'calc(100% - 24px)',
+            objectFit: 'contain',
             background: '#000',
           }}
         />
