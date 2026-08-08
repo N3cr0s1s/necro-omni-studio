@@ -3,7 +3,14 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
-import { IPC, type FolderEntry, type ProjectInfo, type SidecarInfo } from './ipc-contract.js';
+import {
+  IPC,
+  type BackendConfig,
+  type BackendResponse,
+  type FolderEntry,
+  type ProjectInfo,
+  type SidecarInfo,
+} from './ipc-contract.js';
 import {
   ProjectPathError,
   ensureLayout,
@@ -187,9 +194,92 @@ function registerHandlers(): void {
 
   ipcMain.handle(IPC.sidecarInfo, (): SidecarInfo => session.info);
 
+  ipcMain.handle(IPC.backendConfig, (): BackendConfig => backendConfig());
+
+  ipcMain.handle(IPC.backendFetch, async (_event, path: unknown, init: unknown): Promise<BackendResponse> => {
+    const options = (init ?? {}) as { method?: string; body?: string; contentType?: string };
+    return callBackend(requireBackendPath(path), {
+      ...(options.method !== undefined ? { method: options.method } : {}),
+      ...(options.body !== undefined ? { body: options.body } : {}),
+      headers: {
+        ...(options.contentType !== undefined ? { 'content-type': options.contentType } : {}),
+        ...backendAuthHeaders(),
+      },
+    });
+  });
+
+  ipcMain.handle(
+    IPC.backendUpload,
+    async (_event, path: unknown, file: unknown, field: unknown): Promise<BackendResponse> => {
+      const absolute = resolveInProject(requireProject(), requireString(file));
+      const { readFile } = await import('node:fs/promises');
+      const bytes = await readFile(absolute);
+
+      const form = new FormData();
+      form.append(
+        typeof field === 'string' && field !== '' ? field : 'image',
+        new Blob([new Uint8Array(bytes)]),
+        basename(absolute),
+      );
+      // `overwrite` keeps repeated runs from accumulating `file (1).png` copies server-side, which would
+      // then no longer match the filename patched into the graph.
+      form.append('overwrite', 'true');
+
+      return callBackend(requireBackendPath(path), {
+        method: 'POST',
+        body: form,
+        headers: backendAuthHeaders(),
+      });
+    },
+  );
+
   ipcMain.handle(IPC.revealInFolder, async (_event, path: unknown): Promise<void> => {
     shell.showItemInFolder(resolveInProject(requireProject(), requireString(path)));
   });
+}
+
+/**
+ * Where the generator backend lives.
+ *
+ * Environment-driven rather than hard-coded, because the endpoint genuinely varies — a local ComfyUI on
+ * 8188, an instance behind a reverse proxy with basic auth, a machine on the LAN. The credentials are
+ * read here and never handed to the renderer.
+ */
+function backendConfig(): BackendConfig {
+  const baseUrl = (process.env['NOS_COMFYUI_URL'] ?? 'http://127.0.0.1:8188').replace(/\/+$/, '');
+  return { baseUrl, authenticated: process.env['NOS_COMFYUI_USER'] !== undefined };
+}
+
+function backendAuthHeaders(): Record<string, string> {
+  const user = process.env['NOS_COMFYUI_USER'];
+  const password = process.env['NOS_COMFYUI_PASSWORD'];
+  if (user === undefined || password === undefined) return {};
+  return { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` };
+}
+
+/**
+ * Calls the backend from the main process.
+ *
+ * This exists because ComfyUI sends no CORS headers: a renderer loaded from `file://` cannot reach it at
+ * all, and the failure presents as "the server is unreachable" while the server is running perfectly.
+ * Proxying also keeps basic-auth credentials out of the page.
+ */
+async function callBackend(path: string, init: RequestInit): Promise<BackendResponse> {
+  const { baseUrl } = backendConfig();
+  try {
+    const response = await fetch(`${baseUrl}${path}`, init);
+    return { ok: response.ok, status: response.status, body: await response.text() };
+  } catch (error) {
+    return { ok: false, status: 0, body: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** Only a path, never a URL: a full URL here would make the renderer able to name any host. */
+function requireBackendPath(value: unknown): string {
+  const path = requireString(value);
+  if (!path.startsWith('/')) throw new TypeError('a backend path must start with "/"');
+  if (path.startsWith('//')) throw new TypeError('a backend path must not be protocol-relative');
+  return path;
 }
 
 function requireProject(): string {

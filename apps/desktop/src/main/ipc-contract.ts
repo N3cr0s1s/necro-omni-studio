@@ -32,6 +32,12 @@ export const IPC = {
   sidecarInfo: 'sidecar:info',
   /** Reveals a project-relative path in the OS file manager. */
   revealInFolder: 'shell:reveal',
+  /** Performs an HTTP call against the generator backend, from the main process. */
+  backendFetch: 'backend:fetch',
+  /** Uploads a project file to the backend as multipart form data. */
+  backendUpload: 'backend:upload',
+  /** Where the generator backend lives. */
+  backendConfig: 'backend:config',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -50,6 +56,25 @@ export interface SidecarInfo {
   /** False when the sidecar failed to start; `detail` says why, and the UI greys what needs it. */
   readonly available: boolean;
   readonly detail?: string;
+}
+
+/**
+ * A backend call's result.
+ *
+ * The body comes back as text rather than parsed: the caller already knows which endpoints return JSON,
+ * and a parse in the bridge would turn a ComfyUI error page into an opaque failure.
+ */
+export interface BackendResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly body: string;
+}
+
+export interface BackendConfig {
+  /** Origin, no trailing slash. */
+  readonly baseUrl: string;
+  /** True when basic auth is configured, so the UI can say so. The credentials never cross this line. */
+  readonly authenticated: boolean;
 }
 
 export interface FolderEntry {
@@ -76,6 +101,22 @@ export interface DesktopBridge {
   listFolder(path: string): Promise<readonly FolderEntry[]>;
   sidecarInfo(): Promise<SidecarInfo>;
   revealInFolder(path: string): Promise<void>;
+
+  /**
+   * Calls the generator backend through the main process.
+   *
+   * Proxied rather than fetched directly, for two reasons that are both load-bearing. ComfyUI sends no
+   * CORS headers, so a renderer running from `file://` cannot reach it at all — the failure presents as
+   * "unreachable" even with the server running happily. And credentials for a backend behind basic auth
+   * stay in the main process instead of being handed to a page.
+   */
+  backendFetch(
+    path: string,
+    init?: { method?: string; body?: string; contentType?: string },
+  ): Promise<BackendResponse>;
+  /** Uploads a project file to the backend. The bytes never pass through the renderer. */
+  backendUpload(path: string, file: string, field?: string): Promise<BackendResponse>;
+  backendConfig(): Promise<BackendConfig>;
 }
 
 declare global {

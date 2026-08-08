@@ -16,8 +16,11 @@ import {
 } from '@nos/core';
 import { buildTree } from '@nos/media';
 import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
-import { Button, MediaBrowser, PanelHeader, SectionCaption, Timeline, createViewport } from '@nos/ui';
+import { Button, MediaBrowser, SectionCaption, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
+import { RightPanel } from './RightPanel.js';
+import { useGeneratorLibrary } from './use-generator-library.js';
+import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
 
 /**
@@ -32,6 +35,9 @@ import { useProjectTree } from './use-project-tree.js';
  */
 
 const TRACKS = { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') };
+
+/** Where the last opened project is remembered. One key: this is a preference, not a document. */
+const LAST_PROJECT_KEY = 'nos.lastProject';
 
 function emptyProject(name: string): TimelineDocument {
   return createDocument({
@@ -66,6 +72,14 @@ export function App(): ReactNode {
   useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
 
   const tree = useProjectTree(project?.root);
+  // The runtime probes ComfyUI once and reports which backend is actually in use; the registry then
+  // validates `requires` against the node classes that probe returned, so an unavailable generator is
+  // greyed for the real reason rather than because the backend was still starting.
+  const graphsRef = useRef<ReadonlyMap<string, unknown> | undefined>(undefined);
+  const runtime = useGeneratorRuntime({ graphs: graphsRef });
+  const library = useGeneratorLibrary(project?.root, {
+    ...(runtime.capabilities !== undefined ? { installedNodeClasses: runtime.capabilities.nodeClasses } : {}),
+  });
   const laneRef = useRef<HTMLDivElement | null>(null);
 
   // The lane width drives every frame-to-pixel conversion, so it is measured rather than assumed —
@@ -80,10 +94,57 @@ export function App(): ReactNode {
     return () => observer.disconnect();
   }, []);
 
+  // The queue patches from whatever the library last loaded, without being rebuilt — which would
+  // otherwise drop every job in flight each time a manifest is edited.
+  graphsRef.current = library.graphs;
+
   const viewport = useMemo(
     () => createViewport({ framesPerPixel, scrollFrame, widthPx, frameRate: document.frameRate }),
     [framesPerPixel, scrollFrame, widthPx, document.frameRate],
   );
+
+  /**
+   * Adopts an opened folder.
+   *
+   * Shared by the folder picker and the restore-on-launch path, so both produce exactly the same state.
+   * Two of them would drift, and the difference would only appear on a relaunch.
+   */
+  const adopt = useCallback(
+    async (opened: ProjectInfo, api: DesktopBridge) => {
+      setProject(opened);
+      setSidecar(await api.sidecarInfo());
+      globalThis.localStorage?.setItem(LAST_PROJECT_KEY, opened.root);
+
+      if (opened.document === undefined) {
+        // A folder with no `project.json` is a *new* project, not a broken one.
+        store.reset(emptyProject(opened.name));
+        setError(undefined);
+        return;
+      }
+
+      const loaded = loadDocument(opened.document);
+      if (loaded.ok) {
+        store.reset(loaded.value.document);
+        setError(undefined);
+      } else {
+        // Never silently replaced with an empty timeline: that reads as "my project is gone".
+        setError(`${opened.name}/project.json could not be read`);
+      }
+    },
+    [store],
+  );
+
+  // Reopens the last project on launch. An editor that forgets what you were working on every time it
+  // starts is one the user has to navigate a folder picker to use at all.
+  useEffect(() => {
+    const api = bridge();
+    const last = globalThis.localStorage?.getItem(LAST_PROJECT_KEY);
+    if (api === undefined || last === null || last === undefined || last === '') return;
+
+    void api.loadProject(last).then((opened) => {
+      if (opened !== undefined) void adopt(opened, api);
+    });
+  }, [adopt]);
 
   const openProject = useCallback(async () => {
     const api = bridge();
@@ -94,24 +155,8 @@ export function App(): ReactNode {
 
     const opened = await api.openProject();
     if (opened === undefined) return;
-    setProject(opened);
-    setSidecar(await api.sidecarInfo());
-
-    if (opened.document === undefined) {
-      // A folder with no `project.json` is a *new* project, not a broken one.
-      store.reset(emptyProject(opened.name));
-      return;
-    }
-
-    const loaded = loadDocument(opened.document);
-    if (loaded.ok) {
-      store.reset(loaded.value.document);
-      setError(undefined);
-    } else {
-      // Never silently replaced with an empty timeline: that reads as "my project is gone".
-      setError(`${opened.name}/project.json could not be read`);
-    }
-  }, [store]);
+    await adopt(opened, api);
+  }, [adopt]);
 
   const save = useCallback(async () => {
     const api = bridge();
@@ -233,35 +278,19 @@ export function App(): ReactNode {
           </div>
         </main>
 
-        <aside
-          style={{
-            width: 340,
-            flex: 'none',
-            borderLeft: '1px solid var(--nos-border)',
-            background: 'var(--nos-bg-panel)',
-          }}
-        >
-          <PanelHeader caption="Inspector" />
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Button onClick={razor} disabled={selected.size === 0}>
-              Split at playhead
-            </Button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button onClick={() => nudge(-1)} disabled={selected.size === 0} title="Nudge one frame left">
-                ◀ 1f
-              </Button>
-              <Button onClick={() => nudge(1)} disabled={selected.size === 0} title="Nudge one frame right">
-                1f ▶
-              </Button>
-            </div>
-            <Button onClick={() => store.undo()} disabled={!store.getSnapshot().canUndo}>
-              Undo
-            </Button>
-            <Button onClick={() => store.redo()} disabled={!store.getSnapshot().canRedo}>
-              Redo
-            </Button>
-          </div>
-        </aside>
+        <RightPanel
+          registry={library.registry}
+          libraryProblems={library.problems}
+          runtime={runtime}
+          playhead={playhead}
+          selectedClip={[...selected][0]}
+          canUndo={store.getSnapshot().canUndo}
+          canRedo={store.getSnapshot().canRedo}
+          onSplit={razor}
+          onNudge={nudge}
+          onUndo={() => store.undo()}
+          onRedo={() => store.redo()}
+        />
       </div>
     </div>
   );

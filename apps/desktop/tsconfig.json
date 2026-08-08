@@ -10,16 +10,41 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/media" },
-    { "path": "../../packages/sidecar-client" },
-    { "path": "../../packages/editing" },
-    { "path": "../../packages/compositor" },
-    { "path": "../../packages/effects" },
-    { "path": "../../packages/audio" },
-    { "path": "../../packages/export" },
-    { "path": "../../packages/generators" },
-    { "path": "../../packages/masks" },
-    { "path": "../../packages/ui" }
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/media"
+    },
+    {
+      "path": "../../packages/sidecar-client"
+    },
+    {
+      "path": "../../packages/editing"
+    },
+    {
+      "path": "../../packages/compositor"
+    },
+    {
+      "path": "../../packages/effects"
+    },
+    {
+      "path": "../../packages/audio"
+    },
+    {
+      "path": "../../packages/export"
+    },
+    {
+      "path": "../../packages/generators"
+    },
+    {
+      "path": "../../packages/masks"
+    },
+    {
+      "path": "../../packages/ui"
+    },
+    {
+      "path": "../../packages/backend-comfyui"
+    }
   ]
 }

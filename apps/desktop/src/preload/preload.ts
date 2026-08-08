@@ -22,6 +22,9 @@ const bridge: DesktopBridge = {
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),
   sidecarInfo: () => ipcRenderer.invoke(IPC.sidecarInfo),
   revealInFolder: (path) => ipcRenderer.invoke(IPC.revealInFolder, path),
+  backendFetch: (path, init) => ipcRenderer.invoke(IPC.backendFetch, path, init),
+  backendUpload: (path, file, field) => ipcRenderer.invoke(IPC.backendUpload, path, file, field),
+  backendConfig: () => ipcRenderer.invoke(IPC.backendConfig),
 };
 
 contextBridge.exposeInMainWorld('nos', bridge);

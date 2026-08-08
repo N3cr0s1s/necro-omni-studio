@@ -16,7 +16,8 @@
     "@nos/masks": "*",
     "@nos/media": "*",
     "@nos/sidecar-client": "*",
-    "@nos/ui": "*"
+    "@nos/ui": "*",
+    "@nos/backend-comfyui": "*"
   },
   "scripts": {
     "typecheck": "tsc --build",
