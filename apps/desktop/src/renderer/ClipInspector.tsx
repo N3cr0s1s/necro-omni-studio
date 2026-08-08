@@ -24,6 +24,7 @@ import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
+import { TransformInspector } from './TransformInspector.js';
 
 /**
  * The clip inspector.
@@ -92,6 +93,16 @@ export function ClipInspector({
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3">
       <p className="truncate font-mono text-xs text-muted-foreground">{located.clip.label}</p>
+
+      {/* Framing first: where a clip is and how much of it shows are questions about the clip itself,
+          where an effect stack is about what is done to it afterwards. */}
+      <TransformInspector
+        document={document}
+        clip={located.clip}
+        playhead={playhead}
+        onChange={onChange}
+        {...(onReject !== undefined ? { onReject } : {})}
+      />
 
       <EffectStack
         entries={entries}

@@ -1,11 +1,4 @@
-import {
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-  type ReactNode,
-  useEffect,
-  useState,
-} from 'react';
+import { type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import {
   type Easing,
   type FrameIndex,
@@ -15,7 +8,7 @@ import {
   frameIndex,
 } from '@nos/core';
 import { Badge } from '@nos/ui/components/ui/badge';
-import { Input } from '@nos/ui/components/ui/input';
+import { NumberField } from '../controls/NumberField.js';
 import { cn } from '@nos/ui/lib/utils';
 import { type TimelineViewport, frameToPx } from './viewport.js';
 
@@ -283,12 +276,15 @@ export function KeyframeLane({
         goes for a number, and a separate field somewhere else would be one more thing to find.
       */}
       {selectedHere !== undefined && onChangeValue !== undefined ? (
-        <ValueField
-          key={selectedHere.id}
-          keyframe={selectedHere}
-          onCommit={(value) => onChangeValue(selectedHere.id, value)}
-          style={{ top: Math.round(heightPx / 2) - 11 }}
-        />
+        <div className="absolute right-4" style={{ top: Math.round(heightPx / 2) - 11 }}>
+          <NumberField
+            key={selectedHere.id}
+            aria-label={`Value at frame ${selectedHere.frame}`}
+            value={selectedHere.value}
+            onCommit={(value) => onChangeValue(selectedHere.id, value)}
+            className="h-5.5 w-20 px-1 py-0 text-center font-mono text-[10px] tabular-nums"
+          />
+        </div>
       ) : (
         currentValue !== undefined && (
           <div
@@ -300,65 +296,6 @@ export function KeyframeLane({
         )
       )}
     </div>
-  );
-}
-
-/**
- * The selected marker's value, as a field.
- *
- * A draft rather than a controlled value, because a number field that writes on every keystroke cannot
- * be typed in: clearing it to type `0.5` sends an empty string, and `-` on its own is not a number. It
- * commits on Enter and on blur, and Escape puts the marker's own value back — the same contract the
- * timecode field and the inline renames use, so nothing here has to be learned twice.
- */
-function ValueField({
-  keyframe,
-  onCommit,
-  style,
-}: {
-  readonly keyframe: Keyframe;
-  readonly onCommit: (value: number) => void;
-  readonly style: CSSProperties;
-}): ReactNode {
-  const [draft, setDraft] = useState<string>(() => String(keyframe.value));
-
-  // A drag moves the marker, not its value — but an undo, or a preset writing over it, does change it
-  // underneath the field. Following the marker keeps the number honest.
-  useEffect(() => setDraft(String(keyframe.value)), [keyframe.value]);
-
-  const commit = (): void => {
-    const parsed = Number(draft.trim());
-    if (draft.trim() === '' || !Number.isFinite(parsed)) {
-      setDraft(String(keyframe.value));
-      return;
-    }
-    onCommit(parsed);
-  };
-
-  return (
-    <Input
-      type="number"
-      step="any"
-      aria-label={`Value at frame ${keyframe.frame}`}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onFocus={(event) => event.target.select()}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') commit();
-        else if (event.key === 'Escape') setDraft(String(keyframe.value));
-        else {
-          // Everything else belongs to the field while it has focus. The timeline's own Delete and
-          // arrow keys would otherwise remove the very marker being edited.
-          event.stopPropagation();
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-      className="absolute right-4 h-5.5 w-20 px-1 py-0 text-center font-mono text-[10px] tabular-nums"
-      style={style}
-    />
   );
 }
 

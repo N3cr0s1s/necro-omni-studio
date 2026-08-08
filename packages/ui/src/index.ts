@@ -12,6 +12,7 @@
  */
 export * from './semantics/glyphs.js';
 export * from './menus/ActionMenu.js';
+export * from './controls/NumberField.js';
 export * from './media-browser/MediaBrowser.js';
 export * from './media-browser/AssetIcon.js';
 export * from './timeline/index.js';
