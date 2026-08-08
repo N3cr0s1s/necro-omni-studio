@@ -28,6 +28,14 @@ export interface BackendAsset {
   readonly path: AssetPath;
   /** Transport declared by the manifest, e.g. `upload_image`. */
   readonly transport: string;
+  /**
+   * Where the backend writes the name it stored the upload under, once the upload returns.
+   *
+   * Part of the contract rather than the ComfyUI patcher's private business: every backend that
+   * takes a file has to put the file's new name somewhere in its own job description, and a backend
+   * that uploaded without rewriting would run happily against whatever the graph shipped with.
+   */
+  readonly bind: string | null;
 }
 
 /** A progress event. Backends emit these as they run. */

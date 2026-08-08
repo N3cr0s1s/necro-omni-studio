@@ -90,6 +90,27 @@ export function createProxyFetch(api: DesktopBridge, baseUrl: string): typeof gl
   }) as typeof globalThis.fetch;
 }
 
+/**
+ * Reads ComfyUI's reply to an upload.
+ *
+ * Tolerant of a missing `subfolder`, which is the usual case, and of a body that is not JSON at all —
+ * a reverse proxy in front of the backend answers with HTML when it is unhappy, and treating that as
+ * a successful upload would submit a graph pointing at nothing.
+ */
+export function parseUpload(
+  body: string,
+): { readonly name: string; readonly subfolder?: string } | undefined {
+  try {
+    const parsed = JSON.parse(body) as { name?: unknown; subfolder?: unknown };
+    if (typeof parsed.name !== 'string' || parsed.name === '') return undefined;
+    return typeof parsed.subfolder === 'string' && parsed.subfolder !== ''
+      ? { name: parsed.name, subfolder: parsed.subfolder }
+      : { name: parsed.name };
+  } catch {
+    return undefined;
+  }
+}
+
 function bridge(): DesktopBridge | undefined {
   return (globalThis as { nos?: DesktopBridge }).nos;
 }
@@ -137,6 +158,36 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
           return result.ok
             ? { ok: true, value: undefined }
             : { ok: false, error: { kind: 'unreachable', detail: result.body } };
+        },
+        // The counterpart to `download`, and the reason an image-to-video run failed with `a backend
+        // path must start with "/"`: the old code read the project file *through the backend
+        // transport*, which in the desktop is a proxy to ComfyUI — so it asked the render server for
+        // a file sitting on the local disk. The bytes cross in the main process, which is also the
+        // only side allowed to name a path on disk, and multipart bodies do not survive the proxy.
+        upload: async ({ path, key }) => {
+          const api = bridge();
+          if (api === undefined) {
+            return { ok: false, error: { kind: 'unreachable', detail: 'no desktop bridge' } };
+          }
+          const result = await api.backendUpload('/upload/image', path, 'image');
+          if (!result.ok) {
+            return { ok: false, error: { kind: 'upload-failed', key, detail: result.body } };
+          }
+          // ComfyUI answers with the name it filed the upload under, which is not always the name
+          // sent — it renames on collision unless told to overwrite, and a graph pointing at the
+          // name we chose would then load a different image.
+          const stored = parseUpload(result.body);
+          if (stored === undefined) {
+            return {
+              ok: false,
+              error: {
+                kind: 'upload-failed',
+                key,
+                detail: `unexpected upload reply: ${result.body.slice(0, 200)}`,
+              },
+            };
+          }
+          return { ok: true, value: stored };
         },
         transport: {
           // Every HTTP call goes through the main process. ComfyUI sends no CORS headers, so a direct

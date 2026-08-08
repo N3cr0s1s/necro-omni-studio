@@ -156,7 +156,10 @@ export function createRecordingPatcher(): {
     manifest: { readonly id: string },
     params: Readonly<Record<string, string | number | boolean>>,
     seeds: readonly number[],
-  ) => { graph: unknown; assets: readonly { key: string; path: string; transport: string }[] };
+  ) => {
+    graph: unknown;
+    assets: readonly { key: string; path: string; transport: string; bind: string | null }[];
+  };
   readonly calls: readonly { generator: string; params: unknown; seeds: readonly number[] }[];
 } {
   const calls: { generator: string; params: unknown; seeds: readonly number[] }[] = [];

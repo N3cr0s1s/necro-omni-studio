@@ -39,6 +39,14 @@ export interface PatchAsset {
   readonly key: string;
   readonly path: string;
   readonly transport: string;
+  /**
+   * Where the uploaded filename goes once the upload returns.
+   *
+   * Carried here so the backend can finish the patch without holding the manifest. Without it the
+   * upload landed on the server and the graph still pointed at whatever the author last saved —
+   * a run that looks like it used your image and did not.
+   */
+  readonly bind: string | null;
 }
 
 export interface PatchRequest {
@@ -103,6 +111,7 @@ export function patchGraph(request: PatchRequest): PatchResult {
         key: param.key,
         path: String(value),
         transport: param.transport ?? 'upload_image',
+        bind: param.bind,
       });
       continue;
     }
@@ -164,6 +173,18 @@ export function patchUploadedAsset(
   const param = manifest.params.find((candidate) => candidate.key === key);
   if (param === undefined || param.bind === null) return graph;
   return patchPointer(graph, param.bind, uploadedFilename);
+}
+
+/**
+ * The same rewrite, driven by the asset record rather than the manifest.
+ *
+ * What the backend uses: it holds a patched graph and a list of assets, never the manifest that
+ * produced them, and asking it to carry one would tie the submit path back to the layer the patcher
+ * exists to keep it away from.
+ */
+export function applyUploadedAsset(graph: unknown, asset: PatchAsset, uploadedFilename: string): unknown {
+  if (asset.bind === null) return graph;
+  return patchPointer(graph, asset.bind, uploadedFilename);
 }
 
 /**

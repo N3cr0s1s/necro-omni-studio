@@ -103,7 +103,7 @@ export interface GraphPatcher {
     seeds: readonly number[],
   ): {
     readonly graph: unknown;
-    readonly assets: readonly { key: string; path: string; transport: string }[];
+    readonly assets: readonly { key: string; path: string; transport: string; bind: string | null }[];
   };
 }
 
@@ -235,6 +235,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
               key: asset.key,
               path: asset.path as never,
               transport: asset.transport,
+              bind: asset.bind,
             })),
           });
 

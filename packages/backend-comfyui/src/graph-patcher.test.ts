@@ -226,7 +226,16 @@ describe('asset parameters', () => {
       seeds: [1],
     });
 
-    expect(assets).toEqual([{ key: 'first_frame', path: 'media/frame.png', transport: 'upload_image' }]);
+    expect(assets).toEqual([
+      {
+        key: 'first_frame',
+        path: 'media/frame.png',
+        transport: 'upload_image',
+        // Carried so the backend can finish the patch without the manifest. Missing, the upload
+        // landed and the graph still pointed at whatever the author last saved.
+        bind: '/114/inputs/image',
+      },
+    ]);
     // Untouched until the upload returns.
     expect(readLiteral(graph, '/114/inputs/image')).toBe(readLiteral(i2vGraph, '/114/inputs/image'));
   });

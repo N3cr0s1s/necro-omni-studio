@@ -1,4 +1,5 @@
 import { type AssetPath, type Result, assetPath, err, ok } from '@nos/core';
+import { applyUploadedAsset } from './graph-patcher.js';
 import type {
   BackendCapabilities,
   BackendError,
@@ -69,6 +70,30 @@ export interface ComfyUiBackendOptions {
    * writing to disk is the shell's privilege, not this package's.
    */
   readonly download: (query: string, destination: AssetPath) => Promise<Result<void, BackendError>>;
+
+  /**
+   * Sends a project file to the backend and reports the name it was stored under.
+   *
+   * Injected for the same reason `download` is, and for a second one: the file lives on the local
+   * disk, not on the backend. Reading it through the backend transport was the bug — in the desktop
+   * that transport is a proxy to ComfyUI, so an image-to-video run failed with `a backend path must
+   * start with "/"` while pointing at a file that was sitting right there in the project.
+   *
+   * The returned name is the backend's, not the project's: ComfyUI stores an upload in its own input
+   * directory and a graph must reference it by that name.
+   */
+  readonly upload: (asset: {
+    readonly path: AssetPath;
+    readonly key: string;
+  }) => Promise<Result<UploadedAsset, BackendError>>;
+}
+
+/** What the backend stored an upload as. */
+export interface UploadedAsset {
+  /** Filename as the backend knows it, which is what a graph node must reference. */
+  readonly name: string;
+  /** Set when the backend filed it under a subfolder, which some nodes need spelled out. */
+  readonly subfolder?: string;
 }
 
 interface HistoryEntry {
@@ -135,17 +160,21 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
     id: 'comfyui',
 
     async submit(request: SubmitRequest): Promise<Result<BackendJobId, BackendError>> {
-      // Uploads first: the graph references them by the filename the server assigns, so submitting before
-      // they land would queue a prompt pointing at a file that does not exist yet.
+      // Uploads first, and the graph is rewritten with what each upload was named. Submitting before
+      // they land would queue a prompt pointing at a file that does not exist yet; submitting without
+      // the rewrite would queue one pointing at whatever the graph's author last saved — a run that
+      // looks like it used your image and did not.
+      let graph = request.graph;
       for (const asset of request.assets) {
-        const uploaded = await uploadAsset(asset.path, asset.key);
+        const uploaded = await options.upload({ path: assetPath(asset.path), key: asset.key });
         if (!uploaded.ok) return uploaded;
+        graph = applyUploadedAsset(graph, asset, uploaded.value.name);
       }
 
       const submitted = await call<{ prompt_id?: string; error?: unknown }>('/prompt', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: request.graph, client_id: clientId }),
+        body: JSON.stringify({ prompt: graph, client_id: clientId }),
       });
       if (!submitted.ok) return submitted;
 
@@ -269,36 +298,6 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
       return ok({ nodeClasses, enumOptions });
     },
   };
-
-  async function uploadAsset(path: string, key: string): Promise<Result<void, BackendError>> {
-    try {
-      const file = await transport.fetch(path);
-      if (!file.ok) {
-        return err({ kind: 'upload-failed', key, detail: `could not read ${path}` });
-      }
-      const body = new FormData();
-      body.append('image', await file.blob(), path.split('/').pop() ?? 'upload');
-      // `overwrite` keeps repeated runs from accumulating `file (1).png` copies server-side, which would
-      // then no longer match the filename patched into the graph.
-      body.append('overwrite', 'true');
-
-      const response = await transport.fetch(`${endpoint.baseUrl}/upload/image`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body,
-      });
-      if (!response.ok) {
-        return err({ kind: 'upload-failed', key, detail: `HTTP ${response.status}` });
-      }
-      return ok(undefined);
-    } catch (error) {
-      return err({
-        kind: 'upload-failed',
-        key,
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
 }
 
 interface ObjectInfoNode {

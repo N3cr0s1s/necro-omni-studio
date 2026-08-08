@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { assetPath } from '@nos/core';
 import {
   type ComfyUiBackendOptions,
   type ComfyUiSocket,
@@ -12,8 +13,14 @@ import {
 function fakeTransport(
   routes: Record<string, unknown>,
   messages: readonly unknown[] = [],
-): ComfyUiTransport & { readonly calls: string[]; readonly closed: number } {
+): ComfyUiTransport & {
+  readonly calls: string[];
+  /** Request bodies, so a test can assert what was actually submitted rather than only where. */
+  readonly bodies: string[];
+  readonly closed: number;
+} {
   const calls: string[] = [];
+  const bodies: string[] = [];
   const state = { closed: 0 };
 
   const socket: ComfyUiSocket = {
@@ -27,12 +34,14 @@ function fakeTransport(
 
   return {
     calls,
+    bodies,
     get closed() {
       return state.closed;
     },
     fetch: (async (input: string, init?: RequestInit) => {
       const url = String(input);
       calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (typeof init?.body === 'string') bodies.push(init.body);
       const key = Object.keys(routes).find((route) => url.includes(route));
       if (key === undefined) {
         return { ok: false, status: 404, text: async () => 'not found', json: async () => ({}) };
@@ -49,18 +58,33 @@ function fakeTransport(
 const downloads: { query: string; destination: string }[] = [];
 
 type Download = ComfyUiBackendOptions['download'];
+type Upload = ComfyUiBackendOptions['upload'];
 
-const backendWith = (transport: ComfyUiTransport, download: Download = defaultDownload) =>
+/** Records what the backend asked to be uploaded, since the graph is rewritten from the answer. */
+const uploads: { path: string; key: string }[] = [];
+
+const backendWith = (
+  transport: ComfyUiTransport,
+  download: Download = defaultDownload,
+  upload: Upload = defaultUpload,
+) =>
   createComfyUiBackend({
     endpoint: { baseUrl: 'http://localhost:8188' },
     transport,
     clientId: 'client-1',
     download,
+    upload,
   });
 
 const defaultDownload: Download = async (query, destination) => {
   downloads.push({ query, destination });
   return { ok: true, value: undefined };
+};
+
+const defaultUpload: Upload = async ({ path, key }) => {
+  uploads.push({ path, key });
+  // ComfyUI files an upload under its own name, which is what a graph must reference.
+  return { ok: true, value: { name: `stored_${path.split('/').pop() ?? path}` } };
 };
 
 describe('submit', () => {
@@ -70,6 +94,69 @@ describe('submit', () => {
 
     expect(result).toEqual({ ok: true, value: 'abc123' });
     expect(transport.calls.some((call) => call.startsWith('POST http://localhost:8188/prompt'))).toBe(true);
+  });
+
+  it('uploads an asset and points the graph at the name the backend stored it under', async () => {
+    // Both halves were broken. The upload read the project file *through the backend transport*,
+    // which in the desktop proxies to ComfyUI — so it asked the render server for a file on the
+    // local disk, and the run died with `a backend path must start with "/"`. And the returned name
+    // was never written into the graph, so even a working upload left the node loading whatever the
+    // graph's author last saved: a run that looks like it used your image and did not.
+    uploads.length = 0;
+    const transport = fakeTransport({ '/prompt': { prompt_id: 'p1' } });
+    const result = await backendWith(transport).submit({
+      graph: { '114': { inputs: { image: 'placeholder.png' } } },
+      assets: [
+        {
+          key: 'first_frame',
+          path: assetPath('media/stills/take_000089.png'),
+          transport: 'upload_image',
+          bind: '/114/inputs/image',
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(uploads).toEqual([{ path: 'media/stills/take_000089.png', key: 'first_frame' }]);
+    const posted = transport.bodies.join('');
+    expect(posted).toContain('stored_take_000089.png');
+    expect(posted).not.toContain('placeholder.png');
+  });
+
+  it('does not submit at all when an upload fails', async () => {
+    // A prompt referencing a file that never arrived fails deep inside the backend, where the reason
+    // is a validation error about a missing input rather than the upload that actually broke.
+    const transport = fakeTransport({ '/prompt': { prompt_id: 'p1' } });
+    const result = await backendWith(transport, defaultDownload, async () => ({
+      ok: false,
+      error: { kind: 'upload-failed', key: 'first_frame', detail: 'disk on fire' },
+    })).submit({
+      graph: {},
+      assets: [
+        {
+          key: 'first_frame',
+          path: assetPath('media/a.png'),
+          transport: 'upload_image',
+          bind: '/1/inputs/image',
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(transport.calls.some((call) => call.includes('/prompt'))).toBe(false);
+  });
+
+  it('leaves the graph alone for an asset the manifest never bound', async () => {
+    // An unbound manifest is a legitimate state — a contract written before its graph exists — and
+    // patching a null pointer would throw where nothing is wrong.
+    const transport = fakeTransport({ '/prompt': { prompt_id: 'p1' } });
+    const result = await backendWith(transport).submit({
+      graph: { '1': { inputs: { image: 'kept.png' } } },
+      assets: [{ key: 'first_frame', path: assetPath('media/a.png'), transport: 'upload_image', bind: null }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(transport.bodies.join('')).toContain('kept.png');
   });
 
   it('treats a 200 with no prompt id as a rejection', async () => {
