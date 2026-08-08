@@ -15,9 +15,15 @@ import {
 } from '@nos/core';
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
 import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
-import { type EffectStackEntry, Button, EffectStack, Mono, SectionCaption } from '@nos/ui';
+import { DiamondIcon, PlusIcon, WandSparklesIcon, XIcon } from 'lucide-react';
+import { type EffectStackEntry, EffectStack } from '@nos/ui';
+import { Button } from '@nos/ui/components/ui/button';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
+import { Slider } from '@nos/ui/components/ui/slider';
+import { Switch } from '@nos/ui/components/ui/switch';
+import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
-import { token } from '@nos/ui';
 
 /**
  * The clip inspector.
@@ -58,8 +64,8 @@ export function ClipInspector({
   const located = clip === undefined ? undefined : locateClip(document, clip as never);
   if (located === undefined) {
     return (
-      <div style={{ padding: 16 }}>
-        <Mono tone={token.textFaint}>no clip selected</Mono>
+      <div className="p-4">
+        <p className="font-mono text-xs text-muted-foreground">no clip selected</p>
       </div>
     );
   }
@@ -84,8 +90,8 @@ export function ClipInspector({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, minWidth: 0 }}>
-      <Mono tone={token.textFaint}>{located.clip.label}</Mono>
+    <div className="flex min-w-0 flex-col gap-3 p-3">
+      <p className="truncate font-mono text-xs text-muted-foreground">{located.clip.label}</p>
 
       <EffectStack
         entries={entries}
@@ -205,35 +211,28 @@ function Transitions({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <SectionCaption>Transitions</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <input
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Transitions</span>
+        <Input
           type="number"
           aria-label="Transition frames"
           min={2}
           max={120}
           value={duration}
           onChange={(event) => setDuration(Number(event.target.value))}
-          style={{
-            width: 60,
-            height: token.controlHeightSm,
-            background: token.surface1,
-            border: `1px solid ${token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: token.textBright,
-            font: token.textValue,
-            padding: `0 ${token.space2}`,
-          }}
+          className="ml-auto h-7 w-15 font-mono tabular-nums"
         />
       </div>
 
       {existing.map((transition) => (
-        <div key={transition.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Mono tone={token.accent}>{`${transition.effect} · ${transition.span.duration}f`}</Mono>
-          <div style={{ flex: 1 }} />
+        <div key={transition.id} className="flex items-center gap-1.5">
+          <span className="font-mono text-xs text-primary">{`${transition.effect} · ${transition.span.duration}f`}</span>
           <Button
+            variant="ghost"
+            size="icon-xs"
+            className="ml-auto"
+            aria-label={`Remove the ${transition.effect} transition`}
             onClick={() => {
               const result = removeTransition(document, transition.id);
               if (result.ok) onChange('remove transition', result.value);
@@ -241,23 +240,25 @@ function Transitions({
             }}
             title="Remove this transition and return both clips to the cut"
           >
-            ×
+            <XIcon />
           </Button>
         </div>
       ))}
 
-      {available.length === 0 && <Mono tone={token.textGhost}>no transition effects are registered</Mono>}
+      {available.length === 0 && (
+        <p className="font-mono text-xs text-muted-foreground">no transition effects are registered</p>
+      )}
 
       {(['before', 'after'] as const).map((side) => {
         const pair = side === 'before' ? neighbours.before : neighbours.after;
         return (
-          <div key={side} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <Mono tone={token.textFaint} style={{ width: 44 }}>
-              {side}
-            </Mono>
+          <div key={side} className="flex items-center gap-1">
+            <span className="w-11 font-mono text-xs text-muted-foreground">{side}</span>
             {available.map((entry) => (
               <Button
                 key={entry.id}
+                variant="outline"
+                size="xs"
                 disabled={pair === undefined || entry.id === undefined}
                 onClick={() => entry.id !== undefined && apply(entry.id, side)}
                 title={
@@ -314,20 +315,28 @@ function EffectPicker({
   const available = useMemo(() => effects.entries(), [effects]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <SectionCaption>Add effect</SectionCaption>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <WandSparklesIcon className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Add effect</span>
+      </div>
       {available.map((entry, index) => (
         <Button
           key={entry.id ?? `invalid-${index}`}
+          variant="ghost"
+          size="sm"
           disabled={entry.status !== 'available' || entry.id === undefined}
           onClick={() => entry.id !== undefined && onPick(entry.id)}
           title={entry.status === 'available' ? entry.manifest.name : describeEntryProblem(entry)}
-          style={{ justifyContent: 'flex-start' }}
+          className="justify-start"
         >
+          <PlusIcon />
           {entry.status === 'available' ? entry.manifest.name : (entry.id ?? 'a broken manifest')}
         </Button>
       ))}
-      {available.length === 0 && <Mono tone={token.textGhost}>no effects are registered</Mono>}
+      {available.length === 0 && (
+        <p className="font-mono text-xs text-muted-foreground">no effects are registered</p>
+      )}
     </div>
   );
 }
@@ -353,28 +362,33 @@ function EffectParams({
   const manifest = effects.manifestFor(instance.effect);
   const declared = manifest?.params ?? [];
   if (declared.length === 0) {
-    return <Mono tone={token.textGhost}>this effect declares no parameters</Mono>;
+    return <p className="font-mono text-xs text-muted-foreground">this effect declares no parameters</p>;
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <SectionCaption>{manifest?.name ?? instance.effect}</SectionCaption>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {manifest?.name ?? instance.effect}
+      </span>
       {declared.map((param) => {
         const value = instance.params[param.key];
         const animated = value !== undefined && isAnimated(value as never);
 
         return (
-          <label key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ font: token.textLabel, color: token.textSoft }}>
+          <Field key={param.key} className="gap-1">
+            <FieldLabel htmlFor={`param-${instance.id}-${param.key}`} className="text-xs">
               {param.key}
               {animated ? ' · animated' : ''}
-            </span>
+            </FieldLabel>
 
             {param.keyframable === true && (
               // Animating is an explicit act. A parameter silently becoming keyframed on first edit
               // would surprise anyone who only meant to change its value once.
-              <Button
-                onClick={() =>
+              <Toggle
+                size="sm"
+                pressed={animated}
+                aria-label={animated ? `Stop animating ${param.key}` : `Animate ${param.key}`}
+                onPressedChange={() =>
                   onChange({
                     ...instance,
                     params: {
@@ -393,47 +407,48 @@ function EffectParams({
                   })
                 }
                 title={animated ? 'Return this to a constant value' : 'Animate this with keyframes'}
-                style={{ alignSelf: 'flex-start' }}
+                className="self-start"
               >
-                {animated ? 'un-animate' : 'animate'}
-              </Button>
+                <DiamondIcon />
+              </Toggle>
             )}
 
             {param.type === 'bool' ? (
-              <Button
-                tone={readNumber(value, param.default) >= 0.5 ? 'active' : 'default'}
+              <Switch
+                id={`param-${instance.id}-${param.key}`}
                 disabled={animated}
-                onClick={() =>
+                checked={readNumber(value, param.default) >= 0.5}
+                onCheckedChange={(next) =>
                   onChange({
                     ...instance,
-                    params: {
-                      ...instance.params,
-                      [param.key]: constant(readNumber(value, param.default) >= 0.5 ? 0 : 1),
-                    },
+                    params: { ...instance.params, [param.key]: constant(next ? 1 : 0) },
                   })
                 }
-                style={{ alignSelf: 'flex-start' }}
-              >
-                {readNumber(value, param.default) >= 0.5 ? 'on' : 'off'}
-              </Button>
+                className="self-start"
+              />
             ) : (
-              <input
-                type="range"
+              <Slider
+                id={`param-${instance.id}-${param.key}`}
                 aria-label={param.key}
                 disabled={animated}
                 min={param.min ?? 0}
                 max={param.max ?? 1}
                 step={(param.max ?? 1) - (param.min ?? 0) > 4 ? 1 : 0.01}
-                value={readNumber(value, param.default)}
-                onChange={(event) =>
+                // The array form even for one value: given a scalar the registry falls back to
+                // `[min, max]` and renders a second thumb.
+                value={[readNumber(value, param.default)]}
+                onValueChange={(next) =>
                   onChange({
                     ...instance,
-                    params: { ...instance.params, [param.key]: constant(Number(event.target.value)) },
+                    params: {
+                      ...instance.params,
+                      [param.key]: constant(Array.isArray(next) ? (next[0] ?? 0) : next),
+                    },
                   })
                 }
               />
             )}
-          </label>
+          </Field>
         );
       })}
     </div>

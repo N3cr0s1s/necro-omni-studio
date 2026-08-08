@@ -44,6 +44,14 @@ export interface ClipBodyProps {
   readonly onToggleExpand?: (clip: ClipId) => void;
   /** The right-click menu for this clip. Absent leaves the clip without one. */
   readonly menu?: MenuBinding<ClipId>;
+  /**
+   * A right-click, reported before the menu opens.
+   *
+   * Separate from `menu` because it is not about the menu's contents: it exists so the lane can select
+   * the clip first. Acting on something other than what was clicked is the one behaviour a context menu
+   * must never have.
+   */
+  readonly onContextMenu?: (clip: ClipId) => void;
 }
 
 /**
@@ -90,6 +98,7 @@ export function ClipBody({
   expanded = false,
   onToggleExpand,
   menu,
+  onContextMenu,
 }: ClipBodyProps): ReactNode {
   const passes = passCount(clip);
   const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX;
@@ -121,13 +130,16 @@ export function ClipBody({
           height: Math.max(0, heightPx - 12),
         }}
         onPointerDown={(event) => onPointerDown?.(clip.id, event)}
+        onContextMenu={() => onContextMenu?.(clip.id)}
       >
         {/* First, so everything else paints over it: an audio strip fills the clip, and a waveform
             drawn on top of the label would hide the one thing that names the clip. */}
         {strip !== undefined && <StripLayer clip={clip} strip={strip} />}
 
         <div className="relative flex min-w-0 items-center gap-1">
-          {isGenerated(clip) && <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />}
+          {isGenerated(clip) && (
+            <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />
+          )}
           <span className="truncate text-[11px] font-medium">{clip.label}</span>
 
           {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
@@ -160,7 +172,10 @@ export function ClipBody({
             </Badge>
           )}
           {clip.effects.some((effect) => effect.mask !== undefined) && (
-            <Badge variant="secondary" className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4">
+            <Badge
+              variant="secondary"
+              className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4"
+            >
               <SquareDashedIcon className="size-2" />
               mask
             </Badge>
@@ -220,7 +235,10 @@ function StripLayer({ clip, strip }: { readonly clip: Clip; readonly strip: Clip
     <div
       aria-hidden="true"
       data-strip-kind={audio ? 'waveform' : 'filmstrip'}
-      className={cn('pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden', audio ? 'h-full' : 'h-8')}
+      className={cn(
+        'pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden',
+        audio ? 'h-full' : 'h-8',
+      )}
     >
       <img
         src={strip.url}
@@ -261,7 +279,10 @@ function TrimHandle({
         event.stopPropagation();
         onPointerDown(event);
       }}
-      className={cn('absolute inset-y-0 cursor-ew-resize bg-transparent', side === 'start' ? 'left-0' : 'right-0')}
+      className={cn(
+        'absolute inset-y-0 cursor-ew-resize bg-transparent',
+        side === 'start' ? 'left-0' : 'right-0',
+      )}
       style={{ width: TRIM_HANDLE_PX }}
     />
   );

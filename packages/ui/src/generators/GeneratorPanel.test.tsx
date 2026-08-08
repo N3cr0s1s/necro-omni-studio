@@ -388,7 +388,9 @@ describe('seed control', () => {
 
   it('explains what locking does', () => {
     renderPanel();
-    expect(screen.getByRole('button', { name: 'Lock the seed' }).getAttribute('title')).toContain('identical');
+    expect(screen.getByRole('button', { name: 'Lock the seed' }).getAttribute('title')).toContain(
+      'identical',
+    );
   });
 });
 

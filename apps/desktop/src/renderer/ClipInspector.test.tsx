@@ -256,7 +256,7 @@ describe('transitions', () => {
     cleanup();
 
     const removed = renderInspector(withTransition);
-    await user.click(screen.getByRole('button', { name: '×' }));
+    await user.click(screen.getByRole('button', { name: /^Remove the .* transition$/ }));
 
     const first = afterChange(removed.onChange, 'c1');
     const second = afterChange(removed.onChange, 'c2');

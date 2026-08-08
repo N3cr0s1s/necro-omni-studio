@@ -103,8 +103,15 @@ export function EffectStack({
   return (
     <section aria-label="Effect stack" className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Effect stack</span>
-        <span className={cn('ml-auto font-mono text-xs', overBudget ? 'text-destructive' : 'text-muted-foreground')}>
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Effect stack
+        </span>
+        <span
+          className={cn(
+            'ml-auto font-mono text-xs',
+            overBudget ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
           {enabledCount} / {passWarningThreshold} passes
         </span>
       </div>
@@ -265,7 +272,11 @@ function EffectRow({
         >
           {/* The icon carries the health as well as the action, and names it: a bare dot conveys
               nothing to a screen reader, and a broken shader is the one state worth announcing. */}
-          <HealthIcon role="img" aria-label={healthTitle(entry)} className={cn(broken && 'text-destructive')} />
+          <HealthIcon
+            role="img"
+            aria-label={healthTitle(entry)}
+            className={cn(broken && 'text-destructive')}
+          />
         </Button>
 
         <Button

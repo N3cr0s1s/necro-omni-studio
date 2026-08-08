@@ -110,9 +110,7 @@ describe('settings changes', () => {
 
   it('marks the selected option in the accessibility tree, not only with a tint', () => {
     renderDialog();
-    const selected = screen
-      .getAllByRole('button', { pressed: true })
-      .map((option) => option.textContent);
+    const selected = screen.getAllByRole('button', { pressed: true }).map((option) => option.textContent);
     // One per group: codec, quality, speed.
     expect(selected).toEqual(['H.264', 'high', 'medium']);
   });

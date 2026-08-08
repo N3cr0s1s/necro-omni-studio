@@ -72,7 +72,9 @@ export function SegmentationPanel({
     >
       <div className="flex h-9 flex-none items-center gap-3 px-4">
         <ScanIcon className="size-3.5 text-chart-4" />
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Segmentation</span>
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Segmentation
+        </span>
         <Badge variant={unavailable ? 'destructive' : 'secondary'} className="ml-auto">
           {unavailable ? 'unavailable' : 'SAM 2'}
         </Badge>

@@ -473,7 +473,9 @@ function RowMeta({ node }: { readonly node: TreeNode }): ReactNode {
   }
 
   if (node.name === 'generated') {
-    return <span className="ml-auto font-mono text-xs text-muted-foreground">{formatBytes(node.sizeBytes)}</span>;
+    return (
+      <span className="ml-auto font-mono text-xs text-muted-foreground">{formatBytes(node.sizeBytes)}</span>
+    );
   }
 
   return node.fileCount > 0 ? (

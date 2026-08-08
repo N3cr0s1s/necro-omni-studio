@@ -285,7 +285,9 @@ function DraftColumn({
         <Identity draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
 
         <div className="flex flex-col gap-3">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Parameters</span>
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Parameters
+          </span>
           {draft.params.length === 0 && (
             <p className="font-mono text-xs text-muted-foreground">
               tick a graph input on the left to make it a parameter

@@ -28,7 +28,12 @@ import {
   DialogTitle,
 } from '@nos/ui/components/ui/dialog';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@nos/ui/components/ui/field';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@nos/ui/components/ui/input-group';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@nos/ui/components/ui/input-group';
 import { Progress } from '@nos/ui/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
 import { cn } from '@nos/ui/lib/utils';

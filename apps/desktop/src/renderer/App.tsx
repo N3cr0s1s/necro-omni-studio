@@ -46,8 +46,38 @@ import {
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
 import {
-  Button,
-  ContextMenu,
+  FilmIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  HistoryIcon,
+  InfoIcon,
+  PauseIcon,
+  PlayIcon,
+  SaveIcon,
+  ServerIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  TriangleAlertIcon,
+  UploadIcon,
+} from 'lucide-react';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@nos/ui/components/ui/dialog';
+import { Input } from '@nos/ui/components/ui/input';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { Spinner } from '@nos/ui/components/ui/spinner';
+import { cn } from '@nos/ui/lib/utils';
+import {
+  type BrowserMenuTarget,
+  type MenuBinding,
+  type TimelineMenuTarget,
   ExportDialog,
   LevelMeter,
   MaskPointOverlay,
@@ -68,7 +98,7 @@ import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
-import { useTheme } from './use-theme.js';
+import { ModeToggle } from './ModeToggle.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
@@ -168,7 +198,6 @@ export function App(): ReactNode {
   // Autosave writes a recovery *sibling*, never `project.json`: an autosave that overwrote the file
   // would destroy the last state the user deliberately saved, the moment they started experimenting.
   const autosave = useAutosave({ store, projectRoot: project?.root, bridge: bridge() });
-  const theme = useTheme();
 
   const tree = useProjectTree(project?.root);
   // The runtime probes ComfyUI once and reports which backend is actually in use; the registry then
@@ -483,9 +512,6 @@ export function App(): ReactNode {
   const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
   /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
   const resizing = useRef(false);
-  const [menu, setMenu] = useState<
-    { clip: ClipId | undefined; track: TrackId | undefined; x: number; y: number } | undefined
-  >(undefined);
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
@@ -511,19 +537,20 @@ export function App(): ReactNode {
   // times would swallow every click meant for the picture, and the crosshair would be a promise
   // about a mode the user is not in.
   const segmenting = rightTab === 'segment';
-  const [browserMenu, setBrowserMenu] = useState<
-    { path: string; isDirectory: boolean; x: number; y: number } | undefined
-  >(undefined);
   // Which browser row has its name field open, and which folder is waiting for a name. Two states
   // rather than one: a new folder has no row to edit until it exists on disk.
   const [renamingPath, setRenamingPath] = useState<string | undefined>(undefined);
   const [newFolderIn, setNewFolderIn] = useState<string | undefined>(undefined);
 
+  /**
+   * Runs whatever the browser's menu chose, **on the row it was opened over**.
+   *
+   * The target is an argument rather than state read back when the action fires. It used to be the
+   * latter, which is a stale read waiting to happen: between opening a menu and choosing from it the
+   * selection can move, and "move to trash" acting on the wrong file is not a recoverable mistake.
+   */
   const runBrowserMenuAction = useCallback(
-    (action: BrowserMenuAction) => {
-      const target = browserMenu;
-      if (target === undefined) return;
-
+    (target: BrowserMenuTarget, action: BrowserMenuAction) => {
       switch (action) {
         case 'new-folder':
           // Into the clicked folder, or beside a clicked file — which is where a user pointing at
@@ -549,7 +576,7 @@ export function App(): ReactNode {
         }
       }
     },
-    [browserMenu, files, tree],
+    [files, tree],
   );
 
   /**
@@ -646,7 +673,7 @@ export function App(): ReactNode {
    * of what is offered, which can be tested without rendering anything.
    */
   const runClipMenuAction = useCallback(
-    (action: ClipMenuAction) => {
+    (target: TimelineMenuTarget, action: ClipMenuAction) => {
       switch (action) {
         case 'add-video-track':
           addTrackOfKind('video');
@@ -658,13 +685,11 @@ export function App(): ReactNode {
           addTrackOfKind('text');
           break;
         case 'rename-track':
-          setRenamingTrack(menu?.track);
+          setRenamingTrack(target.track);
           break;
-        case 'remove-track': {
-          const target = menu?.track;
-          if (target !== undefined) removeTrackById(target);
+        case 'remove-track':
+          if (target.track !== undefined) removeTrackById(target.track);
           break;
-        }
         case 'cut':
           clipEdits.cut();
           break;
@@ -700,9 +725,8 @@ export function App(): ReactNode {
           break;
         case 'unlink':
           store.commit('unlink clips', (current) => {
-            const target = menu?.clip;
-            if (target === undefined) return current;
-            const result = unlinkClips(current, target);
+            if (target.clip === undefined) return current;
+            const result = unlinkClips(current, target.clip);
             if (!result.ok) {
               setError(describeEdit(result.error));
               return current;
@@ -725,20 +749,47 @@ export function App(): ReactNode {
         }
       }
     },
-    [clipEdits, menu, store],
+    [clipEdits, store],
+  );
+
+  /**
+   * What the timeline's right-click offers, and what a choice does.
+   *
+   * One object because the two halves are useless apart, and because the panels render the menu
+   * themselves now — this describes it, and `ActionMenu` turns the description into markup.
+   */
+  const timelineMenu: MenuBinding<TimelineMenuTarget> = useMemo(
+    () => ({
+      items: (target) =>
+        clipMenuItems({
+          document,
+          clip: target.clip,
+          track: target.track,
+          selectionSize: selected.size,
+          canPaste: clipEdits.canPaste,
+          hasAttributes: clipEdits.attributeSummary !== undefined,
+          canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
+          ripple,
+        }),
+      onChoose: (target, action) => runClipMenuAction(target, action as ClipMenuAction),
+    }),
+    [clipEdits, document, ripple, runClipMenuAction, selected],
+  );
+
+  const browserMenu: MenuBinding<BrowserMenuTarget> = useMemo(
+    () => ({
+      items: (target) =>
+        browserMenuItems({
+          path: target.path === '' ? undefined : target.path,
+          isDirectory: target.isDirectory,
+        }),
+      onChoose: (target, action) => runBrowserMenuAction(target, action as BrowserMenuAction),
+    }),
+    [runBrowserMenuAction],
   );
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: 'var(--nos-bg-app)',
-        color: 'var(--nos-text-primary)',
-        font: '400 12px system-ui, sans-serif',
-      }}
-    >
+    <div className="flex h-screen flex-col">
       <TitleBar
         project={project}
         sidecar={sidecar}
@@ -748,44 +799,10 @@ export function App(): ReactNode {
         onSave={() => void save()}
         onExport={openExport}
         autosaveStatus={autosave.status}
-        theme={theme.theme}
-        onToggleTheme={theme.toggle}
       />
 
       {autosave.offer !== undefined && (
         <RecoveryOffer savedAt={autosave.offeredAt} onAccept={autosave.accept} onDiscard={autosave.discard} />
-      )}
-
-      {menu !== undefined && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={clipMenuItems({
-            document,
-            clip: menu.clip,
-            track: menu.track,
-            selectionSize: selected.size,
-            canPaste: clipEdits.canPaste,
-            hasAttributes: clipEdits.attributeSummary !== undefined,
-            canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
-            ripple,
-          })}
-          onChoose={(action) => runClipMenuAction(action as ClipMenuAction)}
-          onClose={() => setMenu(undefined)}
-        />
-      )}
-
-      {browserMenu !== undefined && (
-        <ContextMenu
-          x={browserMenu.x}
-          y={browserMenu.y}
-          items={browserMenuItems({
-            path: browserMenu.path === '' ? undefined : browserMenu.path,
-            isDirectory: browserMenu.isDirectory,
-          })}
-          onChoose={(action) => runBrowserMenuAction(action as BrowserMenuAction)}
-          onClose={() => setBrowserMenu(undefined)}
-        />
       )}
 
       {newFolderIn !== undefined && (
@@ -822,14 +839,7 @@ export function App(): ReactNode {
       )}
 
       {exportRun.timing !== undefined && (
-        <div
-          role="status"
-          style={{
-            padding: '4px 16px',
-            font: '500 11px ui-monospace, monospace',
-            color: 'var(--nos-text-faint)',
-          }}
-        >
+        <div role="status" className="px-4 py-1 font-mono text-xs text-muted-foreground">
           {describeTiming(exportRun.timing)}
         </div>
       )}
@@ -837,13 +847,9 @@ export function App(): ReactNode {
       {(error ?? drag.rejection ?? exportRun.error ?? mediaImport.error) !== undefined && (
         <div
           role="alert"
-          style={{
-            padding: '6px 16px',
-            background: 'rgba(255, 107, 107, 0.12)',
-            color: 'var(--nos-danger)',
-            font: '500 11px ui-monospace, monospace',
-          }}
+          className="flex items-center gap-2 bg-destructive/10 px-4 py-1.5 font-mono text-xs text-destructive"
         >
+          <TriangleAlertIcon className="size-3.5 shrink-0" />
           {error ?? drag.rejection ?? exportRun.error ?? mediaImport.error}
         </div>
       )}
@@ -851,18 +857,14 @@ export function App(): ReactNode {
       {notice !== undefined && (
         <div
           role="status"
-          style={{
-            padding: '6px 16px',
-            background: 'rgba(255, 176, 32, 0.10)',
-            color: 'var(--nos-warn)',
-            font: '500 11px ui-monospace, monospace',
-          }}
+          className="flex items-center gap-2 bg-muted px-4 py-1.5 font-mono text-xs text-muted-foreground"
         >
+          <InfoIcon className="size-3.5 shrink-0" />
           {notice}
         </div>
       )}
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="flex min-h-0 flex-1">
         <MediaBrowser
           tree={tree.tree ?? buildTree([])}
           watcher={tree.watcher}
@@ -870,7 +872,7 @@ export function App(): ReactNode {
           {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
           onSelect={setBrowserSelection}
           detail={<BrowserDetail asset={assetDetail} cache={cache} />}
-          onContextMenu={(path, isDirectory, x, y) => setBrowserMenu({ path, isDirectory, x, y })}
+          menu={browserMenu}
           {...(renamingPath !== undefined ? { renamingPath } : {})}
           onRename={(path, name) => {
             setRenamingPath(undefined);
@@ -892,7 +894,7 @@ export function App(): ReactNode {
           }}
         />
 
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <main className="flex min-w-0 flex-1 flex-col">
           <Preview
             document={drag.document}
             frame={playhead}
@@ -924,7 +926,7 @@ export function App(): ReactNode {
             onClearClip={audio.clearClip}
           />
 
-          <div ref={laneRef} style={{ flex: 'none' }}>
+          <div ref={laneRef} className="flex-none">
             <Timeline
               document={drag.document}
               strips={strips.strips}
@@ -983,13 +985,7 @@ export function App(): ReactNode {
                   if (id !== undefined) setSelected(new Set([id]));
                 });
               }}
-              onContextMenu={(target, x, y) => {
-                // Right-clicking an unselected clip selects it first: acting on something other than
-                // what was clicked is the one behaviour a context menu must never have.
-                const clip = target.clip;
-                if (clip !== undefined && !selected.has(clip)) setSelected(new Set([clip as string]));
-                setMenu({ clip, track: target.track, x, y });
-              }}
+              menu={timelineMenu}
               onSelectRegion={(region, additive) =>
                 setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))
               }
@@ -1085,77 +1081,41 @@ function NewFolderPrompt({
   const [name, setName] = useState('');
 
   return (
-    <div
-      role="dialog"
-      aria-label="New folder"
-      aria-modal="true"
-      onClick={onCancel}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(0, 0, 0, 0.45)',
-        zIndex: 60,
-      }}
-    >
-      <form
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim() !== '') onConfirm(name);
-        }}
-        // Submitting on Enter is what a one-field prompt should do, and the form gives it for free.
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--nos-space-4)',
-          padding: 'var(--nos-space-6)',
-          minWidth: 320,
-          borderRadius: 'var(--nos-radius-card)',
-          background: 'var(--nos-bg-panel)',
-          border: '1px solid var(--nos-border)',
-          boxShadow: '0 18px 48px rgba(0, 0, 0, 0.6)',
-        }}
-      >
-        <label
-          htmlFor="new-folder-name"
-          style={{ font: 'var(--nos-text-label)', color: 'var(--nos-text-soft)' }}
+    <Dialog open onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent aria-label="New folder" className="sm:max-w-sm">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (name.trim() !== '') onConfirm(name);
+          }}
+          // Submitting on Enter is what a one-field prompt should do, and the form gives it for free.
+          className="flex flex-col gap-4"
         >
-          {parent === '' ? 'New folder in the project root' : `New folder in ${parent}`}
-        </label>
-        <input
-          id="new-folder-name"
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') onCancel();
-          }}
-          style={{
-            height: 'var(--nos-control-height)',
-            background: 'var(--nos-surface-1)',
-            border: '1px solid var(--nos-border-control)',
-            borderRadius: 'var(--nos-radius-control)',
-            color: 'var(--nos-text-bright)',
-            font: '400 12.5px system-ui, sans-serif',
-            padding: '0 var(--nos-space-3)',
-          }}
-        />
-        <div style={{ display: 'flex', gap: 'var(--nos-space-2)', justifyContent: 'flex-end' }}>
-          <Button onClick={onCancel}>Cancel</Button>
-          <Button
-            tone="primary"
-            disabled={name.trim() === ''}
-            onClick={() => {
-              if (name.trim() !== '') onConfirm(name);
-            }}
-          >
-            Create
-          </Button>
-        </div>
-      </form>
-    </div>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlusIcon className="size-4" />
+              New folder
+            </DialogTitle>
+            <DialogDescription>{parent === '' ? 'in the project root' : `in ${parent}`}</DialogDescription>
+          </DialogHeader>
+          <Input
+            id="new-folder-name"
+            aria-label="Folder name"
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="ghost" type="button" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={name.trim() === ''}>
+              Create
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1168,8 +1128,6 @@ function TitleBar({
   onSave,
   onExport,
   autosaveStatus,
-  theme,
-  onToggleTheme,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -1179,78 +1137,49 @@ function TitleBar({
   readonly onSave: () => void;
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
-  readonly theme: 'dark' | 'light';
-  readonly onToggleTheme: () => void;
 }): ReactNode {
   return (
-    <header
-      style={{
-        height: 44,
-        flex: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '0 16px',
-        background: 'var(--nos-bg-panel)',
-        borderBottom: '1px solid var(--nos-border)',
-      }}
-    >
-      <span
-        style={{
-          font: '600 10px system-ui',
-          letterSpacing: '.09em',
-          textTransform: 'uppercase',
-          color: 'var(--nos-text-dim)',
-        }}
-      >
+    <header className="flex h-11 flex-none items-center gap-3 border-b px-4">
+      <FilmIcon className="size-4 text-primary" />
+      <span className="text-[10px] font-semibold tracking-[0.09em] text-muted-foreground uppercase">
         Necro Omni Studio
       </span>
-      <span style={{ color: 'var(--nos-text-secondary)' }}>
+      <span className="text-sm">
         {project?.name ?? 'no project open'}
         {dirty ? ' •' : ''}
       </span>
 
-      <div style={{ flex: 1 }} />
       {/* The spec's job chip: generation runs for minutes, and a user who cannot see that something is
           running assumes nothing happened and starts again. */}
       {jobs > 0 && (
-        <span
-          style={{
-            font: '500 11px ui-monospace, monospace',
-            color: 'var(--nos-generated-text)',
-            background: 'rgba(155, 140, 255, 0.16)',
-            borderRadius: 3,
-            padding: '2px 6px',
-          }}
-        >
+        <Badge variant="secondary" className="ml-auto gap-1.5 font-mono text-chart-4">
+          <Spinner className="size-3" />
           {`${jobs} job${jobs === 1 ? '' : 's'}`}
-        </span>
+        </Badge>
       )}
       {/* The sidecar's state is shown rather than hidden: without it there are no proxies, no
           waveforms and no export, and a user who cannot see that will blame the application. */}
-      <span
-        style={{
-          font: '500 11px ui-monospace, monospace',
-          color: sidecar?.available === true ? 'var(--nos-ok)' : 'var(--nos-warn)',
-        }}
+      <Badge
+        variant={sidecar?.available === true ? 'secondary' : 'outline'}
+        className={cn('font-mono', jobs === 0 && 'ml-auto', sidecar?.available === true && 'text-chart-2')}
         title={sidecar?.detail ?? ''}
       >
+        <ServerIcon />
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
-      </span>
+      </Badge>
       {project !== undefined && <AutosaveChip status={autosaveStatus} />}
-      {/* Named for what it switches to rather than what is on: a control labelled with the current
-          state reads as a status, and a user has to guess whether pressing it changes anything. */}
-      <Button
-        onClick={onToggleTheme}
-        title={theme === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme'}
-      >
-        {theme === 'dark' ? '☀' : '☾'}
+      <ModeToggle />
+      <Separator orientation="vertical" className="h-4" />
+      <Button variant="ghost" size="sm" onClick={onOpen}>
+        <FolderOpenIcon />
+        Open project
       </Button>
-      <Button onClick={onOpen}>Open project</Button>
-      <Button onClick={onSave} disabled={project === undefined}>
+      <Button variant="ghost" size="sm" onClick={onSave} disabled={project === undefined}>
+        <SaveIcon />
         Save
       </Button>
-      <Button tone="primary" onClick={onExport} disabled={project === undefined}>
+      <Button size="sm" onClick={onExport} disabled={project === undefined}>
+        <UploadIcon />
         Export
       </Button>
     </header>
@@ -1279,32 +1208,34 @@ function Transport({
   readonly onClearClip: () => void;
 }): ReactNode {
   return (
-    <div
-      aria-label="Transport"
-      style={{
-        height: 'var(--nos-transport-height)',
-        flex: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '0 16px',
-        background: 'var(--nos-bg-panel)',
-        borderTop: '1px solid var(--nos-border)',
-        borderBottom: '1px solid var(--nos-border)',
-      }}
-    >
-      <Button onClick={() => transport.step(-1)} title="Previous frame (←)">
-        ◀
+    <div aria-label="Transport" className="flex h-13 flex-none items-center gap-2 border-y px-4">
+      <Button
+        variant="outline"
+        size="icon-sm"
+        onClick={() => transport.step(-1)}
+        aria-label="Previous frame"
+        title="Previous frame (←)"
+      >
+        <SkipBackIcon />
       </Button>
       <Button
-        tone={transport.playing ? 'active' : 'default'}
+        variant={transport.playing ? 'secondary' : 'default'}
+        size="icon-sm"
         onClick={transport.toggle}
+        aria-label={transport.playing ? 'Pause' : 'Play'}
+        aria-pressed={transport.playing}
         title="Play or pause (space)"
       >
-        {transport.playing ? 'Pause' : 'Play'}
+        {transport.playing ? <PauseIcon /> : <PlayIcon />}
       </Button>
-      <Button onClick={() => transport.step(1)} title="Next frame (→)">
-        ▶
+      <Button
+        variant="outline"
+        size="icon-sm"
+        onClick={() => transport.step(1)}
+        aria-label="Next frame"
+        title="Next frame (→)"
+      >
+        <SkipForwardIcon />
       </Button>
 
       {/* Typed into as well as read. The position was shown and there was no way to go to one, and
@@ -1316,11 +1247,10 @@ function Transport({
         onSeek={transport.seek}
       />
 
-      <div style={{ flex: 1 }} />
-
       {/* Beside the timecode, where an editor already looks during playback. A mix with no meter is a
           mix that can only be checked by exporting it and listening. */}
       <LevelMeter
+        className="ml-auto"
         {...(meters?.peaks !== undefined ? { peaks: meters.peaks } : {})}
         clipped={meters?.clipped ?? false}
         onClearClip={onClearClip}
@@ -1346,10 +1276,10 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
 
   return (
     <span
-      style={{
-        font: '500 11px ui-monospace, monospace',
-        color: status.state === 'failed' ? 'var(--nos-danger)' : 'var(--nos-text-faint)',
-      }}
+      className={cn(
+        'font-mono text-xs',
+        status.state === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+      )}
       title="Autosave writes a recovery file beside the project; it never overwrites project.json"
     >
       {describeAutosave(status, now)}
@@ -1377,25 +1307,19 @@ function RecoveryOffer({
     <div
       role="alertdialog"
       aria-label="Unsaved work was recovered"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '8px 16px',
-        background: 'rgba(255, 176, 32, 0.14)',
-        color: 'var(--nos-warn)',
-        font: '500 11px ui-monospace, monospace',
-      }}
+      className="flex items-center gap-3 bg-muted px-4 py-2 font-mono text-xs"
     >
+      <HistoryIcon className="size-3.5 shrink-0" />
       <span>
         unsaved work from {savedAt === undefined ? 'a previous session' : new Date(savedAt).toLocaleString()}{' '}
         was recovered
       </span>
-      <div style={{ flex: 1 }} />
-      <Button tone="primary" onClick={onAccept}>
+      <Button size="sm" className="ml-auto" onClick={onAccept}>
         Restore it
       </Button>
-      <Button onClick={onDiscard}>Discard</Button>
+      <Button variant="ghost" size="sm" onClick={onDiscard}>
+        Discard
+      </Button>
     </div>
   );
 }

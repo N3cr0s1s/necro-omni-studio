@@ -118,10 +118,7 @@ export function RightPanel(props: RightPanelProps): ReactNode {
   }, [props, tab]);
 
   return (
-    <aside
-      aria-label="Inspector"
-      className="flex w-85 min-h-0 flex-none flex-col border-l"
-    >
+    <aside aria-label="Inspector" className="flex w-85 min-h-0 flex-none flex-col border-l">
       <Tabs
         value={tab}
         onValueChange={(next) => setTab(next as typeof tab)}

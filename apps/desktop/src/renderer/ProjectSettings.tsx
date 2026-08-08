@@ -75,8 +75,10 @@ export function describeRetime(cost: ReturnType<typeof retimeCost>): {
  * project. Anything unrecognised leaves every button unpressed rather than lighting the nearest one.
  */
 function currentPreset(resolution: { readonly width: number; readonly height: number }): string {
-  return PRESETS.find((preset) => preset.width === resolution.width && preset.height === resolution.height)
-    ?.label ?? '';
+  return (
+    PRESETS.find((preset) => preset.width === resolution.width && preset.height === resolution.height)
+      ?.label ?? ''
+  );
 }
 
 export function ProjectSettings({ document, onChange, onReject }: ProjectSettingsProps): ReactNode {
@@ -140,7 +142,9 @@ export function ProjectSettings({ document, onChange, onReject }: ProjectSetting
         // undone without loss, so it gets the one confirmation step in this application.
         onValueChange={(next) => {
           const chosen = RATES.find((rate) => formatFrameRate(rate) === next.at(-1));
-          setPendingRate(chosen !== undefined && !frameRateEquals(chosen, document.frameRate) ? chosen : undefined);
+          setPendingRate(
+            chosen !== undefined && !frameRateEquals(chosen, document.frameRate) ? chosen : undefined,
+          );
         }}
         className="flex-wrap justify-start"
       >

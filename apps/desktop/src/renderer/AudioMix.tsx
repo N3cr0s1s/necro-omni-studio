@@ -161,8 +161,7 @@ export function AudioMix({ document, clip, playhead, onChange }: AudioMixProps):
           onClick={() => write('reset gain', 'gain', staticNumber(1))}
           title="Return the level to unity"
         >
-          <RotateCcwIcon />
-          0 dB
+          <RotateCcwIcon />0 dB
         </Button>
         <Button
           variant="outline"

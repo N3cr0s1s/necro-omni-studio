@@ -20,7 +20,7 @@ import {
   mergeGeneratedKeyframes,
 } from '@nos/text';
 import { TypeIcon } from 'lucide-react';
-import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Field, FieldTitle } from '@nos/ui/components/ui/field';
 import { Input } from '@nos/ui/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Textarea } from '@nos/ui/components/ui/textarea';
@@ -294,15 +294,14 @@ function applyPreset(clip: TextClip, phase: 'in' | 'out', animation: TextAnimati
 /**
  * A caption above a control that already carries its own `aria-label`.
  *
- * Plumbing: the registry's `Field` with a label that is deliberately *not* associated, because every
- * control in this panel names itself and a second association would give each one two accessible names.
+ * Plumbing: the registry's `Field` with `FieldTitle` rather than `FieldLabel`, because every control in
+ * this panel already names itself with `aria-label` — a second `<label>` would give each one two
+ * accessible names, and an unassociated one would give the caption no meaning at all.
  */
 function Labelled({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
   return (
     <Field className="gap-1">
-      <FieldLabel render={<span />} className="text-xs">
-        {label}
-      </FieldLabel>
+      <FieldTitle className="text-xs">{label}</FieldTitle>
       {children}
     </Field>
   );

@@ -10,5 +10,6 @@ apps/sidecar
 # The shadcn registry, vendored verbatim by `shadcn add`. Left exactly as upstream writes it so that
 # `shadcn diff` and the next `shadcn add` produce a real diff rather than a formatting one.
 packages/ui/src/components/ui
+packages/ui/src/styles/globals.css
 packages/ui/src/lib/utils.ts
 packages/ui/src/hooks/use-mobile.ts

@@ -1,12 +1,4 @@
-import {
-  Fragment,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type Clip,
   type ClipId,
@@ -305,91 +297,91 @@ export function Timeline(props: TimelineProps): ReactNode {
             items={props.menu === undefined ? [] : props.menu.items(NO_TARGET)}
             onChoose={(action) => props.menu?.onChoose(NO_TARGET, action)}
           >
-          <div
-            data-lane-surface=""
-            className="relative"
-            onPointerDown={marquee.begin}
-            onDragOver={(event) => {
-              if (props.onDropAsset === undefined) return;
-              if (!event.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
-              // Preventing the default is what makes an element a drop target at all, and the effect
-              // is what turns the cursor from "no" into "copy" while the pointer is over a track.
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'copy';
+            <div
+              data-lane-surface=""
+              className="relative"
+              onPointerDown={marquee.begin}
+              onDragOver={(event) => {
+                if (props.onDropAsset === undefined) return;
+                if (!event.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
+                // Preventing the default is what makes an element a drop target at all, and the effect
+                // is what turns the cursor from "no" into "copy" while the pointer is over a track.
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
 
-              // Where it *would* land, computed from the same function the drop uses so the two
-              // cannot disagree. Without this a drop was a guess: the user let go and found out,
-              // which is what "not deterministic" meant.
-              const bounds = event.currentTarget.getBoundingClientRect();
-              setDropTarget(
-                assetDropTarget(document.sequence.tracks, viewport, {
+                // Where it *would* land, computed from the same function the drop uses so the two
+                // cannot disagree. Without this a drop was a guess: the user let go and found out,
+                // which is what "not deterministic" meant.
+                const bounds = event.currentTarget.getBoundingClientRect();
+                setDropTarget(
+                  assetDropTarget(document.sequence.tracks, viewport, {
+                    x: event.clientX - bounds.left,
+                    y: event.clientY - bounds.top,
+                  }),
+                );
+              }}
+              onDragLeave={(event) => {
+                // Only when the pointer leaves the lane area itself. `dragleave` fires for every child
+                // it crosses, and clearing on those would make the indicator flicker as it moves.
+                if (event.target !== event.currentTarget) return;
+                setDropTarget(undefined);
+              }}
+              onDrop={(event) => {
+                const asset = event.dataTransfer.getData(ASSET_DRAG_TYPE);
+                setDropTarget(undefined);
+                if (props.onDropAsset === undefined || asset === '') return;
+                event.preventDefault();
+
+                const bounds = event.currentTarget.getBoundingClientRect();
+                const target = assetDropTarget(document.sequence.tracks, viewport, {
                   x: event.clientX - bounds.left,
                   y: event.clientY - bounds.top,
-                }),
-              );
-            }}
-            onDragLeave={(event) => {
-              // Only when the pointer leaves the lane area itself. `dragleave` fires for every child
-              // it crosses, and clearing on those would make the indicator flicker as it moves.
-              if (event.target !== event.currentTarget) return;
-              setDropTarget(undefined);
-            }}
-            onDrop={(event) => {
-              const asset = event.dataTransfer.getData(ASSET_DRAG_TYPE);
-              setDropTarget(undefined);
-              if (props.onDropAsset === undefined || asset === '') return;
-              event.preventDefault();
-
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const target = assetDropTarget(document.sequence.tracks, viewport, {
-                x: event.clientX - bounds.left,
-                y: event.clientY - bounds.top,
-              });
-              if (target === undefined) return;
-              props.onDropAsset(asset, target.track, target.frame);
-            }}
-          >
-            {marquee.rect !== undefined && (
-              <div
-                data-marquee="true"
-                aria-hidden="true"
-                className="pointer-events-none absolute z-2 border border-primary bg-primary/10"
-                style={{
-                  left: marquee.rect.left,
-                  top: marquee.rect.top,
-                  width: marquee.rect.width,
-                  height: marquee.rect.height,
-                }}
-              />
-            )}
-            {document.sequence.tracks.map((track) => (
-              <Fragment key={track.id}>
-                <TrackLane
-                  track={track}
-                  viewport={viewport}
-                  {...(dropTarget?.track === track.id ? { dropAt: dropTarget.frame } : {})}
-                  selectedClips={props.selectedClips}
-                  {...(props.strips !== undefined ? { strips: props.strips } : {})}
-                  {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
-                  {...(props.onToggleExpandClip !== undefined
-                    ? { onToggleExpandClip: props.onToggleExpandClip }
-                    : {})}
-                  {...(props.onClipPointerDown !== undefined
-                    ? { onClipPointerDown: props.onClipPointerDown }
-                    : {})}
-                  {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
-                  {...(props.menu !== undefined ? { menu: props.menu } : {})}
-                  {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
-                  {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
+                });
+                if (target === undefined) return;
+                props.onDropAsset(asset, target.track, target.frame);
+              }}
+            >
+              {marquee.rect !== undefined && (
+                <div
+                  data-marquee="true"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute z-2 border border-primary bg-primary/10"
+                  style={{
+                    left: marquee.rect.left,
+                    top: marquee.rect.top,
+                    width: marquee.rect.width,
+                    height: marquee.rect.height,
+                  }}
                 />
-                {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
-                  <div data-clip-lanes={props.expandedClip} className="relative">
-                    {props.lanes}
-                  </div>
-                )}
-              </Fragment>
-            ))}
-          </div>
+              )}
+              {document.sequence.tracks.map((track) => (
+                <Fragment key={track.id}>
+                  <TrackLane
+                    track={track}
+                    viewport={viewport}
+                    {...(dropTarget?.track === track.id ? { dropAt: dropTarget.frame } : {})}
+                    selectedClips={props.selectedClips}
+                    {...(props.strips !== undefined ? { strips: props.strips } : {})}
+                    {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
+                    {...(props.onToggleExpandClip !== undefined
+                      ? { onToggleExpandClip: props.onToggleExpandClip }
+                      : {})}
+                    {...(props.onClipPointerDown !== undefined
+                      ? { onClipPointerDown: props.onClipPointerDown }
+                      : {})}
+                    {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
+                    {...(props.menu !== undefined ? { menu: props.menu } : {})}
+                    {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
+                    {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
+                  />
+                  {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
+                    <div data-clip-lanes={props.expandedClip} className="relative">
+                      {props.lanes}
+                    </div>
+                  )}
+                </Fragment>
+              ))}
+            </div>
           </ActionMenu>
 
           {props.snapIndicator !== undefined && (
@@ -1095,7 +1087,10 @@ function TimelineRuler({
           // The colour is the marker's own — a user who set one chose it deliberately, and overriding
           // it with a theme role would throw away the only thing that tells two markers apart. Absent,
           // it falls back to a role.
-          className={cn('absolute bottom-0 h-2.5 w-2 cursor-pointer rounded-t-sm', marker.color === undefined && 'bg-chart-3')}
+          className={cn(
+            'absolute bottom-0 h-2.5 w-2 cursor-pointer rounded-t-sm',
+            marker.color === undefined && 'bg-chart-3',
+          )}
           style={{
             left: frameToPx(viewport, marker.frame) - 3,
             ...(marker.color !== undefined ? { background: marker.color } : {}),
@@ -1180,6 +1175,11 @@ function TrackLane({
               onSelectClip?.(clipId, event.shiftKey || event.metaKey);
               onClipPointerDown?.(clipId, event);
             }}
+            // Right-clicking an unselected clip selects it first, and leaves a multiple selection
+            // alone — a menu opened over one of five selected clips is about all five.
+            onContextMenu={(clipId) => {
+              if (!selectedClips.has(clipId)) onSelectClip?.(clipId, false);
+            }}
             {...(menu !== undefined
               ? {
                   menu: {
@@ -1241,13 +1241,12 @@ function DropIndicator({
   const left = frameToPx(viewport, frame);
 
   return (
-    <div
-      aria-hidden="true"
-      data-drop-indicator=""
-      className="pointer-events-none absolute inset-0 z-3"
-    >
+    <div aria-hidden="true" data-drop-indicator="" className="pointer-events-none absolute inset-0 z-3">
       <div className="absolute inset-0 bg-primary/10" />
-      <div className="absolute top-0 w-0.5 bg-primary shadow-[0_0_6px_var(--primary)]" style={{ left, height }} />
+      <div
+        className="absolute top-0 w-0.5 bg-primary shadow-[0_0_6px_var(--primary)]"
+        style={{ left, height }}
+      />
     </div>
   );
 }
