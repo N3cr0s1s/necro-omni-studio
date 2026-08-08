@@ -221,7 +221,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2312 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2359 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Branch `build/foundation`, and `refactor/shadcn-baseui` on top of it (pushed).
@@ -244,6 +244,16 @@ ever tracking the first.
 - **A title's outline and shadow could not be set.** Rasterized since M7, including the care taken
   not to draw the shadow twice — in a code path that had never run, because nothing could switch an
   outline on. Fixed: the text inspector now offers every field `TextContent` carries.
+- **A mask could not reach an effect.** The whole of M11 terminated in a file nothing could read: the
+  segmenter produced masks, `EffectInstance` could name one, the plan carried the id, the compositor
+  asked for a texture — and the renderer answered `undefined`, unconditionally. Nothing could set
+  `EffectInstance.mask` either, so the built-in Background Blur, which the spec names as *its own*
+  example of the mask system, declared the slot and could never receive one. Fixed: a binding control
+  for any effect declaring the `mask` sampler, and `mask-source.ts` resolving a bound id to the frame
+  being drawn.
+- **A note was never shown.** §4 asks the browser to display markdown and reserves `notes/` for it;
+  the browser showed the filename. Fixed: `@nos/media/notes/markdown` parses to a structure — never to
+  an HTML string — and `NoteView` renders it.
 
 One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
 graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
