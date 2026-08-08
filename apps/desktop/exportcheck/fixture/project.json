@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "exportcheck",
+  "name": "exportcheck",
+  "frameRate": "30",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "sequence": {
+    "id": "main",
+    "tracks": [
+      {
+        "id": "V1",
+        "kind": "video",
+        "name": "V1",
+        "height": 84
+      },
+      {
+        "id": "A1",
+        "kind": "audio",
+        "name": "A1",
+        "height": 64
+      },
+      {
+        "id": "T1",
+        "kind": "text",
+        "name": "T1",
+        "height": 46,
+        "clips": [
+          {
+            "id": "title_1",
+            "kind": "text",
+            "span": {
+              "start": 0,
+              "duration": 30
+            },
+            "label": "WYSIWYG",
+            "content": {
+              "text": "WYSIWYG",
+              "font": "system-ui, sans-serif",
+              "size": 160,
+              "weight": 700,
+              "align": "center",
+              "outline": {
+                "width": 6,
+                "color": {
+                  "r": 1,
+                  "g": 0,
+                  "b": 0,
+                  "a": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
