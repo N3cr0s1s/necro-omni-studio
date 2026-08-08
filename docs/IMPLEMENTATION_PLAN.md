@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1480 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1508 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -292,6 +292,11 @@ Created across a cut from the clip inspector, consuming handles so the sequence
 never changes length, removed with an exact round trip. Verified in the running
 application: a crossfade overlaps the clips by exactly its duration and the plan
 builds a transition item.
+
+**Media import** closes the loop that mattered most: double-clicking a file in the
+browser probes it and lands it on the timeline, a video carrying audio becoming
+the linked pair the spec describes. Before this, media could only reach the
+timeline by editing `project.json` by hand.
 
 Every feature in the spec is now built, reachable from the shell, and verified in
 the running application — and the shell itself is unit-tested rather than covered
@@ -1374,3 +1379,24 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   **1480 TypeScript tests, 136 Python tests, 22/22 GL assertions, 19/19 rasterizer
   assertions.**
+
+- 2026-08-08: Media import. Reviewing the spec against the shell found the gap that
+  mattered most and had been easy to miss: `onActivate` on the media browser was a
+  no-op, so media could only reach the timeline by editing `project.json` by hand.
+  Every other feature was reachable, which is exactly why this one was invisible.
+
+  The probe runs first, because what a file *is* decides everything that follows:
+  its length, which track it belongs on, and whether it becomes one clip or two.
+  Guessing from the extension would put a silent `.mp4` on two tracks and read a
+  24 fps clip at the project's rate.
+
+  The spec's rule is honoured explicitly — a video whose file carries audio becomes
+  a video clip with a **linked** audio clip beneath it — and the link is *recorded*
+  rather than inferred from matching asset paths, because two cuts of the same file
+  must not appear linked. Inferring it would tie together clips the user
+  deliberately separated.
+
+  Placement lands at the playhead when it is clear and after the material
+  otherwise. The editing layer refuses a collision, as it does for every other
+  operation; finding the first free frame first is what turns that refusal into the
+  result the user wanted rather than an error they have to resolve by hand.
