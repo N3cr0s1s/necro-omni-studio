@@ -764,6 +764,10 @@ so it can gate a release:
 - The project's `effects/` folder is **loaded**, not just created. §4 reserves it and §7
   asks that no concrete effect be baked in; for a long time the folder existed and
   nothing read it, so the extension point was theoretical.
+- A library that reads a folder has **two** kinds of failure and both must be visible: a
+  file that never reached the registry (unreadable, not JSON) has no entry to disable, so
+  it needs its own line; one the registry rejected is listed disabled with its reason.
+  Showing only the second is how a malformed manifest gets skipped in silence.
 - Project effects are registered **after** the builtins, so a project replaces one by
   declaring the same id rather than having to pick a different name.
 - A library that reads the project folder must depend on the **open project**, not load
