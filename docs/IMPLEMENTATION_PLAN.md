@@ -806,6 +806,10 @@ so it can gate a release:
   return nothing in a project folder, and a control that never works teaches the user
   that none of them do.
 
+- Write a control's name **once**. A visible label plus an `sr-only` copy inside the
+  wrapping label names the control correctly and puts the word in the document twice, so
+  "find the control called X" becomes ambiguous — which is how the duplication announces
+  itself. Where the layout allows it, the wrapping label carries the visible name.
 - A shortcut is declared **once**, in `apps/desktop/src/renderer/shortcuts.ts`, and every
   surface that shows one reads it from there. Menus used to repeat the chords, so a
   rebinding had two places to change and the menu was the one that kept printing the
