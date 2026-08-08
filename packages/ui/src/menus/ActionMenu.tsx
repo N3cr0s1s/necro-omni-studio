@@ -35,7 +35,7 @@ export interface ActionMenuItem {
   /** Shown leading. A menu of bare words is slower to scan than one you can recognise by shape. */
   readonly icon?: LucideIcon;
   /** Shown trailing, so a user learns the shortcut by using the menu. */
-  readonly shortcut?: string;
+  readonly shortcut?: string | undefined;
   readonly disabled?: boolean;
   /** Draws a rule above this item, for grouping actions of different weight. */
   readonly separated?: boolean;

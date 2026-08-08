@@ -56,6 +56,7 @@ import {
   SaveIcon,
   ServerIcon,
   SkipBackIcon,
+  KeyboardIcon,
   SkipForwardIcon,
   UploadIcon,
 } from 'lucide-react';
@@ -79,6 +80,7 @@ import {
   type StatusNotice,
   type TimelineMenuTarget,
   ExportDialog,
+  ShortcutSheet,
   StatusBar,
   LevelMeter,
   MaskPointOverlay,
@@ -130,6 +132,7 @@ import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
 import { useConfirmation } from './use-confirmation.js';
+import { SHORTCUT_GROUPS } from './shortcuts.js';
 
 /**
  * The application shell.
@@ -628,6 +631,33 @@ export function App(): ReactNode {
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  /*
+   * `?` opens the reference, which is where every application that has one puts it.
+   *
+   * Ignored while a text field has focus, exactly like every other binding in the shell — a question
+   * mark typed into a prompt is a question mark, not a request for help.
+   */
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      setShortcutsOpen(true);
+      event.preventDefault();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   // Whether the inspector's name field should open by itself, for a rename asked for from the timeline.
   const columns = useStoredLayout('nos.layout.columns');
   const rows = useStoredLayout('nos.layout.rows');
@@ -1054,7 +1084,10 @@ export function App(): ReactNode {
         onSave={() => void save()}
         onExport={openExport}
         autosaveStatus={autosave.status}
+        onShowShortcuts={() => setShortcutsOpen(true)}
       />
+
+      <ShortcutSheet groups={SHORTCUT_GROUPS} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
       {newFolderIn !== undefined && (
         <NewFolderPrompt
@@ -1426,6 +1459,7 @@ function TitleBar({
   onSave,
   onExport,
   autosaveStatus,
+  onShowShortcuts,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -1434,6 +1468,7 @@ function TitleBar({
   readonly onSave: () => void;
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
+  readonly onShowShortcuts: () => void;
 }): ReactNode {
   return (
     <header className="flex h-11 flex-none items-center gap-3 border-b px-4">
@@ -1461,6 +1496,12 @@ function TitleBar({
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
       </Badge>
       {project !== undefined && <AutosaveChip status={autosaveStatus} />}
+      {/* A button as well as the `?` chord, because a reference reachable only by a shortcut is one
+          only the people who do not need it can open. */}
+      <Button variant="ghost" size="icon-sm" onClick={onShowShortcuts} title="Keyboard and pointer (?)">
+        <KeyboardIcon />
+        <span className="sr-only">Keyboard and pointer</span>
+      </Button>
       <ModeToggle />
       <Separator orientation="vertical" className="h-4" />
       <Button variant="ghost" size="sm" onClick={onOpen}>

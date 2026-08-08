@@ -18,6 +18,7 @@ import {
   Trash2Icon,
   TypeIcon,
 } from 'lucide-react';
+import { shortcutLabel } from './shortcuts.js';
 import { type ClipId, type TimelineDocument, type TrackId, linkedPartner, locateClip } from '@nos/core';
 import type { ActionMenuItem } from '@nos/ui';
 
@@ -134,16 +135,28 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       separated: true,
     },
 
-    { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: nothing },
-    { id: 'copy', label: 'Copy', icon: CopyIcon, shortcut: 'Ctrl+C', disabled: nothing },
-    { id: 'paste', label: 'Paste', icon: ClipboardPasteIcon, shortcut: 'Ctrl+V', disabled: !state.canPaste },
-    { id: 'duplicate', label: 'Duplicate', icon: CopyPlusIcon, shortcut: 'Ctrl+D', disabled: nothing },
+    { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: shortcutLabel('cut'), disabled: nothing },
+    { id: 'copy', label: 'Copy', icon: CopyIcon, shortcut: shortcutLabel('copy'), disabled: nothing },
+    {
+      id: 'paste',
+      label: 'Paste',
+      icon: ClipboardPasteIcon,
+      shortcut: shortcutLabel('paste'),
+      disabled: !state.canPaste,
+    },
+    {
+      id: 'duplicate',
+      label: 'Duplicate',
+      icon: CopyPlusIcon,
+      shortcut: shortcutLabel('duplicate'),
+      disabled: nothing,
+    },
 
     {
       id: 'split',
       label: 'Split at playhead',
       icon: SplitIcon,
-      shortcut: 'S',
+      shortcut: shortcutLabel('split'),
       disabled: nothing,
       separated: true,
     },
@@ -153,7 +166,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'toggle-enabled',
       label: enabled ? 'Disable' : 'Enable',
       icon: enabled ? EyeOffIcon : EyeIcon,
-      shortcut: 'E',
+      shortcut: shortcutLabel('toggle-enabled'),
       disabled: nothing,
     },
     {
@@ -177,7 +190,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'copy-attributes',
       label: 'Copy look',
       icon: PaletteIcon,
-      shortcut: 'Ctrl+Shift+C',
+      shortcut: shortcutLabel('copy-attributes'),
       disabled: target === undefined,
       separated: true,
     },
@@ -185,7 +198,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'paste-attributes',
       label: 'Paste look',
       icon: PaintBucketIcon,
-      shortcut: 'Ctrl+Shift+V',
+      shortcut: shortcutLabel('paste-attributes'),
       disabled: !state.hasAttributes || nothing,
     },
 
@@ -193,7 +206,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'remove',
       label: state.ripple ? 'Ripple delete' : 'Delete',
       icon: Trash2Icon,
-      shortcut: 'Del',
+      shortcut: shortcutLabel('remove'),
       disabled: nothing,
       separated: true,
       danger: true,

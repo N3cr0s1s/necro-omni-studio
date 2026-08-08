@@ -16,6 +16,8 @@ export * from './controls/EditableName.js';
 export * from './controls/NumberField.js';
 export * from './notes/NoteView.js';
 export * from './status/activity.js';
+export * from './shortcuts/ShortcutSheet.js';
+export * from './shortcuts/shortcuts.js';
 export * from './status/StatusBar.js';
 export * from './media-browser/MediaBrowser.js';
 export * from './media-browser/AssetIcon.js';
