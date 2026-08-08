@@ -141,7 +141,7 @@ describe('naming', () => {
 
   it('suggests an id nothing is using', () => {
     const document = added(documentOf(), 'video', 'v2');
-    expect(nextTrackId(document, 'video')).toBe('v3');
+    expect(nextTrackId(document, 'video')).toBe('V3');
   });
 
   it('does not suggest an id that differs from an existing one only in case', () => {
@@ -156,7 +156,23 @@ describe('naming', () => {
       trackIds: { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') },
     });
 
-    expect(nextTrackId(base, 'video')).toBe('v2');
+    expect(nextTrackId(base, 'video')).toBe('V2');
+  });
+
+  it('suggests it in the case the user already sees on their tracks', () => {
+    // A generated track called `a2` sitting under `A1` reads as something the application did rather
+    // than something the user asked for, and the id is what the status bar names when one appears.
+    const base = createDocument({
+      id: projectId('p'),
+      sequenceId: sequenceId('s'),
+      name: 'p',
+      frameRate: FRAME_RATES.WEB_30,
+      resolution: { width: 1920, height: 1080 },
+      trackIds: { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') },
+    });
+
+    expect(nextTrackId(base, 'audio')).toBe('A2');
+    expect(nextTrackName(base, 'audio')).toBe('A2');
   });
 });
 

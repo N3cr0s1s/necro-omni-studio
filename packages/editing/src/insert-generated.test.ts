@@ -182,6 +182,35 @@ describe('a declared length lands exactly where it was staged', () => {
     const result = insertGenerated(document, request({ duration: 'declared' }));
     expect(result.ok).toBe(false);
   });
+
+  it('takes the caller’s answer to that collision', () => {
+    // Reporting the conflict is the point — but only so the user can decide. Once they have, refusing a
+    // second time would leave them holding a message with no way past it. The observed shape of that
+    // dead end: Keep a generated clip at a busy playhead and nothing happens, ever.
+    const document = withClips(emptyProject(), TRACKS.audio, [audioClip('existing', 0, 500)]);
+    const result = insertGenerated(
+      document,
+      request({ duration: 'declared', placement: 'find-room', spareTrackIds: [trackId('A9')] }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.createdTrack).toBe(true);
+      // And still nothing moved, which is the rule the override must not be able to break.
+      const existing = document.sequence.tracks.find((track) => track.id === TRACKS.audio);
+      expect(existing?.clips).toHaveLength(1);
+    }
+  });
+
+  it('can be asked to stay put even when it would otherwise look for room', () => {
+    // The override runs both ways: a discovered-length insert the user placed deliberately should be
+    // able to report a conflict rather than quietly landing on a track they were not looking at.
+    const document = withClips(emptyProject(), TRACKS.audio, [audioClip('existing', 0, 500)]);
+    const result = insertGenerated(document, request({ duration: 'discovered', placement: 'staged' }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('collision');
+  });
 });
 
 describe('a discovered length never shifts existing clips', () => {

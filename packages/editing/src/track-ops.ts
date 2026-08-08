@@ -200,13 +200,17 @@ export function nextTrackName(document: TimelineDocument, kind: TrackKind): stri
  * be handed `v1` for its second — two ids that differ only in case, indistinguishable in every log
  * line and error message the user will ever read, and one careless comparison away from being the
  * same track.
+ *
+ * The id it hands back is in the same case as `nextTrackName` uses, because the user reads both. A
+ * generated track called `a2` sitting under `A1` looks like something the application did rather than
+ * something they asked for — which is exactly what the naming rule exists to avoid.
  */
 export function nextTrackId(document: TimelineDocument, kind: TrackKind): TrackId {
   const taken = new Set(document.sequence.tracks.map((track) => (track.id as string).toLowerCase()));
-  const prefix = TRACK_PREFIX[kind].toLowerCase();
+  const prefix = TRACK_PREFIX[kind];
   for (let ordinal = 1; ; ordinal += 1) {
     const candidate = `${prefix}${ordinal}`;
-    if (!taken.has(candidate)) return trackId(candidate);
+    if (!taken.has(candidate.toLowerCase())) return trackId(candidate);
   }
 }
 

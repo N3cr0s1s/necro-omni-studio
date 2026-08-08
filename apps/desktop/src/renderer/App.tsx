@@ -30,6 +30,7 @@ import {
   clipsOnTrack,
   combineSelection,
   firstTrackOfKind,
+  type InsertPlacement,
   insertGenerated,
   linkablePair,
   linkClips,
@@ -176,6 +177,18 @@ async function readText(path: string): Promise<string | undefined> {
     ?.readTextFile(path)
     .catch(() => undefined);
 }
+
+/**
+ * An accepted variant that is bound for the timeline.
+ *
+ * The accept case with its target narrowed to the one that has a track and a position. Written as a
+ * type rather than checked again at each use, so a retry cannot be handed a media-browser outcome that
+ * has nowhere to land.
+ */
+type AcceptOutcome = Extract<SelectionOutcome, { kind: 'accept' }>;
+type AcceptedVariant = Omit<AcceptOutcome, 'target'> & {
+  readonly target: Extract<AcceptOutcome['target'], { kind: 'timeline' }>;
+};
 
 export function App(): ReactNode {
   const [project, setProject] = useState<ProjectInfo | undefined>(undefined);
@@ -398,22 +411,29 @@ export function App(): ReactNode {
    * The insertion rule lives in `@nos/editing` because it is a document transform, not a UI decision —
    * and it is two rules: a declared-length output lands where it was staged and reports a collision,
    * while a discovered-length one moves to a free track rather than shifting anything a user has cut.
+   *
+   * The placement is passed in rather than left to the rule, because the collision it reports is a
+   * question. Answering it is this layer's job: the rule says what happened, the status bar offers the
+   * way out, and the retry comes back through here with the same outcome and a different placement.
    */
-  const acceptVariant = useCallback(
-    (outcome: SelectionOutcome, manifest: GeneratorManifest) => {
-      if (outcome.kind !== 'accept') return;
-
-      // A media-browser target means the output belongs in the project folder, not on the timeline —
-      // it is already written to `generated/`, and the browser shows it. Inserting anyway would drop a
-      // clip the user never asked to place, at whatever position happened to be under the playhead.
-      if (outcome.target.kind !== 'timeline') {
-        // Said out loud. The file is already in `generated/` and the browser shows it, but a Keep that
-        // produced no visible change is indistinguishable from a Keep that failed.
-        setError(`kept — ${outcome.output.path} is in the project folder`);
-        tree.refresh();
-        return;
+  /**
+   * A variant the user kept, that could not go where it was staged.
+   *
+   * Held so the collision can be *offered* rather than only reported. Keeping the whole outcome means
+   * the retry is the same call with one argument changed, instead of a second insertion path that
+   * would drift from this one.
+   */
+  const [blocked, setBlocked] = useState<
+    | {
+        readonly outcome: AcceptedVariant;
+        readonly manifest: GeneratorManifest;
+        readonly track: TrackId;
       }
+    | undefined
+  >(undefined);
 
+  const landVariant = useCallback(
+    (outcome: AcceptedVariant, manifest: GeneratorManifest, placement: InsertPlacement) => {
       const kind = manifest.produces === 'audio' ? 'audio' : 'video';
       // The group's own parameters, not an empty set. A declared-length manifest reads its length from
       // one of them, so `{}` fell back to the manifest default — a user who asked for ten seconds got
@@ -434,6 +454,7 @@ export function App(): ReactNode {
           at: target.at,
           track: target.track,
           duration: manifest.duration,
+          placement,
           // Keyed by the *candidate*, not the run: a batched run's variants share a run id, so
           // accepting the second would collide with the first and be refused — which is what "Keep
           // does nothing" looked like from the outside.
@@ -450,14 +471,48 @@ export function App(): ReactNode {
         });
 
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          // A collision is the one rejection the user can answer, so it is offered as a choice rather
+          // than reported as a failure. Everything else is a plain error.
+          if (result.error.kind === 'collision' && placement === 'staged') {
+            setBlocked({ outcome, manifest, track: result.error.track });
+          } else {
+            setError(describeEdit(result.error));
+          }
           return current;
         }
-        setError(undefined);
+
+        setBlocked(undefined);
+        setError(
+          result.value.createdTrack
+            ? // Said out loud, because a track appearing is a change to the project the user did not
+              // literally ask for and would otherwise have to notice on their own.
+              `kept — ${manifest.name} went to a new track, ${result.value.track}`
+            : undefined,
+        );
         return result.value.document;
       });
     },
-    [document.frameRate, store, tree],
+    [document.frameRate, store],
+  );
+
+  const acceptVariant = useCallback(
+    (outcome: SelectionOutcome, manifest: GeneratorManifest) => {
+      if (outcome.kind !== 'accept') return;
+
+      // A media-browser target means the output belongs in the project folder, not on the timeline —
+      // it is already written to `generated/`, and the browser shows it. Inserting anyway would drop a
+      // clip the user never asked to place, at whatever position happened to be under the playhead.
+      if (outcome.target.kind !== 'timeline') {
+        // Said out loud. The file is already in `generated/` and the browser shows it, but a Keep that
+        // produced no visible change is indistinguishable from a Keep that failed.
+        setError(`kept — ${outcome.output.path} is in the project folder`);
+        tree.refresh();
+        return;
+      }
+
+      landVariant({ ...outcome, target: outcome.target }, manifest, 'staged');
+    },
+    [landVariant, tree],
   );
 
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
@@ -858,6 +913,25 @@ export function App(): ReactNode {
     return [
       ...(failure !== undefined ? [{ id: 'error', tone: 'error' as const, message: failure }] : []),
       ...(notice !== undefined ? [{ id: 'notice', tone: 'warning' as const, message: notice }] : []),
+      ...(blocked !== undefined
+        ? [
+            {
+              id: 'variant-collision',
+              tone: 'warning' as const,
+              message: `${blocked.manifest.name} would land on top of a clip already on ${blocked.track}`,
+              actions: [
+                {
+                  // Honest about both outcomes: it prefers a free track of the same kind and adds one
+                  // only when there is none. Either way nothing already on the timeline moves.
+                  label: 'Find room for it',
+                  onClick: () => landVariant(blocked.outcome, blocked.manifest, 'find-room'),
+                  primary: true,
+                },
+                { label: 'Leave it', onClick: () => setBlocked(undefined) },
+              ],
+            },
+          ]
+        : []),
       ...(autosave.offer !== undefined
         ? [
             {
@@ -876,7 +950,7 @@ export function App(): ReactNode {
           ]
         : []),
     ];
-  }, [autosave, drag.rejection, error, exportRun.error, mediaImport.error, notice]);
+  }, [autosave, blocked, drag.rejection, error, exportRun.error, landVariant, mediaImport.error, notice]);
 
   const browserMenu: MenuBinding<BrowserMenuTarget> = useMemo(
     () => ({

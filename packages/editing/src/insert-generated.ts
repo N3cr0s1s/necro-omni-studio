@@ -46,6 +46,19 @@ import { createTrack, nextTrackId, nextTrackName } from './track-ops.js';
 
 export type DurationMode = 'declared' | 'discovered';
 
+/**
+ * What an insert may do when the staged position is taken.
+ *
+ * The duration mode chooses this by default, and that default is the rule above. It is an override
+ * rather than a second opinion: a declared-length collision is reported *so that the user can decide*,
+ * and once they have decided, refusing again would leave them with a message and no way past it.
+ */
+export type InsertPlacement =
+  /** Exactly where it was staged. A collision is an error. */
+  | 'staged'
+  /** Another track of the same kind with room, or a new one. Never shifts an existing clip. */
+  | 'find-room';
+
 export interface InsertGeneratedRequest {
   /** Where the file landed, project-relative. */
   readonly asset: AssetPath;
@@ -57,6 +70,8 @@ export interface InsertGeneratedRequest {
   /** Preferred track. A discovered-length insert may land elsewhere; a declared one may not. */
   readonly track: TrackId;
   readonly duration: DurationMode;
+  /** Overrides what `duration` would choose. Absent means the rule above applies. */
+  readonly placement?: InsertPlacement;
   readonly id: ClipId;
   readonly label: string;
   readonly provenance: GeneratorProvenance;
@@ -104,8 +119,9 @@ export function insertGenerated(
   }
 
   // A declared-length insert was staged at a position the user could see, so a collision there is a
-  // genuine conflict and is reported rather than worked around.
-  if (request.duration === 'declared') {
+  // genuine conflict and is reported rather than worked around — unless the caller has come back with
+  // the user's answer to it.
+  if (placementOf(request) === 'staged') {
     const blocking = clipsIn(requested).find((existing) => overlaps(existing.span, span));
     return err({
       kind: 'collision',
@@ -142,6 +158,11 @@ export function insertGenerated(
     track: created.id,
     createdTrack: true,
   });
+}
+
+/** The rule, with the caller's override winning when there is one. */
+function placementOf(request: InsertGeneratedRequest): InsertPlacement {
+  return request.placement ?? (request.duration === 'declared' ? 'staged' : 'find-room');
 }
 
 /** Clips on a track, regardless of which kind of track it is. */
@@ -208,7 +229,7 @@ function buildClip(request: InsertGeneratedRequest, span: ReturnType<typeof span
 /** Where a discovered-length insert would land, for showing it before it happens. */
 export function previewInsertTrack(
   document: TimelineDocument,
-  request: Pick<InsertGeneratedRequest, 'kind' | 'at' | 'length' | 'track' | 'duration'>,
+  request: Pick<InsertGeneratedRequest, 'kind' | 'at' | 'length' | 'track' | 'duration' | 'placement'>,
 ): { readonly track: TrackId | undefined; readonly createsTrack: boolean } {
   const span = spanFromBounds(request.at, frameIndex(request.at + Math.max(1, request.length)));
   const requested = document.sequence.tracks.find((track) => track.id === request.track);
@@ -216,7 +237,10 @@ export function previewInsertTrack(
   if (requested !== undefined && requested.kind === request.kind && !isOccupied(requested, span)) {
     return { track: requested.id, createsTrack: false };
   }
-  if (request.duration === 'declared') return { track: undefined, createsTrack: false };
+  // Same override as the insert itself, so a preview cannot promise one thing and the insert do another.
+  if (placementOf(request as InsertGeneratedRequest) === 'staged') {
+    return { track: undefined, createsTrack: false };
+  }
 
   const free = document.sequence.tracks.find(
     (track) => track.kind === request.kind && !track.locked && !isOccupied(track, span),
