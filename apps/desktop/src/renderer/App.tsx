@@ -7,6 +7,8 @@ import {
   type FrameIndex,
   type FrameRate,
   type TimelineDocument,
+  type TrackId,
+  type TrackKind,
   FRAME_RATES,
   createDocument,
   createDocumentStore,
@@ -23,7 +25,20 @@ import {
   trackId,
 } from '@nos/core';
 import { buildTree } from '@nos/media';
-import { insertGenerated, moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
+import {
+  type TrackFlag,
+  addTrack,
+  clipsOnTrack,
+  firstTrackOfKind,
+  insertGenerated,
+  moveClip,
+  nextTrackId,
+  removeTrack,
+  toggleTrackFlag,
+  splitClip,
+  trimClipEnd,
+  trimClipStart,
+} from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
 import { Button, ExportDialog, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
@@ -250,10 +265,13 @@ export function App(): ReactNode {
         const located = locateClip(current, target as ClipId);
         if (located === undefined) return current;
 
+        // Onto the clip's *own* track. Nudging used to force everything to the first video track,
+        // so nudging an audio clip was rejected for the wrong kind and nudging anything on a second
+        // video track silently moved it up one.
         const result = moveClip(
           current,
           target as ClipId,
-          TRACKS.video,
+          located.track.id,
           frameIndex(Math.max(0, located.clip.span.start + delta)),
         );
         if (!result.ok) {
@@ -419,13 +437,62 @@ export function App(): ReactNode {
         ? `no strip for ${strips.failures[0]}`
         : `no strip for ${strips.failures.length} clips — ${strips.failures[0]}`);
 
+  // Resolved from the document rather than assumed. Fixed ids were safe only while the track list
+  // could not change; now that tracks can be added and removed, an import targeting a hard-coded `V1`
+  // would fail on any project whose first video track was removed and remade.
   const mediaImport = useMediaImport({
     document,
     sidecar,
-    videoTrack: TRACKS.video,
-    audioTrack: TRACKS.audio,
+    videoTrack: firstTrackOfKind(document, 'video')?.id ?? TRACKS.video,
+    audioTrack: firstTrackOfKind(document, 'audio')?.id ?? TRACKS.audio,
     commit: commitDocument,
   });
+
+  const addTrackOfKind = useCallback(
+    (kind: TrackKind) => {
+      store.commit('add track', (current) => {
+        const result = addTrack(current, { kind, id: nextTrackId(current, kind) });
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        return result.value.document;
+      });
+    },
+    [store],
+  );
+
+  const toggleTrack = useCallback(
+    (id: TrackId, flag: TrackFlag) => {
+      store.commit(`toggle track ${flag}`, (current) => {
+        const result = toggleTrackFlag(current, id, flag);
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        return result.value;
+      });
+    },
+    [store],
+  );
+
+  const removeTrackById = useCallback(
+    (id: TrackId) => {
+      store.commit('remove track', (current) => {
+        // Said before it happens, because the clips go with the track. Undo covers it, but a user who
+        // did not realise what was on a collapsed row should not have to discover it by undoing.
+        const lost = clipsOnTrack(current, id);
+        const result = removeTrack(current, id);
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        if (lost > 0) setError(`removed the track and ${lost} clip${lost === 1 ? '' : 's'} on it`);
+        return result.value;
+      });
+    },
+    [store],
+  );
 
   const razor = useCallback(() => {
     const target = [...selected][0];
@@ -553,6 +620,11 @@ export function App(): ReactNode {
             <Timeline
               document={drag.document}
               strips={strips.strips}
+              onAddTrack={addTrackOfKind}
+              onTrackRemove={removeTrackById}
+              onTrackMute={(id) => toggleTrack(id, 'muted')}
+              onTrackSolo={(id) => toggleTrack(id, 'solo')}
+              onTrackLock={(id) => toggleTrack(id, 'locked')}
               onMarkIn={range.markIn}
               onMarkOut={range.markOut}
               onClearRange={range.clear}

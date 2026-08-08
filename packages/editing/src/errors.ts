@@ -34,7 +34,9 @@ export type EditError =
     }
   /** A cut fell on a clip boundary, where it would produce a zero-length clip. */
   | { readonly kind: 'nothing-to-cut'; readonly track: TrackId }
-  | { readonly kind: 'no-free-track'; readonly kindWanted: string };
+  | { readonly kind: 'no-free-track'; readonly kindWanted: string }
+  /** A track id already in use. Adding one anyway would replace a track and everything on it. */
+  | { readonly kind: 'duplicate-track'; readonly track: TrackId };
 
 export function describeEditError(error: EditError): string {
   switch (error.kind) {
@@ -56,6 +58,8 @@ export function describeEditError(error: EditError): string {
       return 'There is nothing to cut at that position';
     case 'no-free-track':
       return `No free ${error.kindWanted} track is available`;
+    case 'duplicate-track':
+      return `Track ${error.track} already exists`;
     default: {
       const unreachable: never = error;
       throw new Error(`Unhandled edit error ${JSON.stringify(unreachable)}`);

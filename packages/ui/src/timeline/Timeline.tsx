@@ -8,6 +8,7 @@ import {
   type TimelineDocument,
   type Track,
   type TrackId,
+  type TrackKind,
   clipCount,
   documentEnd,
   endExclusive,
@@ -61,10 +62,13 @@ export interface TimelineProps {
   readonly onToggleSnap?: () => void;
   readonly onToggleRipple?: () => void;
   readonly onZoom?: (framesPerPixel: number, anchorPx: number) => void;
-  readonly onAddTrack?: () => void;
   readonly onTrackMute?: (track: TrackId) => void;
   readonly onTrackSolo?: (track: TrackId) => void;
   readonly onTrackLock?: (track: TrackId) => void;
+  /** Removes a track and everything on it. Absent hides the control rather than showing a dead one. */
+  readonly onTrackRemove?: (track: TrackId) => void;
+  /** Adds a track of a kind. The toolbar offers one button per kind the spec allows N of. */
+  readonly onAddTrack?: (kind: TrackKind) => void;
 
   /** In/out marks. Absent handlers hide the controls rather than showing dead ones. */
   readonly onMarkIn?: () => void;
@@ -137,6 +141,7 @@ export function Timeline(props: TimelineProps): ReactNode {
           {...(props.onTrackMute !== undefined ? { onMute: props.onTrackMute } : {})}
           {...(props.onTrackSolo !== undefined ? { onSolo: props.onTrackSolo } : {})}
           {...(props.onTrackLock !== undefined ? { onLock: props.onTrackLock } : {})}
+          {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
         />
 
         <div
@@ -267,9 +272,19 @@ function TimelineToolbar({
       <div style={{ flex: 1 }} />
 
       <Mono tone={token.textFaint}>{formatTimelineStatus(document.frameRate, totalFrames, clips)}</Mono>
-      <Button onClick={onAddTrack} style={{ height: token.controlHeightSm }}>
-        + Track
-      </Button>
+      {/* One button per kind rather than a single `+ Track` that guesses. The spec allows N of each,
+          and which kind the user wants is not derivable from anything on screen. */}
+      {onAddTrack !== undefined &&
+        (['video', 'audio', 'text'] as const).map((kind) => (
+          <Button
+            key={kind}
+            onClick={() => onAddTrack(kind)}
+            title={`Add ${kind === 'audio' ? 'an' : 'a'} ${kind} track`}
+            style={{ height: token.controlHeightSm }}
+          >
+            + {TRACK_BUTTON_LABEL[kind]}
+          </Button>
+        ))}
     </div>
   );
 }
@@ -280,12 +295,14 @@ function TrackHeaderColumn({
   onMute,
   onSolo,
   onLock,
+  onRemove,
 }: {
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
   readonly onMute?: (track: TrackId) => void;
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
+  readonly onRemove?: (track: TrackId) => void;
 }): ReactNode {
   return (
     <div
@@ -311,6 +328,7 @@ function TrackHeaderColumn({
           {...(onMute !== undefined ? { onMute } : {})}
           {...(onSolo !== undefined ? { onSolo } : {})}
           {...(onLock !== undefined ? { onLock } : {})}
+          {...(onRemove !== undefined ? { onRemove } : {})}
         />
       ))}
     </div>
@@ -332,12 +350,14 @@ function TrackHeader({
   onMute,
   onSolo,
   onLock,
+  onRemove,
 }: {
   readonly track: Track;
   readonly audible: boolean;
   readonly onMute?: (track: TrackId) => void;
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
+  readonly onRemove?: (track: TrackId) => void;
 }): ReactNode {
   const stacked = track.height >= STACKED_HEADER_MIN_HEIGHT;
 
@@ -391,10 +411,29 @@ function TrackHeader({
           title={`Lock ${track.name}`}
           onClick={() => onLock?.(track.id)}
         />
+        {/* Removal sits with the toggles rather than behind a menu, and is *disabled* on a locked
+            track rather than hidden: a control that vanishes leaves the user hunting for it, where a
+            disabled one with a reason explains itself. */}
+        {onRemove !== undefined && (
+          <TrackToggle
+            label="×"
+            active={false}
+            disabled={track.locked}
+            title={
+              track.locked
+                ? `${track.name} is locked — unlock it to remove it`
+                : `Remove ${track.name} and everything on it`
+            }
+            onClick={() => onRemove(track.id)}
+          />
+        )}
       </div>
     </div>
   );
 }
+
+/** Short enough for a dense toolbar, and the letters already on every track header. */
+const TRACK_BUTTON_LABEL: Readonly<Record<TrackKind, string>> = { video: 'V', audio: 'A', text: 'T' };
 
 function trackLabelColor(track: Track): string {
   switch (track.kind) {
@@ -417,11 +456,13 @@ function TrackToggle({
   label,
   active,
   title,
+  disabled = false,
   onClick,
 }: {
   readonly label: string;
   readonly active: boolean;
   readonly title: string;
+  readonly disabled?: boolean;
   readonly onClick: () => void;
 }): ReactNode {
   return (
@@ -430,6 +471,7 @@ function TrackToggle({
       title={title}
       aria-label={title}
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
       style={{
         width: 17,

@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1696 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1728 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1647,3 +1647,46 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Verified in the running app: a 320×180 source reads `320×180 · h264 · 0:03` with
   `filmstrip ✓` and no proxy line; a 3840×2160 source reads `proxy ✓ filmstrip ✓`;
   and Clear took the cache from 5 files to 0 on disk with the footer following.
+
+- 2026-08-08: Tracks can be added, removed and toggled. The spec's timeline is
+  **N video, N audio, N text**; a project had exactly one of each for its whole
+  life, because the mockups' `+ Track` button was wired to nothing. A title over a
+  title, or music under dialogue, was simply not expressible. The M/S/L buttons on
+  every track header were dead too — mute and solo drive both the composite and the
+  mix through `isTrackAudible`, so the plan builders honoured a state nothing could
+  reach.
+
+  A new track lands **after the last track of its own kind**, not at the end. The
+  timeline reads video, then audio, then text; a second video track appearing below
+  the audio would break that reading for every project it happened in, and no
+  amount of naming would recover it.
+
+  Removal takes the track's clips with it, because undo is the safety net and
+  requiring a track to be emptied first would mean deleting fifty clips by hand to
+  get rid of one row — but the shell says how many went, since a user who did not
+  realise what was on a collapsed row should not have to discover it by undoing. A
+  **locked** track is refused: locking exists to say "do not disturb this", and
+  honouring it for stray drags but not for removal would make it worthless. Muting
+  and soloing a locked track stay allowed — locking protects content, not
+  monitoring.
+
+  Two defects this surfaced, both from the assumption that the track list could not
+  change:
+
+  - **Nudging moved clips to the wrong track.** It passed a hard-coded first video
+    track, so nudging an audio clip was rejected for the wrong kind and nudging
+    anything on a second video track would have silently moved it up one. It now
+    keeps the clip on its own track.
+  - **Import targeted hard-coded ids.** Safe only while `V1` was guaranteed to
+    exist; the first thing the new remove button can do is make it not. Resolved
+    from the document by kind now.
+
+  A third came from watching the ids: the generator produced `v1` for a project
+  whose first track was `V1` — two ids differing only in case, indistinguishable in
+  every log line a user reads and one careless comparison from being the same
+  track. Uniqueness is checked case-insensitively.
+
+  Verified in the running app: adding one of each kind lands them in the right
+  places, removing `V1` leaves the import to find `v2`, a locked track's remove
+  button is disabled with its reason, mute still works on it, and undo walks back
+  through all of it.

@@ -13,7 +13,6 @@ import {
   type TrackId,
   type TrackKind,
   type VideoClip,
-  DEFAULT_TRACK_HEIGHTS,
   endExclusive,
   err,
   frameIndex,
@@ -21,10 +20,10 @@ import {
   overlaps,
   spanFromBounds,
   staticNumber,
-  trackId,
 } from '@nos/core';
 import type { EditError } from './errors.js';
 import { addClipToTrack, replaceTrack } from './mutate.js';
+import { createTrack, nextTrackId, nextTrackName } from './track-ops.js';
 
 /**
  * Landing generator output on the timeline.
@@ -162,36 +161,11 @@ function isOccupied(track: Track, span: ReturnType<typeof spanFromBounds>): bool
  * rather than something they asked for.
  */
 function newTrack(document: TimelineDocument, request: InsertGeneratedRequest): Track | undefined {
-  const sameKind = document.sequence.tracks.filter((track) => track.kind === request.kind);
-  const ordinal = sameKind.length + 1;
-  const prefix = request.kind === 'video' ? 'V' : 'A';
-
-  const id =
-    request.spareTrackIds?.[0] ??
-    (() => {
-      const candidate = `${prefix}${ordinal}`;
-      // Falls back only when the caller supplied nothing; a collision here would replace a track.
-      return document.sequence.tracks.some((track) => track.id === candidate)
-        ? `${prefix}${ordinal}_generated`
-        : candidate;
-    })();
-
-  const base = {
-    id: trackId(id),
-    name: `${prefix}${ordinal}`,
-    muted: false,
-    solo: false,
-    locked: false,
-    height: DEFAULT_TRACK_HEIGHTS[request.kind],
-    collapsed: false,
-    clips: [],
-  } as const;
-
-  return request.kind === 'video'
-    ? { ...base, kind: 'video', transitions: [] }
-    : // Unity gain, centred: a new track must not alter what the material sounds like, and a default the
-      // user did not choose is a bug they will chase in the mixer.
-      { ...base, kind: 'audio', gain: 1, pan: 0 };
+  const id = request.spareTrackIds?.[0] ?? nextTrackId(document, request.kind);
+  // Built by the shared constructor rather than here. Two of them would drift the moment either grew
+  // a field, and a generated track differing from a hand-made one in its defaults is the kind of
+  // difference that only shows up later, in the mixer.
+  return createTrack(request.kind, { id, name: nextTrackName(document, request.kind) });
 }
 
 function buildClip(request: InsertGeneratedRequest, span: ReturnType<typeof spanFromBounds>): Clip {

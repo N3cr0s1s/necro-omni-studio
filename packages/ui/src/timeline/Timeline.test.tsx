@@ -295,6 +295,50 @@ describe('ruler', () => {
   });
 });
 
+describe('tracks', () => {
+  it('offers a button per kind, because which one is wanted is not derivable', () => {
+    const onAddTrack = vi.fn();
+    renderTimeline({ onAddTrack });
+
+    screen.getByTitle('Add an audio track').click();
+    expect(onAddTrack).toHaveBeenCalledWith('audio');
+  });
+
+  it('offers no add buttons when nothing can handle them', () => {
+    renderTimeline();
+    expect(screen.queryByTitle('Add a video track')).toBeNull();
+  });
+
+  it('reports a removal rather than performing one', () => {
+    const onTrackRemove = vi.fn();
+    renderTimeline({ onTrackRemove });
+
+    screen.getByLabelText('Remove V1 and everything on it').click();
+    expect(onTrackRemove).toHaveBeenCalledWith('v1');
+  });
+
+  it('disables removal on a locked track rather than hiding it', () => {
+    // A control that vanishes leaves the user hunting for it; a disabled one explains itself.
+    const base = makeDocument([video('a', 0, 300)]);
+    const locked = {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        tracks: base.sequence.tracks.map((track) => (track.id === 'v1' ? { ...track, locked: true } : track)),
+      },
+    } as TimelineDocument;
+
+    renderTimeline({ document: locked, onTrackRemove: vi.fn() });
+    const button = screen.getByLabelText('V1 is locked — unlock it to remove it');
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('says what removal costs in the control´s own name', () => {
+    renderTimeline({ onTrackRemove: vi.fn() });
+    expect(screen.getByLabelText('Remove A1 and everything on it')).toBeDefined();
+  });
+});
+
 describe('strips', () => {
   function stripImage(clip: string): HTMLImageElement | null {
     return document.querySelector(`[data-clip-id="${clip}"] img`);
