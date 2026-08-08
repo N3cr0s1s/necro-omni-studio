@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type Clip,
@@ -271,6 +272,32 @@ describe('which lanes appear', () => {
 describe('editing markers', () => {
   const animated = () =>
     documentWith(videoClip({ transform: { ...videoClip().transform, opacity: curve(0, 1) } }));
+
+  it('writes a typed value into the document, which nothing else could do', async () => {
+    // The gap this closes: the inspector disables an animated parameter's slider, so before the lane
+    // grew a field there was no control anywhere that could give a marker a number. A fade could be
+    // *started* and never finished.
+    const onChange = renderLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    const field = screen.getByLabelText('Value at frame 0');
+
+    await userEvent.clear(field);
+    await userEvent.type(field, '0.3{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('set keyframe value', expect.anything());
+    const first = animatedOpacityFrom(onChange).keyframes[0];
+    expect(first?.value).toBe(0.3);
+  });
+
+  it('names the change for what it was, so undo says something recognisable', async () => {
+    const onChange = renderLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    const field = screen.getByLabelText('Value at frame 0');
+    await userEvent.clear(field);
+    await userEvent.type(field, '0.9{Enter}');
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('set keyframe value');
+  });
 
   it('adds a keyframe where the lane was double-clicked', () => {
     const onChange = renderLanes(animated());

@@ -7,6 +7,7 @@
 export * from './ids.js';
 export * from './asset-type.js';
 export * from './params.js';
+export * from './keyframe-edits.js';
 export * from './clip.js';
 export * from './track.js';
 export * from './document.js';

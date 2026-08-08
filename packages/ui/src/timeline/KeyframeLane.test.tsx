@@ -121,6 +121,105 @@ describe('value readout', () => {
   });
 });
 
+/**
+ * The value field.
+ *
+ * The absence of this was not a missing control but a missing *capability*: a parameter's slider is
+ * disabled once it is keyframed, so between the two there was nowhere at all to give a marker a
+ * number, and an animation could only hold whatever value was current when it was made.
+ */
+describe('editing a value', () => {
+  const selected = { selected: keyframeId('k2'), onChangeValue: vi.fn() };
+
+  it('offers a field for the selected marker, in place of the readout', () => {
+    renderLane(selected);
+    expect(screen.getByLabelText('Value at frame 100')).toHaveProperty('value', '0.5');
+  });
+
+  it('leaves the readout alone when nothing in this lane is selected', () => {
+    // Selection is per clip, so a marker on another parameter's lane must not open a field here.
+    renderLane({ selected: keyframeId('somewhere-else'), onChangeValue: vi.fn() });
+    expect(screen.queryByLabelText(/^Value at frame/)).toBeNull();
+  });
+
+  it('reports the new value on Enter', async () => {
+    const onChangeValue = vi.fn();
+    renderLane({ selected: keyframeId('k2'), onChangeValue });
+
+    const field = screen.getByLabelText('Value at frame 100');
+    await userEvent.clear(field);
+    await userEvent.type(field, '0.8{Enter}');
+
+    expect(onChangeValue).toHaveBeenCalledWith('k2', 0.8);
+  });
+
+  it('reports it on blur too, because clicking away is a decision', async () => {
+    const onChangeValue = vi.fn();
+    renderLane({ selected: keyframeId('k2'), onChangeValue });
+
+    const field = screen.getByLabelText('Value at frame 100');
+    await userEvent.clear(field);
+    await userEvent.type(field, '-2');
+    await userEvent.tab();
+
+    expect(onChangeValue).toHaveBeenCalledWith('k2', -2);
+  });
+
+  it('puts the marker back on Escape', async () => {
+    const onChangeValue = vi.fn();
+    renderLane({ selected: keyframeId('k2'), onChangeValue });
+
+    const field = screen.getByLabelText('Value at frame 100');
+    await userEvent.clear(field);
+    await userEvent.type(field, '9{Escape}');
+
+    expect(field).toHaveProperty('value', '0.5');
+    expect(onChangeValue).not.toHaveBeenCalled();
+  });
+
+  it('does not report an empty field, which is what clearing it to type looks like', async () => {
+    // A field that wrote on every keystroke could not be typed in at all: clearing it to enter `0.5`
+    // sends an empty string first, and `-` on its own is not a number.
+    const onChangeValue = vi.fn();
+    renderLane({ selected: keyframeId('k2'), onChangeValue });
+
+    const field = screen.getByLabelText('Value at frame 100');
+    await userEvent.clear(field);
+    await userEvent.tab();
+
+    expect(onChangeValue).not.toHaveBeenCalled();
+    expect(field).toHaveProperty('value', '0.5');
+  });
+
+  it('keeps the timeline out of it while the field has focus', async () => {
+    // Delete would otherwise remove the very marker being edited.
+    const onRemoveKeyframe = vi.fn();
+    renderLane({ selected: keyframeId('k2'), onChangeValue: vi.fn(), onRemoveKeyframe });
+
+    const field = screen.getByLabelText('Value at frame 100');
+    field.focus();
+    await userEvent.keyboard('{Delete}');
+
+    expect(onRemoveKeyframe).not.toHaveBeenCalled();
+  });
+
+  it('follows the marker when it changes underneath, as an undo makes it', () => {
+    const { rerender } = renderLane(selected);
+    rerender(
+      <KeyframeLane
+        label="film_grain · amount"
+        keyframes={[kf('k1', 0, 0), kf('k2', 100, 0.25), kf('k3', 200, 1)]}
+        clipStart={frameIndex(0)}
+        viewport={viewport}
+        playhead={frameIndex(50)}
+        selected={keyframeId('k2')}
+        onChangeValue={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('Value at frame 100')).toHaveProperty('value', '0.25');
+  });
+});
+
 describe('keyboard operation', () => {
   it('exposes each marker as a slider with its value and easing', () => {
     renderLane();

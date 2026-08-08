@@ -4,16 +4,15 @@ import {
   type Clip,
   type ClipTransform,
   type FrameIndex,
-  type Keyframe,
   type KeyframeId,
   type TimelineDocument,
-  EASINGS,
-  animatedNumber,
-  evaluateAt,
+  addKeyframeAt,
+  cycleKeyframeEasing,
+  editKeyframe,
   frameIndex,
   isAnimated,
-  keyframeId,
   locateClip,
+  removeKeyframe,
 } from '@nos/core';
 import { type EffectRegistry } from '@nos/effects';
 import { type TimelineViewport, KeyframeLane } from '@nos/ui';
@@ -187,7 +186,10 @@ export function KeyframeLanes({
               if (from === undefined || original === undefined) return current;
 
               const relative = frameIndex(Math.max(0, toFrame - from.clip.span.start));
-              return { base, preview: target.write(base, moveKeyframe(original, id, relative)) };
+              return {
+                base,
+                preview: target.write(base, editKeyframe(original, id, { frame: relative })),
+              };
             });
           }}
           onDragEnd={() => {
@@ -198,12 +200,17 @@ export function KeyframeLanes({
               return undefined;
             });
           }}
-          onCycleEasing={(id) => commit(target, cycleEasing(target.param, id), 'change easing')}
+          onCycleEasing={(id) => commit(target, cycleKeyframeEasing(target.param, id), 'change easing')}
+          // A discrete edit, so one history entry — unlike a drag, which coalesces. Typing 0.5 and
+          // then 0.55 is two decisions, and undo should step back through both.
+          onChangeValue={(id, value) =>
+            commit(target, editKeyframe(target.param, id, { value }), 'set keyframe value')
+          }
           onRemoveKeyframe={(id) => commit(target, removeKeyframe(target.param, id), 'remove keyframe')}
           onAddKeyframe={(atFrame) =>
             commit(
               target,
-              addKeyframe(target.param, frameIndex(Math.max(0, atFrame - located.clip.span.start))),
+              addKeyframeAt(target.param, frameIndex(Math.max(0, atFrame - located.clip.span.start))),
               'add keyframe',
             )
           }
@@ -213,57 +220,6 @@ export function KeyframeLanes({
         double-click a lane to add a keyframe · click a marker´s badge to cycle its easing
       </p>
     </div>
-  );
-}
-
-/**
- * Moves a keyframe, keeping the list sorted.
- *
- * Sorted because evaluation walks the list in order: an out-of-order keyframe would be skipped by the
- * search and its value silently ignored, which looks like the marker simply not working.
- */
-function moveKeyframe(param: AnimatedParam, id: KeyframeId, to: FrameIndex): AnimatableNumber {
-  // `animatedNumber` sorts and dedupes, so a drag landing on an occupied frame replaces rather than
-  // throwing mid-gesture — which is exactly what that constructor was written for.
-  return animatedNumber(
-    param.keyframes.map((keyframe) => (keyframe.id === id ? { ...keyframe, frame: to } : keyframe)),
-  );
-}
-
-function removeKeyframe(param: AnimatedParam, id: KeyframeId): AnimatableNumber {
-  const remaining = param.keyframes.filter((keyframe) => keyframe.id !== id);
-  // A parameter with one keyframe left is still animated, which is meaningful: it holds that value and
-  // the user can add a second. Collapsing to a constant here would quietly discard their easing choice.
-  return animatedNumber(remaining);
-}
-
-/**
- * Adds a keyframe at a frame, taking the parameter's current value there.
- *
- * The value comes from evaluating the existing curve rather than from a default, so adding a marker in
- * the middle of an animation does not change what the animation does — it only makes that instant
- * editable, which is what a user means by the gesture.
- */
-function addKeyframe(param: AnimatedParam, at: FrameIndex): AnimatableNumber {
-  if (param.keyframes.some((keyframe) => keyframe.frame === at)) return param;
-
-  const keyframe: Keyframe = {
-    id: keyframeId(`kf_${at}`),
-    frame: at,
-    value: evaluateAt(param, at),
-    ease: 'linear',
-  };
-  return animatedNumber([...param.keyframes, keyframe]);
-}
-
-/** Cycles a marker's interpolation through the modes the spec fixes for v1. */
-function cycleEasing(param: AnimatedParam, id: KeyframeId): AnimatableNumber {
-  return animatedNumber(
-    param.keyframes.map((keyframe) => {
-      if (keyframe.id !== id) return keyframe;
-      const index = EASINGS.indexOf(keyframe.ease);
-      return { ...keyframe, ease: EASINGS[(index + 1) % EASINGS.length] ?? 'linear' };
-    }),
   );
 }
 

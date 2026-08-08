@@ -1,4 +1,11 @@
-import { type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useState,
+} from 'react';
 import {
   type Easing,
   type FrameIndex,
@@ -8,6 +15,7 @@ import {
   frameIndex,
 } from '@nos/core';
 import { Badge } from '@nos/ui/components/ui/badge';
+import { Input } from '@nos/ui/components/ui/input';
 import { cn } from '@nos/ui/lib/utils';
 import { type TimelineViewport, frameToPx } from './viewport.js';
 
@@ -42,6 +50,14 @@ export interface KeyframeLaneProps {
   readonly onDragStart?: (keyframe: KeyframeId) => void;
   readonly onDragEnd?: () => void;
   readonly onCycleEasing?: (keyframe: KeyframeId) => void;
+  /**
+   * A new value for a marker, typed into the readout at the lane's right edge.
+   *
+   * The spec's §6.4 asks for it in as many words, and without it an animated parameter is unwritable:
+   * the inspector disables a parameter's slider once it is keyframed — correctly, so two controls
+   * cannot disagree — which left the value with nowhere to be edited at all.
+   */
+  readonly onChangeValue?: (keyframe: KeyframeId, value: number) => void;
   readonly onRemoveKeyframe?: (keyframe: KeyframeId) => void;
   /** Double-click on empty lane space adds a keyframe there. */
   readonly onAddKeyframe?: (atFrame: FrameIndex) => void;
@@ -75,6 +91,7 @@ export function KeyframeLane({
   onDragStart,
   onDragEnd,
   onCycleEasing,
+  onChangeValue,
   onRemoveKeyframe,
   onAddKeyframe,
 }: KeyframeLaneProps): ReactNode {
@@ -84,6 +101,10 @@ export function KeyframeLane({
     keyframes.length === 0 ? undefined : evaluateAt({ kind: 'animated', keyframes }, clipRelativePlayhead);
 
   const absoluteFrame = (keyframe: Keyframe): FrameIndex => frameIndex(clipStart + keyframe.frame);
+
+  // Only when the selected marker is one of *this* lane's. Selection is held per clip, so without the
+  // check every lane would open a field for a marker belonging to another parameter.
+  const selectedHere = keyframes.find((keyframe) => keyframe.id === selected);
 
   const handleDrag = (keyframe: Keyframe) => (event: PointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
@@ -256,16 +277,88 @@ export function KeyframeLane({
         );
       })}
 
-      {/* Value under the playhead, pinned right so it does not move as markers do. */}
-      {currentValue !== undefined && (
-        <div
-          className="pointer-events-none absolute right-4 font-mono text-[10px] font-medium text-muted-foreground"
-          style={{ top: Math.round(heightPx / 2) - 7 }}
-        >
-          {currentValue.toFixed(2)}
-        </div>
+      {/*
+        The readout, pinned right so it does not move as markers do — and editable when a marker of
+        this lane is selected. The two are the same corner deliberately: it is where the eye already
+        goes for a number, and a separate field somewhere else would be one more thing to find.
+      */}
+      {selectedHere !== undefined && onChangeValue !== undefined ? (
+        <ValueField
+          key={selectedHere.id}
+          keyframe={selectedHere}
+          onCommit={(value) => onChangeValue(selectedHere.id, value)}
+          style={{ top: Math.round(heightPx / 2) - 11 }}
+        />
+      ) : (
+        currentValue !== undefined && (
+          <div
+            className="pointer-events-none absolute right-4 font-mono text-[10px] font-medium text-muted-foreground"
+            style={{ top: Math.round(heightPx / 2) - 7 }}
+          >
+            {currentValue.toFixed(2)}
+          </div>
+        )
       )}
     </div>
+  );
+}
+
+/**
+ * The selected marker's value, as a field.
+ *
+ * A draft rather than a controlled value, because a number field that writes on every keystroke cannot
+ * be typed in: clearing it to type `0.5` sends an empty string, and `-` on its own is not a number. It
+ * commits on Enter and on blur, and Escape puts the marker's own value back — the same contract the
+ * timecode field and the inline renames use, so nothing here has to be learned twice.
+ */
+function ValueField({
+  keyframe,
+  onCommit,
+  style,
+}: {
+  readonly keyframe: Keyframe;
+  readonly onCommit: (value: number) => void;
+  readonly style: CSSProperties;
+}): ReactNode {
+  const [draft, setDraft] = useState<string>(() => String(keyframe.value));
+
+  // A drag moves the marker, not its value — but an undo, or a preset writing over it, does change it
+  // underneath the field. Following the marker keeps the number honest.
+  useEffect(() => setDraft(String(keyframe.value)), [keyframe.value]);
+
+  const commit = (): void => {
+    const parsed = Number(draft.trim());
+    if (draft.trim() === '' || !Number.isFinite(parsed)) {
+      setDraft(String(keyframe.value));
+      return;
+    }
+    onCommit(parsed);
+  };
+
+  return (
+    <Input
+      type="number"
+      step="any"
+      aria-label={`Value at frame ${keyframe.frame}`}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onFocus={(event) => event.target.select()}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') commit();
+        else if (event.key === 'Escape') setDraft(String(keyframe.value));
+        else {
+          // Everything else belongs to the field while it has focus. The timeline's own Delete and
+          // arrow keys would otherwise remove the very marker being edited.
+          event.stopPropagation();
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      className="absolute right-4 h-5.5 w-20 px-1 py-0 text-center font-mono text-[10px] tabular-nums"
+      style={style}
+    />
   );
 }
 
