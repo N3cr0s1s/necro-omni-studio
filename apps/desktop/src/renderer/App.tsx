@@ -490,6 +490,7 @@ export function App(): ReactNode {
           onUndo={() => store.undo()}
           onRedo={() => store.redo()}
           onAddText={addText}
+          onReject={setError}
         />
       </div>
     </div>

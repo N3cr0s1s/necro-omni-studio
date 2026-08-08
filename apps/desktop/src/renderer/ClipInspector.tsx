@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import {
   type Clip,
+  type ClipId,
   type EffectInstance,
   type EffectInstanceId,
   type TimelineDocument,
@@ -13,6 +14,7 @@ import {
   locateClip,
 } from '@nos/core';
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
+import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
 import { type EffectStackEntry, Button, EffectStack, Mono, SectionCaption } from '@nos/ui';
 import { token } from '@nos/ui';
 
@@ -35,9 +37,17 @@ export interface ClipInspectorProps {
   readonly clip?: string | undefined;
   readonly effects: EffectRegistry;
   readonly onChange: (label: string, next: TimelineDocument) => void;
+  /** Surfaces a rejected edit, since a transition can legitimately be refused. */
+  readonly onReject?: ((reason: string) => void) | undefined;
 }
 
-export function ClipInspector({ document, clip, effects, onChange }: ClipInspectorProps): ReactNode {
+export function ClipInspector({
+  document,
+  clip,
+  effects,
+  onChange,
+  onReject,
+}: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
 
@@ -114,6 +124,14 @@ export function ClipInspector({ document, clip, effects, onChange }: ClipInspect
         />
       )}
 
+      <Transitions
+        document={document}
+        clip={located.clip}
+        effects={effects}
+        onChange={onChange}
+        {...(onReject !== undefined ? { onReject } : {})}
+      />
+
       {selected !== undefined && (
         <EffectParams
           instance={stack.find((entry) => entry.id === selected)}
@@ -129,6 +147,147 @@ export function ClipInspector({ document, clip, effects, onChange }: ClipInspect
     </div>
   );
 }
+
+/**
+ * Transitions across this clip's cuts.
+ *
+ * Offered on the clip rather than on the cut because a cut is not a thing the user can select — the
+ * clips are. A transition is created against whichever neighbour meets this clip's edge, and the
+ * operation refuses with a reason when there is no neighbour or no handles.
+ */
+function Transitions({
+  document,
+  clip,
+  effects,
+  onChange,
+  onReject,
+}: {
+  readonly document: TimelineDocument;
+  readonly clip: Clip;
+  readonly effects: EffectRegistry;
+  readonly onChange: (label: string, next: TimelineDocument) => void;
+  readonly onReject?: (reason: string) => void;
+}): ReactNode {
+  const [duration, setDuration] = useState(DEFAULT_TRANSITION_FRAMES);
+
+  const available = useMemo(
+    () =>
+      effects
+        .entries()
+        .filter((entry) => entry.status === 'available' && entry.manifest.category === 'transition'),
+    [effects],
+  );
+  if (clip.kind !== 'video' && clip.kind !== 'image') return null;
+
+  const neighbours = adjacentClips(document, clip.id);
+  const existing = transitionsOf(document, clip.id);
+
+  const apply = (effect: string, side: 'before' | 'after'): void => {
+    const pair = side === 'before' ? neighbours.before : neighbours.after;
+    if (pair === undefined) return;
+
+    const result = addTransition(document, {
+      from: side === 'before' ? pair : clip.id,
+      to: side === 'before' ? clip.id : pair,
+      effect: effect as never,
+      durationFrames: duration,
+      id: effectInstanceId(`${clip.id}_${side}_transition`),
+    });
+
+    if (result.ok) onChange('add transition', result.value);
+    else onReject?.(describeTransitionError(result.error));
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SectionCaption>Transitions</SectionCaption>
+        <div style={{ flex: 1 }} />
+        <input
+          type="number"
+          aria-label="Transition frames"
+          min={2}
+          max={120}
+          value={duration}
+          onChange={(event) => setDuration(Number(event.target.value))}
+          style={{
+            width: 60,
+            height: token.controlHeightSm,
+            background: token.surface1,
+            border: `1px solid ${token.borderControl}`,
+            borderRadius: token.radiusControl,
+            color: token.textBright,
+            font: token.textValue,
+            padding: `0 ${token.space2}`,
+          }}
+        />
+      </div>
+
+      {existing.map((transition) => (
+        <div key={transition.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Mono tone={token.accent}>{`${transition.effect} · ${transition.span.duration}f`}</Mono>
+          <div style={{ flex: 1 }} />
+          <Button
+            onClick={() => {
+              const result = removeTransition(document, transition.id);
+              if (result.ok) onChange('remove transition', result.value);
+              else onReject?.(describeTransitionError(result.error));
+            }}
+            title="Remove this transition and return both clips to the cut"
+          >
+            ×
+          </Button>
+        </div>
+      ))}
+
+      {available.length === 0 && <Mono tone={token.textGhost}>no transition effects are registered</Mono>}
+
+      {(['before', 'after'] as const).map((side) => {
+        const pair = side === 'before' ? neighbours.before : neighbours.after;
+        return (
+          <div key={side} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <Mono tone={token.textFaint} style={{ width: 44 }}>
+              {side}
+            </Mono>
+            {available.map((entry) => (
+              <Button
+                key={entry.id}
+                disabled={pair === undefined || entry.id === undefined}
+                onClick={() => entry.id !== undefined && apply(entry.id, side)}
+                title={
+                  pair === undefined
+                    ? `nothing meets this clip's ${side === 'before' ? 'start' : 'end'}`
+                    : `${entry.status === 'available' ? entry.manifest.name : entry.id} across the cut`
+                }
+              >
+                {entry.status === 'available' ? entry.manifest.name : entry.id}
+              </Button>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The clips that meet this one's edges, which are the only ones a transition can join. */
+function adjacentClips(document: TimelineDocument, id: string): { before?: ClipId; after?: ClipId } {
+  const located = locateClip(document, id as never);
+  if (located === undefined) return {};
+
+  const span = located.clip.span;
+  const clips = located.track.clips as readonly Clip[];
+  const before = clips.find((entry) => entry.span.start + entry.span.duration === span.start);
+  const after = clips.find((entry) => entry.span.start === span.start + span.duration);
+
+  return {
+    ...(before !== undefined ? { before: before.id } : {}),
+    ...(after !== undefined ? { after: after.id } : {}),
+  };
+}
+
+/** Twelve frames: a little under half a second, the length a dissolve reads as deliberate. */
+export const DEFAULT_TRANSITION_FRAMES = 12;
 
 /**
  * The effects that can be added.

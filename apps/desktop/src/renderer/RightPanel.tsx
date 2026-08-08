@@ -51,6 +51,8 @@ export interface RightPanelProps {
   readonly onUndo: () => void;
   readonly onRedo: () => void;
   readonly onAddText: () => void;
+  /** Reports an edit the document layer refused, so the shell can show its reason. */
+  readonly onReject: (reason: string) => void;
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
@@ -118,6 +120,7 @@ function InspectorTab({
   onUndo,
   onRedo,
   onAddText,
+  onReject,
 }: RightPanelProps): ReactNode {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -134,6 +137,7 @@ function InspectorTab({
         {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
         effects={effects}
         onChange={onChangeDocument}
+        onReject={onReject}
       />
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>

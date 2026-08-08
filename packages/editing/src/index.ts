@@ -9,3 +9,4 @@ export * from './snap.js';
 export * from './mutate.js';
 export * from './clip-ops.js';
 export * from './insert-generated.js';
+export * from './transition-ops.js';
