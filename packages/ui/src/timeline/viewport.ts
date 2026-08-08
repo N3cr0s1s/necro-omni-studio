@@ -348,3 +348,27 @@ export function formatZoom(viewport: TimelineViewport): string {
 export function formatTimelineStatus(rate: FrameRate, totalFrames: number, clipCount: number): string {
   return `${displayFrameRate(rate)} fps · ${totalFrames} f · ${clipCount} clips`;
 }
+
+/**
+ * How tall a collapsed lane is drawn.
+ *
+ * Enough for the clips on it to stay visible as coloured bars. A collapsed track that showed nothing
+ * would be a row of empty space the user has to expand to find out whether it holds anything — which
+ * is precisely the question collapsing is meant to stop them from having to ask about the other seven.
+ */
+export const COLLAPSED_TRACK_HEIGHT_PX = 22;
+
+/**
+ * How tall a track is drawn.
+ *
+ * One rule, in one place, because the answer is needed by five: the header, the lane, the clips inside
+ * it, and the two running offsets that put the playhead and the drop indicator at the right y. A
+ * collapsed track computed differently in any one of them would put the lanes and their headers out of
+ * step, and everything below the mistake would be drawn at the wrong height.
+ *
+ * The track's own `height` is left untouched while it is collapsed, so expanding restores the height
+ * the user chose rather than a default.
+ */
+export function laneHeight(track: { readonly height: number; readonly collapsed: boolean }): number {
+  return track.collapsed ? COLLAPSED_TRACK_HEIGHT_PX : track.height;
+}

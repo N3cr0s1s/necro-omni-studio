@@ -23,6 +23,7 @@ import {
   trackId,
 } from '@nos/core';
 import { Timeline, assetDropTarget, flushAfter, flushBefore, regionFor } from './Timeline.js';
+import { COLLAPSED_TRACK_HEIGHT_PX } from './viewport.js';
 import { clipAccessibleLabel } from './ClipBody.js';
 import { createViewport } from './viewport.js';
 
@@ -1016,5 +1017,100 @@ describe('trim handles', () => {
     renderTimeline({ document: doc });
     const clip = document.querySelector('[data-clip-id="tiny"]');
     expect(clip?.querySelector('[data-trim-handle="start"]')).toBeNull();
+  });
+});
+
+/**
+ * Collapsing a track.
+ *
+ * `Track.collapsed` was in the document model, defaulted, serialized and round-tripped — and nothing
+ * ever wrote or read it. A track could be collapsed in the file format and not in the application.
+ *
+ * A view state, not an edit: the height is kept, the clips stay, and a locked track collapses like any
+ * other because collapsing disturbs nothing on it.
+ */
+describe('collapsing a track', () => {
+  function collapsedDocument(): TimelineDocument {
+    const base = makeDocument([video('a', 0, 300)]);
+    const tracks = base.sequence.tracks.map((track, index) =>
+      index === 0 ? ({ ...track, collapsed: true } as typeof track) : track,
+    );
+    return { ...base, sequence: { ...base.sequence, tracks } };
+  }
+
+  const laneOf = (id: string): HTMLElement | null =>
+    document.querySelector(`[data-track-id="${id}"]`) as HTMLElement | null;
+
+  it('draws the lane as a strip', () => {
+    renderTimeline({ document: collapsedDocument() });
+    expect(laneOf('v1')?.style.height).toBe(`${COLLAPSED_TRACK_HEIGHT_PX}px`);
+  });
+
+  it('leaves the other lanes alone', () => {
+    // Collapsing one row must not move or resize the rest; only its own height changes.
+    const doc = collapsedDocument();
+    renderTimeline({ document: doc });
+    const audio = doc.sequence.tracks[1]!;
+    expect(laneOf('a1')?.style.height).toBe(`${audio.height}px`);
+  });
+
+  it('keeps the clips on it, because the question is where the material is', () => {
+    renderTimeline({ document: collapsedDocument() });
+    expect(document.querySelectorAll('[data-clip-id]')).toHaveLength(1);
+  });
+
+  it('offers to expand a collapsed track and to collapse an open one', () => {
+    // Labelled with what the click does, not the state it is in.
+    renderTimeline({ document: collapsedDocument(), onTrackCollapse: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Expand V1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Collapse A1' })).toBeTruthy();
+  });
+
+  it('reports the toggle rather than performing it', () => {
+    // The same rule every control here follows: the document is the shell's to change.
+    const onTrackCollapse = vi.fn();
+    renderTimeline({ onTrackCollapse });
+    screen.getByRole('button', { name: 'Collapse V1' }).click();
+    expect(onTrackCollapse).toHaveBeenCalledWith('v1');
+  });
+
+  it('shows no disclosure at all when nothing can collapse a track', () => {
+    renderTimeline();
+    expect(screen.queryByRole('button', { name: 'Collapse V1' })).toBeNull();
+  });
+
+  it('draws its clips as bars, without labels there is no room for', () => {
+    // A label clipped to three pixels of its ascenders is not a smaller label, it is noise over the
+    // one thing that says which clip this is. The accessible name stays, so the clip is still findable.
+    renderTimeline({ document: collapsedDocument() });
+    const clip = document.querySelector('[data-clip-id="a"]') as HTMLElement;
+
+    expect(clip.textContent).toBe('');
+    expect(clip.getAttribute('aria-label')).toContain('a');
+  });
+
+  it('keeps the label when the lane is tall enough for one', () => {
+    renderTimeline();
+    expect((document.querySelector('[data-clip-id="a"]') as HTMLElement).textContent).not.toBe('');
+  });
+
+  it('drops the monitoring toggles from a collapsed header', () => {
+    // A track that has been put away. The header's job is to say which one it is and offer to bring
+    // it back; mute, solo, lock and delete are all still one right-click away.
+    renderTimeline({ document: collapsedDocument(), onTrackCollapse: vi.fn() });
+    expect(screen.queryByTitle('Mute V1')).toBeNull();
+    expect(screen.getByTitle('Mute A1')).toBeTruthy();
+  });
+
+  it('still names a collapsed row, which is all that identifies it', () => {
+    renderTimeline({ document: collapsedDocument(), onTrackCollapse: vi.fn() });
+    expect(screen.getByText('V1')).toBeTruthy();
+  });
+
+  it('withdraws the resize grip while collapsed', () => {
+    // It would set a height the lane is not drawing, so the row would refuse to follow the pointer.
+    renderTimeline({ document: collapsedDocument(), onTrackResize: vi.fn() });
+    expect(screen.queryByRole('separator', { name: 'Resize V1' })).toBeNull();
+    expect(screen.getByRole('separator', { name: 'Resize A1' })).toBeTruthy();
   });
 });

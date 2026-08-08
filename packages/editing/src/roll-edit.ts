@@ -191,11 +191,6 @@ function err(error: EditError): Result<TimelineDocument, EditError> {
   return { ok: false, error };
 }
 
-/** Frame the cut sits on, for a caller that wants to show it. */
-export function cutFrame(document: TimelineDocument, outgoing: ClipId, incoming: ClipId): number | undefined {
-  return sharedCut(document, outgoing, incoming)?.frame;
-}
-
 /** Re-exported for callers that build a request without importing the whole module. */
 export function rollTo(
   document: TimelineDocument,

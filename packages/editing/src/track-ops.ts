@@ -89,15 +89,16 @@ export function removeTrack(document: TimelineDocument, id: TrackId): Result<Tim
 }
 
 /** The monitoring and protection flags a track header exposes. */
-export type TrackFlag = 'muted' | 'solo' | 'locked';
+export type TrackFlag = 'muted' | 'solo' | 'locked' | 'collapsed';
 
 /**
  * Toggles one of a track's flags.
  *
- * A **locked** track can still be muted and soloed. Locking protects a track's *content* from being
- * disturbed — that is what it is for, and what every editing operation honours — where muting and
- * soloing change only what is being listened to. Refusing them would make locking a finished layer
- * mean giving up the ability to hear the rest of the mix without it.
+ * A **locked** track can still be muted, soloed and collapsed. Locking protects a track's *content*
+ * from being disturbed — that is what it is for, and what every editing operation honours — where the
+ * others change only what is being listened to or looked at. Refusing them would make locking a
+ * finished layer mean giving up the ability to hear the rest of the mix without it, or to get it out
+ * of the way while working on something else.
  */
 export function toggleTrackFlag(
   document: TimelineDocument,

@@ -22,6 +22,8 @@ import {
   visibleSpan,
   zoomAt,
   zoomToFit,
+  COLLAPSED_TRACK_HEIGHT_PX,
+  laneHeight,
 } from './viewport.js';
 
 const viewport = (framesPerPixel: number, scrollFrame = 0, widthPx = 1000) =>
@@ -327,5 +329,37 @@ describe('formatting', () => {
 
   it('formats the status line', () => {
     expect(formatTimelineStatus(FRAME_RATES.NTSC_29_97, 3241, 12)).toBe('29.97 fps · 3241 f · 12 clips');
+  });
+});
+
+/**
+ * How tall a track is drawn.
+ *
+ * One rule because five things need the answer — the header, the lane, the clips inside it, and the
+ * two running offsets that place the playhead and the drop indicator. A collapsed track computed
+ * differently in any one of them puts the lanes and their headers out of step, and everything below
+ * the mistake is drawn at the wrong y.
+ */
+describe('lane height', () => {
+  it('is the track´s own height when it is open', () => {
+    expect(laneHeight({ height: 72, collapsed: false })).toBe(72);
+  });
+
+  it('is a strip when it is collapsed', () => {
+    expect(laneHeight({ height: 72, collapsed: true })).toBe(COLLAPSED_TRACK_HEIGHT_PX);
+  });
+
+  it('leaves the stored height alone, so expanding restores what the user chose', () => {
+    // The whole point of collapsing being a view state: a track that came back at a default height
+    // would punish anyone who had sized it deliberately.
+    const track = { height: 140, collapsed: true };
+    expect(laneHeight(track)).toBe(COLLAPSED_TRACK_HEIGHT_PX);
+    expect(laneHeight({ ...track, collapsed: false })).toBe(140);
+  });
+
+  it('stays tall enough to show that a lane holds something', () => {
+    // A collapsed track drawn at nothing is a row the user has to expand to find out whether it is
+    // empty — which is the question collapsing exists to stop them asking about the other seven.
+    expect(COLLAPSED_TRACK_HEIGHT_PX).toBeGreaterThan(12);
   });
 });

@@ -833,6 +833,9 @@ export function App(): ReactNode {
         case 'rename-track':
           setRenamingTrack(target.track);
           break;
+        case 'collapse-track':
+          if (target.track !== undefined) toggleTrack(target.track, 'collapsed');
+          break;
         case 'remove-track':
           if (target.track !== undefined) removeTrackById(target.track);
           break;
@@ -1230,6 +1233,7 @@ export function App(): ReactNode {
                   onTrackMute={(id) => toggleTrack(id, 'muted')}
                   onTrackSolo={(id) => toggleTrack(id, 'solo')}
                   onTrackLock={(id) => toggleTrack(id, 'locked')}
+                  onTrackCollapse={(id) => toggleTrack(id, 'collapsed')}
                   onMarkIn={range.markIn}
                   onMarkOut={range.markOut}
                   onClearRange={range.clear}

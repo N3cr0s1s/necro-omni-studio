@@ -21,6 +21,8 @@ import {
 import {
   ArrowRightLeftIcon,
   AudioLinesIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   FilmIcon,
   HeadphonesIcon,
   LockIcon,
@@ -50,6 +52,7 @@ import {
   frameToPx,
   generateTicks,
   isSpanVisible,
+  laneHeight,
   pxToFrameFloor,
   spanGeometry,
 } from './viewport.js';
@@ -154,6 +157,13 @@ export interface TimelineProps {
   readonly onTrackResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
   /** Adds a track of a kind. The toolbar offers one button per kind the spec allows N of. */
   readonly onAddTrack?: (kind: TrackKind) => void;
+  /**
+   * Collapses a track to a strip, or restores it.
+   *
+   * A view state, not an edit to the material: the track keeps its height and everything on it, and a
+   * locked track can still be collapsed because collapsing disturbs nothing.
+   */
+  readonly onTrackCollapse?: (track: TrackId) => void;
 
   /**
    * The opened clip, and what to draw beneath its track.
@@ -263,6 +273,7 @@ export function Timeline(props: TimelineProps): ReactNode {
           {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
           {...(props.onTrackRename !== undefined ? { onRename: props.onTrackRename } : {})}
           {...(props.onTrackResize !== undefined ? { onResize: props.onTrackResize } : {})}
+          {...(props.onTrackCollapse !== undefined ? { onToggleCollapse: props.onTrackCollapse } : {})}
           {...(props.renamingTrack !== undefined ? { renaming: props.renamingTrack } : {})}
         />
 
@@ -525,6 +536,7 @@ function TrackHeaderColumn({
   onRemove,
   onRename,
   onResize,
+  onToggleCollapse,
 }: {
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
@@ -535,9 +547,15 @@ function TrackHeaderColumn({
   readonly onRemove?: (track: TrackId) => void;
   readonly onRename?: (track: TrackId, name: string) => void;
   readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
+  readonly onToggleCollapse?: (track: TrackId) => void;
 }): ReactNode {
   return (
-    <div className="flex w-37 flex-none flex-col border-r">
+    /* 44 rather than 37. Measured: at 147 px a side-by-side header spent all of it on padding, four
+       toggles and the gap between them, leaving 15 px for the name — about one character, so a `T1`
+       read as `T` and a renamed `A2 · music` read as nothing. The extra 28 px costs about two per cent
+       of the lane area and is the difference between a header that names its row and one that does
+       not. */
+    <div className="flex w-44 flex-none flex-col border-r">
       {/* Spacer aligning the headers with the lanes, which sit below the ruler. */}
       <div className="h-6.5 flex-none border-b" />
 
@@ -552,6 +570,7 @@ function TrackHeaderColumn({
           {...(onRemove !== undefined ? { onRemove } : {})}
           {...(onRename !== undefined ? { onRename } : {})}
           {...(onResize !== undefined ? { onResize } : {})}
+          {...(onToggleCollapse !== undefined ? { onToggleCollapse } : {})}
           renaming={renaming === track.id}
         />
       ))}
@@ -577,6 +596,7 @@ function TrackHeader({
   onRemove,
   onRename,
   onResize,
+  onToggleCollapse,
   renaming = false,
 }: {
   readonly track: Track;
@@ -589,9 +609,27 @@ function TrackHeader({
   readonly onRemove?: (track: TrackId) => void;
   readonly onRename?: (track: TrackId, name: string) => void;
   readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
+  readonly onToggleCollapse?: (track: TrackId) => void;
 }): ReactNode {
-  const stacked = track.height >= STACKED_HEADER_MIN_HEIGHT;
+  const stacked = laneHeight(track) >= STACKED_HEADER_MIN_HEIGHT;
   const TrackKindIcon = TRACK_KIND_ICON[track.kind];
+
+  /*
+   * What a 147 px header can hold, measured rather than guessed.
+   *
+   * Laid out side by side it is padding (24) + toggles (78) + the gap between the groups (12), which
+   * leaves 33 px for everything that names the row. The kind icon and a disclosure together are 34 —
+   * so adding the disclosure naively took the name to exactly zero width, and a short track showed a
+   * blank header. Two rules keep it honest:
+   *
+   * - Side by side, the disclosure takes the icon's place instead of sitting beside it. The kind is
+   *   still legible from the name (`V1`, `A1`) and from the colour of the clips on the row.
+   * - A **collapsed** row drops the toggles. It is a track that has been put away; its header's whole
+   *   job is to say which one it is and offer to bring it back, and mute, solo, lock and delete are
+   *   all still one right-click away — or one click, after expanding it.
+   */
+  const showKindIcon = stacked || onToggleCollapse === undefined;
+  const showToggles = !track.collapsed;
 
   return (
     <div
@@ -603,9 +641,11 @@ function TrackHeader({
         // invisible gets blamed on the engine.
         !audible && 'bg-muted/60',
       )}
-      style={{ height: track.height }}
+      style={{ height: laneHeight(track) }}
     >
-      {onResize !== undefined && <ResizeHandle track={track} onResize={onResize} />}
+      {/* Not while collapsed: the grip would set a height the lane is not drawing, so the row would
+          refuse to follow the pointer and the user would be adjusting something invisible. */}
+      {onResize !== undefined && !track.collapsed && <ResizeHandle track={track} onResize={onResize} />}
       <div className={cn('flex min-w-0 items-center gap-1.5', stacked ? 'flex-none' : 'flex-1')}>
         {/*
           The kind is the icon, not the name's colour. It was the colour, in the same categorical roles
@@ -613,11 +653,31 @@ function TrackHeader({
           behind something, and `chart-1` on a light background is barely there. The icon keeps the
           colour where it works and the name stays at full contrast in both modes.
         */}
-        <TrackKindIcon
-          className={cn('size-3 flex-none', trackLabelColor(track))}
-          role="img"
-          aria-label={track.kind}
-        />
+        {/* Leftmost, where a disclosure belongs and where the eye runs down a column of them. */}
+        {onToggleCollapse !== undefined && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-expanded={!track.collapsed}
+            aria-label={`${track.collapsed ? 'Expand' : 'Collapse'} ${track.name}`}
+            title={track.collapsed ? 'Expand this track' : 'Collapse this track'}
+            onClick={() => onToggleCollapse(track.id)}
+            className="size-4 flex-none"
+          >
+            {track.collapsed ? (
+              <ChevronRightIcon className="size-3" />
+            ) : (
+              <ChevronDownIcon className="size-3" />
+            )}
+          </Button>
+        )}
+        {showKindIcon && (
+          <TrackKindIcon
+            className={cn('size-3 flex-none', trackLabelColor(track))}
+            role="img"
+            aria-label={track.kind}
+          />
+        )}
         <EditableName
           autoEdit={renaming}
           value={track.name}
@@ -626,42 +686,44 @@ function TrackHeader({
           {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
         />
       </div>
-      <div className="flex flex-none gap-0.5">
-        <TrackToggle
-          icon={VolumeXIcon}
-          active={track.muted}
-          title={`Mute ${track.name}`}
-          onClick={() => onMute?.(track.id)}
-        />
-        <TrackToggle
-          icon={HeadphonesIcon}
-          active={track.solo}
-          title={`Solo ${track.name}`}
-          onClick={() => onSolo?.(track.id)}
-        />
-        <TrackToggle
-          icon={LockIcon}
-          active={track.locked}
-          title={`Lock ${track.name}`}
-          onClick={() => onLock?.(track.id)}
-        />
-        {/* Removal sits with the toggles rather than behind a menu, and is *disabled* on a locked
+      {showToggles && (
+        <div className="flex flex-none gap-0.5">
+          <TrackToggle
+            icon={VolumeXIcon}
+            active={track.muted}
+            title={`Mute ${track.name}`}
+            onClick={() => onMute?.(track.id)}
+          />
+          <TrackToggle
+            icon={HeadphonesIcon}
+            active={track.solo}
+            title={`Solo ${track.name}`}
+            onClick={() => onSolo?.(track.id)}
+          />
+          <TrackToggle
+            icon={LockIcon}
+            active={track.locked}
+            title={`Lock ${track.name}`}
+            onClick={() => onLock?.(track.id)}
+          />
+          {/* Removal sits with the toggles rather than behind a menu, and is *disabled* on a locked
             track rather than hidden: a control that vanishes leaves the user hunting for it, where a
             disabled one with a reason explains itself. */}
-        {onRemove !== undefined && (
-          <TrackToggle
-            icon={Trash2Icon}
-            active={false}
-            disabled={track.locked}
-            title={
-              track.locked
-                ? `${track.name} is locked — unlock it to remove it`
-                : `Remove ${track.name} and everything on it`
-            }
-            onClick={() => onRemove(track.id)}
-          />
-        )}
-      </div>
+          {onRemove !== undefined && (
+            <TrackToggle
+              icon={Trash2Icon}
+              active={false}
+              disabled={track.locked}
+              title={
+                track.locked
+                  ? `${track.name} is locked — unlock it to remove it`
+                  : `Remove ${track.name} and everything on it`
+              }
+              onClick={() => onRemove(track.id)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -801,7 +863,7 @@ export function assetDropTarget(
 ): { readonly track: TrackId; readonly frame: FrameIndex } | undefined {
   let top = 0;
   for (const track of tracks) {
-    top += track.height;
+    top += laneHeight(track);
     if (offset.y < top) {
       return { track: track.id, frame: frameIndex(Math.max(0, pxToFrameFloor(viewport, offset.x))) };
     }
@@ -830,7 +892,7 @@ export function regionFor(
   let offset = 0;
   for (const track of tracks) {
     const top = offset;
-    offset += track.height;
+    offset += laneHeight(track);
     if (top < rect.top + rect.height && offset > rect.top) covered.push(track.id);
   }
 
@@ -1091,9 +1153,11 @@ function TrackLane({
         data-track-id={track.id}
         data-track-kind={track.kind}
         className="relative border-b"
-        style={{ height: track.height }}
+        style={{ height: laneHeight(track) }}
       >
-        {dropAt !== undefined && <DropIndicator viewport={viewport} frame={dropAt} height={track.height} />}
+        {dropAt !== undefined && (
+          <DropIndicator viewport={viewport} frame={dropAt} height={laneHeight(track)} />
+        )}
 
         {visible.map((clip) => (
           <ClipBody
@@ -1102,7 +1166,7 @@ function TrackLane({
             rollableStart={flushBefore(track, clip)}
             rollableEnd={flushAfter(track, clip)}
             geometry={spanGeometry(viewport, clip.span)}
-            heightPx={track.height}
+            heightPx={laneHeight(track)}
             selected={selectedClips.has(clip.id)}
             {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
             expanded={expandedClip === clip.id}

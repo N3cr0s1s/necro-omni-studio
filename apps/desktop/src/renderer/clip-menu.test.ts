@@ -213,6 +213,30 @@ describe('track actions', () => {
     expect(item(items, 'rename-track')?.label).toBe('Rename track');
   });
 
+  it('says what collapsing will do, not what state the lane is in', () => {
+    // `Collapse track` on an open one and `Expand track` on a collapsed one. An item labelled with the
+    // current state leaves the user working out which way it toggles.
+    const open = clipMenuItems(state({ track: trackId('v1') }));
+    expect(item(open, 'collapse-track')?.label).toBe('Collapse track');
+
+    const open2 = documentWith([video('a')]);
+    const document: TimelineDocument = {
+      ...open2,
+      sequence: {
+        ...open2.sequence,
+        tracks: open2.sequence.tracks.map((track) =>
+          track.id === 'v1' ? ({ ...track, collapsed: true } as Track) : track,
+        ),
+      },
+    };
+    const shut = clipMenuItems(state({ document, track: trackId('v1') }));
+    expect(item(shut, 'collapse-track')?.label).toBe('Expand track');
+  });
+
+  it('cannot collapse when the click was on no lane', () => {
+    expect(item(clipMenuItems(state({ track: undefined })), 'collapse-track')?.disabled).toBe(true);
+  });
+
   it('cannot rename a clip when the click was on no clip', () => {
     // An empty lane. Renaming would have to pick a clip the user did not click.
     const items = clipMenuItems(state({ clip: undefined, selectionSize: 0, track: trackId('v1') }));

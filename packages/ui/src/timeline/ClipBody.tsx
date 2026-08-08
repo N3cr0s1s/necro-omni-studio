@@ -83,6 +83,15 @@ function clipPalette(clip: Clip): string {
 const TRIM_HANDLE_PX = 6;
 const MIN_HANDLE_CLIP_WIDTH_PX = 24;
 
+/**
+ * Below this lane height a clip is a bar and nothing else.
+ *
+ * The same rule as the width one above, in the other axis: a label clipped to three pixels of its
+ * ascenders is not a smaller label, it is noise over the one thing that says which clip this is. A
+ * collapsed track is read for *where the material is*, not for what it says.
+ */
+const MIN_LABEL_TRACK_HEIGHT_PX = 34;
+
 export function ClipBody({
   clip,
   geometry,
@@ -101,8 +110,14 @@ export function ClipBody({
   onContextMenu,
 }: ClipBodyProps): ReactNode {
   const passes = passCount(clip);
-  const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX;
+  const compact = heightPx < MIN_LABEL_TRACK_HEIGHT_PX;
+  // Handles are hidden in a compact lane too: a 10 px bar cannot be trimmed with any precision, and
+  // the grab zones would sit exactly where the user is aiming to click the clip itself.
+  const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX && !compact;
   const Disclosure = expanded ? ChevronDownIcon : ChevronRightIcon;
+  // Less inset when there is less to inset. The default six pixels top and bottom is most of a
+  // collapsed lane, and would leave the bar too thin to see the colour that says what kind it is.
+  const inset = compact ? 2 : 6;
 
   return (
     <ActionMenu
@@ -126,8 +141,8 @@ export function ClipBody({
         style={{
           left: geometry.leftPx,
           width: geometry.widthPx,
-          top: 6,
-          height: Math.max(0, heightPx - 12),
+          top: inset,
+          height: Math.max(0, heightPx - inset * 2),
         }}
         onPointerDown={(event) => onPointerDown?.(clip.id, event)}
         onContextMenu={() => onContextMenu?.(clip.id)}
@@ -136,63 +151,65 @@ export function ClipBody({
             drawn on top of the label would hide the one thing that names the clip. */}
         {strip !== undefined && <StripLayer clip={clip} strip={strip} />}
 
-        <div className="relative flex min-w-0 items-center gap-1">
-          {isGenerated(clip) && (
-            <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />
-          )}
-          <span className="truncate text-[11px] font-medium">{clip.label}</span>
+        {!compact && (
+          <div className="relative flex min-w-0 items-center gap-1">
+            {isGenerated(clip) && (
+              <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />
+            )}
+            <span className="truncate text-[11px] font-medium">{clip.label}</span>
 
-          {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
+            {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
               there is something to show — an empty disclosure punishes the user for using it. */}
-          {onToggleExpand !== undefined && hasAnimation(clip) && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              data-clip-disclosure={clip.id}
-              aria-expanded={expanded}
-              aria-label={`${expanded ? 'Hide' : 'Show'} ${clip.label} keyframe lanes`}
-              title={expanded ? 'Hide the parameter lanes' : 'Show the parameter lanes'}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleExpand(clip.id);
-              }}
-              className="size-3.5"
-            >
-              <Disclosure className="size-2.5" />
-            </Button>
-          )}
+            {onToggleExpand !== undefined && hasAnimation(clip) && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                data-clip-disclosure={clip.id}
+                aria-expanded={expanded}
+                aria-label={`${expanded ? 'Hide' : 'Show'} ${clip.label} keyframe lanes`}
+                title={expanded ? 'Hide the parameter lanes' : 'Show the parameter lanes'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleExpand(clip.id);
+                }}
+                className="size-3.5"
+              >
+                <Disclosure className="size-2.5" />
+              </Button>
+            )}
 
-          {passes > 0 && (
-            <Badge
-              variant={passes > passWarningThreshold ? 'destructive' : 'secondary'}
-              className="h-3.5 flex-none px-1 font-mono text-[8.5px]"
-            >
-              fx {passes}
-            </Badge>
-          )}
-          {clip.effects.some((effect) => effect.mask !== undefined) && (
-            <Badge
-              variant="secondary"
-              className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4"
-            >
-              <SquareDashedIcon className="size-2" />
-              mask
-            </Badge>
-          )}
+            {passes > 0 && (
+              <Badge
+                variant={passes > passWarningThreshold ? 'destructive' : 'secondary'}
+                className="h-3.5 flex-none px-1 font-mono text-[8.5px]"
+              >
+                fx {passes}
+              </Badge>
+            )}
+            {clip.effects.some((effect) => effect.mask !== undefined) && (
+              <Badge
+                variant="secondary"
+                className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4"
+              >
+                <SquareDashedIcon className="size-2" />
+                mask
+              </Badge>
+            )}
 
-          {/* A link is the reason two clips move as one, so it has to be visible: a user whose sound
+            {/* A link is the reason two clips move as one, so it has to be visible: a user whose sound
               follows their picture without knowing why cannot tell a feature from a fault. */}
-          {linkedPartner(clip) !== undefined && (
-            <LinkIcon
-              data-clip-linked="true"
-              aria-hidden="true"
-              className="size-2.5 flex-none text-muted-foreground"
-            />
-          )}
-        </div>
+            {linkedPartner(clip) !== undefined && (
+              <LinkIcon
+                data-clip-linked="true"
+                aria-hidden="true"
+                className="size-2.5 flex-none text-muted-foreground"
+              />
+            )}
+          </div>
+        )}
 
-        {clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (
+        {!compact && clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (
           <div className="absolute bottom-1 left-1.5 font-mono text-[9px] text-chart-4">
             seed {clip.provenance.seed}
           </div>

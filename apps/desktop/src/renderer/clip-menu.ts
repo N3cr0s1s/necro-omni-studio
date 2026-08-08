@@ -10,6 +10,8 @@ import {
   Link2OffIcon,
   PaintBucketIcon,
   PaletteIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   PencilIcon,
   ScissorsIcon,
   SplitIcon,
@@ -56,6 +58,7 @@ export const CLIP_MENU_ACTIONS = [
   'add-audio-track',
   'add-text-track',
   'rename-track',
+  'collapse-track',
   'remove-track',
   'rename-clip',
   'cut',
@@ -82,8 +85,12 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
   const track = state.track;
   // The last of its kind cannot go: a sequence with no video track has nowhere to drop a video, and
   // the user's next action after deleting it would be to create one.
-  const kind =
-    track === undefined ? undefined : state.document.sequence.tracks.find((t) => t.id === track)?.kind;
+  const laneClicked =
+    track === undefined ? undefined : state.document.sequence.tracks.find((t) => t.id === track);
+  const kind = laneClicked?.kind;
+  // Read from the document rather than passed in: the label has to say which way this toggles, and a
+  // caller that had to compute it could disagree with what the row is actually showing.
+  const collapsed = laneClicked?.collapsed === true;
   const lastOfKind =
     kind === undefined || state.document.sequence.tracks.filter((t) => t.kind === kind).length <= 1;
 
@@ -98,6 +105,15 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'rename-track',
       label: 'Rename track',
       icon: PencilIcon,
+      disabled: track === undefined,
+    },
+    {
+      // Reads as what the click will do, not as the state it is in: `Collapse track` on an expanded
+      // one, `Expand track` on a collapsed one. A menu item labelled with the current state leaves the
+      // user working out which way it toggles.
+      id: 'collapse-track',
+      label: collapsed ? 'Expand track' : 'Collapse track',
+      icon: collapsed ? ChevronRightIcon : ChevronDownIcon,
       disabled: track === undefined,
     },
     {
