@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1339 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1480 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -294,7 +294,8 @@ application: a crossfade overlaps the clips by exactly its duration and the plan
 builds a transition item.
 
 Every feature in the spec is now built, reachable from the shell, and verified in
-the running application.
+the running application — and the shell itself is unit-tested rather than covered
+only by end-to-end probes.
 
 ### Editing rules (keep these)
 
@@ -1349,3 +1350,27 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   them, because its stated property — one malformed manifest must not stop the
   others — is the kind that fails silently and looks like a generator was never
   installed.
+
+- 2026-08-08: Component tests for the shell — the last weakness this ledger named.
+
+  `App`'s children were covered only by driving the running application, which
+  catches integration failures and says nothing about behaviour. These pin the
+  parts with consequences.
+
+  `TextInspector`, because "a preset writes keyframes into the channels it touches
+  and no others" is the claim the panel makes in its own hint text, and because
+  typewriter has to land on `reveal` rather than on the transform. `ClipInspector`,
+  because the transition controls must be disabled where there is no neighbour and
+  must *report* a rejection rather than silently doing nothing. `KeyframeLanes`,
+  because a lane has to appear for a clip's own transform as well as for effect
+  parameters, and because clip-relative positions are converted in exactly one
+  place — a clip starting at frame 60 shows its frame-0 marker at 60.
+
+  One of these replaced a first draft that could pass without asserting anything,
+  because jsdom gives every element a zero-sized box and the lane converts a click
+  offset into a frame. A test with an `if (nothing happened) return` in it is worse
+  than no test: it reports success for the case it was written to catch. Stating
+  the box makes the conversion testable instead of skipped.
+
+  **1480 TypeScript tests, 136 Python tests, 22/22 GL assertions, 19/19 rasterizer
+  assertions.**
