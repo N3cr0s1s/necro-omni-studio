@@ -24,29 +24,68 @@ import type { ExportProgress } from '@nos/export';
 export function generatorActivities(snapshot: QueueSnapshot): readonly Activity[] {
   return snapshot.runs.map((run) => {
     const group = snapshot.groups.find((candidate) => candidate.id === run.group);
-    const ordinal = group === undefined ? 0 : group.runs.indexOf(run.id) + 1;
-    const variants = group?.variantCount ?? 1;
 
     return {
       id: `run:${run.id}`,
       kind: 'generate',
-      // Named for what it makes, and numbered only when there is more than one — "Warehouse drone 1
-      // of 1" is noise on every single-variant run, which is every video generator by default.
-      label:
-        variants > 1
-          ? `${group?.label ?? 'Generating'} · variant ${ordinal} of ${variants}`
-          : (group?.label ?? 'Generating'),
+      label: runLabel(group, run, snapshot),
       ...(describeRun(run) !== undefined ? { detail: describeRun(run)! } : {}),
       ...(run.progress !== undefined ? { progress: run.progress } : {}),
       state: runState(run.status),
       facts: [
-        { label: 'seed', value: String(run.seed) },
+        // Plural for a batched run. One seed shown for a submit that used three is the fact a user
+        // would take to a bug report, and it would be wrong for two of the three files on disk.
+        run.seeds.length > 1
+          ? { label: 'seeds', value: run.seeds.join(', ') }
+          : { label: 'seed', value: String(run.seed) },
         ...(group === undefined ? [] : paramFacts(group.params)),
       ],
       ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
       ...(run.finishedAt !== undefined ? { finishedAt: run.finishedAt } : {}),
     } satisfies Activity;
   });
+}
+
+type QueueRun = QueueSnapshot['runs'][number];
+type QueueGroup = QueueSnapshot['groups'][number];
+
+/**
+ * What a run is called while it is working.
+ *
+ * The subtlety is that a run is **not** a variant. In sequential mode it happens to be one, but a
+ * batched manifest puts every seed the graph can hold into a single submit — so a group of three can
+ * be one run that produces all three. Numbering that run "variant 1 of 3" was observably wrong: the
+ * status bar showed it against a real Stable Audio submit, three files landed at once, and the bar
+ * still implied two more runs were coming that never would.
+ *
+ * So the number comes from the seeds the run actually carries, not from its position in the group.
+ */
+function runLabel(group: QueueGroup | undefined, run: QueueRun, snapshot: QueueSnapshot): string {
+  const name = group?.label ?? 'Generating';
+  const total = group?.variantCount ?? 1;
+
+  // Not numbered at all when there is nothing to distinguish — "Warehouse drone 1 of 1" is noise on
+  // every single-variant run, which is every video generator by default.
+  if (group === undefined || total <= 1) return name;
+
+  const covered = Math.max(1, run.seeds.length);
+  // One run holding the whole group: a count, because there is no "which one" to answer.
+  if (covered >= total) return `${name} · ${total} variants`;
+
+  const first = variantOffset(group, run, snapshot) + 1;
+  if (covered === 1) return `${name} · variant ${first} of ${total}`;
+  return `${name} · variants ${first}–${first + covered - 1} of ${total}`;
+}
+
+/** How many variants the runs before this one already account for. */
+function variantOffset(group: QueueGroup, run: QueueRun, snapshot: QueueSnapshot): number {
+  const position = group.runs.indexOf(run.id);
+  if (position <= 0) return 0;
+
+  return group.runs.slice(0, position).reduce((sum, id) => {
+    const earlier = snapshot.runs.find((candidate) => candidate.id === id);
+    return sum + Math.max(1, earlier?.seeds.length ?? 1);
+  }, 0);
 }
 
 function runState(status: QueueSnapshot['runs'][number]['status']): Activity['state'] {
