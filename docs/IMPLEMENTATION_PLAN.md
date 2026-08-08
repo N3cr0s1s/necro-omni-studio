@@ -289,6 +289,28 @@ To run it against a fixture rather than a folder picker: the shell remembers the
 `--remote-debugging-port` a port well clear of anything else on the machine — the sidecar takes an
 ephemeral one, but other tooling may not.
 
+And there is a fourth, which found more than the other three put together: **run a real job against
+the real backend and read every word the application says while it does.** Not "does it work" — it
+did — but whether each sentence on screen is true. One Stable Audio submit produced five findings:
+
+- The bar read `variant 1 of 3` while all three landed at once. A run is not a variant; a batched
+  manifest puts every seed into one submit, and the label promised two more runs that never existed.
+- The stage read `executing 30:3`. The graph we submitted knows that node as `KSampler`.
+- `Keep` at a busy playhead said `the edit was rejected: collision` and stopped there. The rejection
+  was right; having no answer to it was not.
+- The new track it eventually made was called `a2`, under `A1`.
+- `kept — …` was still on screen ten minutes later, under an error icon, with nothing to remove it.
+
+None of these are visible to a unit test, because every one of them is a *true* statement about the
+wrong thing, or a true statement with no way forward. The question that finds them is: after this
+sentence, what would a user do next — and can they?
+
+The same pass found the one outright hang in the system, by watching a run stay at
+`VAE Decode · 1 running · 100%` for twenty minutes while ComfyUI, restarted underneath it, had an
+empty queue and an idle GPU. The socket adapter woke only on a `message`, so a backend that went away
+parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
+its source dies**, or the job waits forever and reports nothing.
+
 One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
 graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
 so building one would be widening the scope rather than closing a gap.
@@ -517,6 +539,14 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### ComfyUI backend rules (keep these)
 
+- The event socket must end its stream on **close and error**, not only on a message.
+  A backend that restarts mid-run otherwise leaves the progress loop awaiting a promise
+  nothing resolves, and the run stays "running" for the rest of the session with no
+  error and no collection attempt. Ending is not failing: collection is still tried,
+  because a socket that dropped after the last node ran has outputs in the history.
+- The `executing` event names a node by **id** (`30:3`, or `54:14` inside a subgraph).
+  Resolve it through the submitted graph's `_meta.title` before showing it. Keep those
+  names **per job** — ids collide between graphs.
 - Patch order is fixed: defaults, then user values, then **preset pins last**, then
   the seed, then batch size. A preset's purpose is to _fix_ a parameter, so letting
   a stale user value win would make it a suggestion rather than a definition.
@@ -704,6 +734,20 @@ so it can gate a release:
   clips its label — which is exactly what happened at the mockups' 46 px text track.
 
 ### UI rules (keep these)
+
+- A message that says something **worked** and one that says it did not want different
+  lifetimes. A failure persists until resolved or dismissed; a confirmation answers an
+  action and clears itself, or it becomes furniture under an error icon. Saying the same
+  confirmation twice restarts its clock — two Keeps in a row say one sentence twice, and
+  the second is the one being waited on.
+- A rejection a user could answer must come with the answer. `insertGenerated` reports a
+  collision so the user can decide; the status bar turns it into "Find room for it", and
+  the retry is the same call with a different `placement` rather than a second path.
+- Never use a media element's `controls`. Chromium's bar ignores the theme and matches
+  nothing else on the panel. `TransportBar` draws it from the same primitives.
+- The shadcn `Slider` spreads its props onto its **root**, and the control needing an
+  accessible name is the range input inside the thumb. Wrap it in a `Label` with an
+  sr-only string; an `aria-label` on the root reaches nothing.
 
 - Every colour, size and font resolves through a token in
   `packages/ui/src/tokens/`. A literal hex in a component is a bug: the mockups
