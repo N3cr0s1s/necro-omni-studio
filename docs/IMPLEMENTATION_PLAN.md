@@ -729,6 +729,12 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Export rules (keep these)
 
+- Fixing one side of a preview/export divergence **creates the other side**. The export was wired to the
+  shared effect registry while the preview kept building its own, turning "drawn nowhere" into "drawn in
+  the file but not on screen". Change both in one commit or neither.
+- The shared trio is registry, compositor and texture provider. Anything a third one of those appears,
+  it is a divergence waiting to be found.
+
 - Preview and export share **one effect registry**, not one compositor and two registries. The export
   built its own from the builtins, so a project-local effect rendered in the preview and vanished from
   the delivered file. Anything the preview merges in, the export must be handed.
