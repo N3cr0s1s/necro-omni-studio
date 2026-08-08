@@ -9,7 +9,9 @@ import type {
   RegistryRecord,
   SelectionOutcome,
 } from '@nos/generators';
-import { acceptSelection, buildSelection } from '@nos/generators';
+import { type TextChoice, acceptSelection, buildSelection, previewOf } from '@nos/generators';
+import { bridge } from './bridge.js';
+import { noteChoicesFrom, resolveTextChoice, textChoicesFrom } from './generator-text.js';
 import type { MaskWorkspace } from './use-mask-workspace.js';
 import type { DirectoryNode } from '@nos/media';
 import {
@@ -367,6 +369,7 @@ function GenerateTab({
   registry,
   libraryProblems,
   libraryPath,
+  onReject,
   runtime,
   playhead,
   projectTree,
@@ -383,6 +386,14 @@ function GenerateTab({
   const [params, setParams] = useState<Readonly<Record<string, string | number | boolean>>>({});
   const [variantCount, setVariantCount] = useState<number | undefined>(undefined);
   const [lockedSeed, setLockedSeed] = useState<number | undefined>(undefined);
+  /**
+   * What each text parameter is bound to, when it is not being typed.
+   *
+   * The binding is kept rather than only its text, so the value can be re-read at submit time. Copying
+   * the words in once would voice a stale draft the moment the note was edited — which is exactly the
+   * round trip this feature exists to remove.
+   */
+  const [boundText, setBoundText] = useState<Readonly<Record<string, TextChoice | undefined>>>({});
   const [destination, setDestination] = useState<'media-browser' | 'timeline'>('media-browser');
 
   /*
@@ -399,6 +410,42 @@ function GenerateTab({
     setParams(recalled.params);
     setLockedSeed(recalled.lockedSeed);
   }, [recalled]);
+
+  /*
+   * Notes and text clips, as things a script can be. Clips carry their words already; a folder listing
+   * knows names but not contents, so the notes are read once and their openings filled in below.
+   */
+  const [notePreviews, setNotePreviews] = useState<ReadonlyMap<string, string>>(new Map());
+  const textChoices = useMemo(() => {
+    const base = textChoicesFrom(projectTree, document);
+    return base.map((choice) =>
+      choice.source === 'notes_file' ? { ...choice, preview: notePreviews.get(choice.ref) ?? '' } : choice,
+    );
+  }, [projectTree, document, notePreviews]);
+
+  useEffect(() => {
+    const api = bridge();
+    if (api === undefined) return;
+
+    const notes = noteChoicesFrom(projectTree);
+    if (notes.length === 0) return;
+
+    let cancelled = false;
+    void Promise.all(
+      notes.map(async (note) => {
+        // A note that cannot be read is left without a preview rather than reported: it is still a
+        // legitimate choice, and the run refuses with a reason if it is picked and still unreadable.
+        const text = await api.readTextFile(note.ref).catch(() => undefined);
+        return [note.ref, text === undefined ? '' : previewOf(text)] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setNotePreviews(new Map(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectTree]);
 
   const record: RegistryRecord | undefined =
     records.find((entry) => entry.manifest.id === selectedId) ?? records[0];
@@ -516,6 +563,17 @@ function GenerateTab({
             ? { capabilityOptions: runtime.capabilities.enumOptions }
             : {})}
           assetChoices={assetChoices}
+          textChoices={textChoices}
+          boundText={boundText}
+          onBindText={(key, choice) => {
+            setBoundText((current) => ({ ...current, [key]: choice }));
+            if (choice === undefined) return;
+            // The field is filled straight away so the panel shows what will be spoken, and re-read at
+            // submit so an edit between choosing and running is picked up rather than silently missed.
+            void resolveTextChoice(choice, document, (path) => readProjectText(path)).then((text) => {
+              if (text !== undefined) setParams((current) => ({ ...current, [key]: text }));
+            });
+          }}
           projectShape={document.resolution}
           frameGrab={{
             describe: frameGrab.available,
@@ -537,16 +595,37 @@ function GenerateTab({
               current === undefined ? Math.floor(Math.random() * 2 ** 31) : undefined,
             )
           }
-          onRun={() =>
-            runtime.run({
-              manifest: record.manifest,
-              params,
-              target,
-              ...(preset !== undefined ? { preset } : {}),
-              ...(variantCount !== undefined ? { variantCount } : {}),
-              ...(lockedSeed !== undefined ? { lockedSeed } : {}),
-            })
-          }
+          onRun={() => {
+            /*
+             * Bindings are resolved again here, not reused from when they were chosen. A note edited
+             * between picking it and pressing Generate must be the version that gets voiced — reading
+             * once at binding time is how a tool ends up confidently producing yesterday's script.
+             */
+            void (async () => {
+              const resolved: Record<string, string | number | boolean> = { ...params };
+              for (const [key, choice] of Object.entries(boundText)) {
+                if (choice === undefined) continue;
+                const text = await resolveTextChoice(choice, document, (path) => readProjectText(path));
+                if (text === undefined) {
+                  // Refused rather than run with the stale value: the source the user pointed at is
+                  // gone, and generating from what it used to say is worse than not generating.
+                  onReject(`${choice.label} could not be read, so nothing was generated`);
+                  return;
+                }
+                resolved[key] = text;
+              }
+
+              setParams(resolved);
+              runtime.run({
+                manifest: record.manifest,
+                params: resolved,
+                target,
+                ...(preset !== undefined ? { preset } : {}),
+                ...(variantCount !== undefined ? { variantCount } : {}),
+                ...(lockedSeed !== undefined ? { lockedSeed } : {}),
+              });
+            })();
+          }}
         />
       )}
     </div>
@@ -668,4 +747,21 @@ function SegmentTab({ document, selectedClip, masks }: RightPanelProps): ReactNo
       )}
     </div>
   );
+}
+
+/**
+ * A project file's text, or a rejection.
+ *
+ * Throws rather than returning empty, because `resolveTextChoice` distinguishes "this is empty" from
+ * "this could not be read" and the caller refuses the run on the second. A bridge-less build throws
+ * for the same reason: it cannot read the file, and pretending otherwise would generate from nothing.
+ */
+async function readProjectText(path: string): Promise<string> {
+  const api = bridge();
+  if (api === undefined) throw new Error('no bridge');
+  const text = await api.readTextFile(path);
+  // `undefined` from the bridge means the file is not there; throwing keeps "missing" and "empty"
+  // distinct all the way up to the refusal, which is the distinction the caller acts on.
+  if (text === undefined) throw new Error(`${path} could not be read`);
+  return text;
 }

@@ -13,6 +13,7 @@ export * from './queue/variant-plan.js';
 export * from './queue/gpu-semaphore.js';
 export * from './queue/job-queue.js';
 export * from './panel/asset-inputs.js';
+export * from './panel/text-inputs.js';
 export * from './panel/derived-defaults.js';
 export * from './provenance/asset-provenance.js';
 export * from './provenance/recall.js';

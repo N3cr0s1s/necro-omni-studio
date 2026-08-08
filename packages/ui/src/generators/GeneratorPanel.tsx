@@ -4,6 +4,11 @@ import {
   type AssetChoice,
   type GeneratorManifest,
   type GeneratorParam,
+  type TextChoice,
+  type TextSource,
+  choicesForSource,
+  inputFor,
+  textSourcesFor,
   type RegistryRecord,
   choicesFor,
   defaultFor,
@@ -65,6 +70,15 @@ export interface GeneratorPanelProps {
    */
   readonly assetChoices?: readonly AssetChoice[];
   /**
+   * Notes and text clips a text parameter may be bound to, per the spec's §10.
+   *
+   * Supplied whole, as `assetChoices` is: which of them apply to a given parameter is decided from
+   * that parameter's declared sources, and reading a folder is not this component's job.
+   */
+  readonly textChoices?: readonly TextChoice[];
+  /** What each text parameter is bound to, keyed by parameter. Absent means the user typed it. */
+  readonly boundText?: Readonly<Record<string, TextChoice | undefined>>;
+  /**
    * Capturing the frame under the playhead for an image-valued parameter.
    *
    * Offered alongside the project's files rather than instead of them: a first frame is very often
@@ -82,6 +96,8 @@ export interface GeneratorPanelProps {
   readonly projectShape?: { readonly width: number; readonly height: number };
 
   readonly onChangeParam?: (key: string, value: string | number | boolean) => void;
+  /** Binds a text parameter to a note or a clip. `undefined` returns it to being typed. */
+  readonly onBindText?: (key: string, choice: TextChoice | undefined) => void;
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
   readonly onChangeVariantCount?: (count: number) => void;
   readonly onToggleSeedLock?: () => void;
@@ -114,6 +130,9 @@ export function GeneratorPanel({
   frameGrab,
   projectShape,
   onChangeParam,
+  onBindText,
+  textChoices,
+  boundText,
   onChangePreset,
   onChangeVariantCount,
   onToggleSeedLock,
@@ -216,7 +235,15 @@ export function GeneratorPanel({
             {...(isAssetParam(param) ? { choices: choicesFor(param, assetChoices ?? []) } : {})}
             {...(frameGrab !== undefined && param.type === 'image' ? { frameGrab } : {})}
             {...(param.type === 'seed' ? { seedLocked: lockedSeed !== undefined } : {})}
+            {...(param.type === 'text'
+              ? {
+                  textSources: textSourcesFor(inputFor(record.manifest, param)),
+                  textChoices: textChoices ?? [],
+                  boundTextChoice: boundText?.[param.key],
+                }
+              : {})}
             {...(onChangeParam !== undefined ? { onChange: onChangeParam } : {})}
+            {...(onBindText !== undefined ? { onBindText } : {})}
             {...(onToggleSeedLock !== undefined ? { onToggleSeedLock } : {})}
           />
         ))}
@@ -348,7 +375,11 @@ function ParamControl({
   choices,
   frameGrab,
   seedLocked,
+  textSources,
+  textChoices,
+  boundTextChoice,
   onChange,
+  onBindText,
   onToggleSeedLock,
 }: {
   readonly param: GeneratorParam;
@@ -368,7 +399,13 @@ function ParamControl({
    */
   readonly projectShape?: { readonly width: number; readonly height: number };
   readonly seedLocked?: boolean;
+  /** Sources this text parameter declares. Absent is `inline`, so an unchanged manifest is unchanged. */
+  readonly textSources?: readonly TextSource[];
+  readonly textChoices?: readonly TextChoice[];
+  /** What this parameter is currently bound to, when it is not being typed. */
+  readonly boundTextChoice?: TextChoice | undefined;
   readonly onChange?: (key: string, value: string | number | boolean) => void;
+  readonly onBindText?: (key: string, choice: TextChoice | undefined) => void;
   readonly onToggleSeedLock?: () => void;
 }): ReactNode {
   const label = param.label ?? param.key;
@@ -386,12 +423,17 @@ function ParamControl({
       </FieldLabel>
 
       {param.type === 'text' && (
-        <Textarea
+        <TextInput
           id={id}
+          label={label}
+          param={param}
+          value={value}
           disabled={disabled}
-          rows={param.multiline === true ? 3 : 1}
-          value={String(value ?? '')}
-          onChange={(event) => onChange?.(param.key, event.target.value)}
+          sources={textSources ?? ['inline']}
+          textChoices={textChoices ?? []}
+          boundChoice={boundTextChoice}
+          onChange={onChange}
+          onBindText={onBindText}
         />
       )}
 
@@ -655,3 +697,129 @@ function VariantControl({
     </div>
   );
 }
+
+/**
+ * A text parameter, and where its value comes from.
+ *
+ * The spec's §10 allows a script to be typed, taken from a `notes/` file, or taken from a text clip
+ * already on the timeline. A parameter declaring only `inline` renders exactly what it always did — a
+ * textarea and nothing else — so a manifest that says nothing about sources is untouched by this.
+ *
+ * Binding rather than copying. Choosing a note *fills the field and remembers the note*, so the panel
+ * can say what it is reading and re-read it at submit time; copying the text in would silently voice a
+ * stale draft after the file was edited, which is the failure mode this whole feature exists to remove.
+ * Typing into the field breaks the binding, because at that point the value is the user's, not the
+ * file's.
+ */
+function TextInput({
+  id,
+  label,
+  param,
+  value,
+  disabled,
+  sources,
+  textChoices,
+  boundChoice,
+  onChange,
+  onBindText,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly param: GeneratorParam;
+  readonly value: string | number | boolean | undefined;
+  readonly disabled: boolean;
+  readonly sources: readonly TextSource[];
+  readonly textChoices: readonly TextChoice[];
+  readonly boundChoice: TextChoice | undefined;
+  readonly onChange?: ((key: string, value: string | number | boolean) => void) | undefined;
+  readonly onBindText?: ((key: string, choice: TextChoice | undefined) => void) | undefined;
+}): ReactNode {
+  const offered = sources.filter(
+    (source) => source === 'inline' || choicesForSource(textChoices, source).length > 0,
+  );
+
+  // Nothing to choose between: one source, or alternatives that this project has no material for. A
+  // selector offering a single option is a control that cannot be operated.
+  if (offered.length <= 1) {
+    return (
+      <Textarea
+        id={id}
+        disabled={disabled}
+        rows={param.multiline === true ? 3 : 1}
+        value={String(value ?? '')}
+        onChange={(event) => onChange?.(param.key, event.target.value)}
+      />
+    );
+  }
+
+  const active: TextSource = boundChoice?.source ?? 'inline';
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <NativeSelect
+        aria-label={`${label} source`}
+        disabled={disabled}
+        value={active}
+        onChange={(event) => {
+          const next = event.target.value as TextSource;
+          if (next === 'inline') {
+            onBindText?.(param.key, undefined);
+            return;
+          }
+          // Bound to the first of that kind, so choosing a source is one action rather than two. The
+          // second select below changes which one.
+          const first = choicesForSource(textChoices, next)[0];
+          if (first !== undefined) onBindText?.(param.key, first);
+        }}
+      >
+        {offered.map((source) => (
+          <NativeSelectOption key={source} value={source}>
+            {SOURCE_LABELS[source]}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+
+      {active === 'inline' ? (
+        <Textarea
+          id={id}
+          disabled={disabled}
+          rows={param.multiline === true ? 3 : 1}
+          value={String(value ?? '')}
+          onChange={(event) => onChange?.(param.key, event.target.value)}
+        />
+      ) : (
+        <>
+          <NativeSelect
+            id={id}
+            aria-label={label}
+            disabled={disabled}
+            value={boundChoice?.ref ?? ''}
+            onChange={(event) => {
+              const picked = choicesForSource(textChoices, active).find(
+                (choice) => choice.ref === event.target.value,
+              );
+              if (picked !== undefined) onBindText?.(param.key, picked);
+            }}
+          >
+            {choicesForSource(textChoices, active).map((choice) => (
+              <NativeSelectOption key={choice.ref} value={choice.ref}>
+                {choice.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          {/* The opening words, because a file name is not how anyone recognises a script. */}
+          {boundChoice !== undefined && boundChoice.preview !== '' && (
+            <p className="line-clamp-2 font-mono text-xs text-muted-foreground">{boundChoice.preview}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** What each source is called on screen, in the user's terms rather than the manifest's. */
+const SOURCE_LABELS: Readonly<Record<TextSource, string>> = {
+  inline: 'type it',
+  notes_file: 'from notes',
+  text_clip: 'from a text clip',
+};
