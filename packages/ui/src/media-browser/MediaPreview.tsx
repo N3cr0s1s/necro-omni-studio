@@ -1,9 +1,11 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type RefObject, useState } from 'react';
 import { FileQuestionIcon, TriangleAlertIcon } from 'lucide-react';
 import type { AssetType } from '@nos/media';
 import { AspectRatio } from '@nos/ui/components/ui/aspect-ratio';
 import { Skeleton } from '@nos/ui/components/ui/skeleton';
 import { cn } from '@nos/ui/lib/utils';
+import { TransportBar } from './TransportBar.js';
+import { useMediaTransport } from './use-media-transport.js';
 
 /**
  * The selected file, played.
@@ -17,9 +19,13 @@ import { cn } from '@nos/ui/lib/utils';
  *
  * The preview above the timeline renders the *edit*: the composite at the playhead, through the
  * effect stack, at project resolution. This answers a different question — "what is this file?" —
- * about material that is usually not on the timeline at all. A `<video>` element also gives seeking
- * and playback for free, which is the whole of what is wanted here and would otherwise mean a second
- * transport.
+ * about material that is usually not on the timeline at all. A `<video>` element decodes and seeks it
+ * for free, which is the whole of what is wanted here.
+ *
+ * Its `controls` attribute is a different matter and is not used. Chromium's bar is fixed chrome: it
+ * ignores the theme, matches nothing else on the panel, and sizes itself — so the one place a user goes
+ * to hear a take looked like a different program. `TransportBar` draws that from the same primitives as
+ * everything else, and `useMediaTransport` keeps the element the source of truth behind it.
  */
 
 export interface MediaPreviewProps {
@@ -58,26 +64,9 @@ export function MediaPreview({ url, assetType, name, className }: MediaPreviewPr
     );
   }
 
-  if (assetType === 'audio') {
-    // No frame: an audio element is a strip of controls, and boxing it in a 16:9 rectangle would
-    // reserve the height of a picture for something that has none.
+  if (assetType === 'image') {
     return (
-      <audio
-        // `metadata`, not `auto`: a browser full of music beds would otherwise start downloading every
-        // one the moment a row is selected.
-        preload="metadata"
-        controls
-        src={url}
-        aria-label={`Play ${name}`}
-        onError={() => setFailed(url)}
-        className={cn('h-8 w-full', className)}
-      />
-    );
-  }
-
-  return (
-    <Frame className={className}>
-      {assetType === 'image' ? (
+      <Frame className={className}>
         <img
           src={url}
           alt={name}
@@ -85,17 +74,73 @@ export function MediaPreview({ url, assetType, name, className }: MediaPreviewPr
           className="size-full object-contain"
           draggable={false}
         />
-      ) : (
-        <video
+      </Frame>
+    );
+  }
+
+  return <Playable url={url} assetType={assetType} name={name} onFail={setFailed} className={className} />;
+}
+
+/**
+ * A file with a transport.
+ *
+ * Its own component because the transport is a hook, and a hook cannot live behind the early returns
+ * above — a selection moving from a picture to a sound would change how many hooks this render calls.
+ */
+function Playable({
+  url,
+  assetType,
+  name,
+  onFail,
+  className,
+}: {
+  readonly url: string;
+  readonly assetType: AssetType;
+  readonly name: string;
+  readonly onFail: (url: string) => void;
+  readonly className?: string | undefined;
+}): ReactNode {
+  const transport = useMediaTransport(url);
+
+  // An `<audio>` and a `<video>` are both media elements, but their ref types are siblings rather than
+  // one being the other — so the shared ref is narrowed at the element instead of the hook being
+  // written twice.
+  const audioRef = transport.ref as RefObject<HTMLAudioElement | null>;
+  const videoRef = transport.ref as RefObject<HTMLVideoElement | null>;
+
+  if (assetType === 'audio') {
+    // No frame: sound has no picture, and boxing the bar in a 16:9 rectangle would reserve the height
+    // of one for it. The element itself draws nothing without `controls`.
+    return (
+      <div className={cn('flex flex-col gap-1', className)}>
+        <audio
+          ref={audioRef}
+          // `metadata`, not `auto`: a browser full of music beds would otherwise start downloading
+          // every one the moment a row is selected.
           preload="metadata"
-          controls
           src={url}
-          aria-label={`Play ${name}`}
-          onError={() => setFailed(url)}
+          aria-label={name}
+          onError={() => onFail(url)}
+        />
+        <TransportBar state={transport.state} controls={transport.controls} label={name} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <Frame>
+        <video
+          ref={videoRef}
+          preload="metadata"
+          src={url}
+          aria-label={name}
+          onError={() => onFail(url)}
           className="size-full object-contain"
         />
-      )}
-    </Frame>
+      </Frame>
+      <TransportBar state={transport.state} controls={transport.controls} label={name} />
+    </div>
   );
 }
 
