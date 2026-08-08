@@ -221,7 +221,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2374 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2376 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Branch `build/foundation`, and `refactor/shadcn-baseui` on top of it (pushed).
@@ -264,12 +264,30 @@ ever tracking the first.
   storage, so segmentation lived in React state alone and a reopened project rendered a bound effect
   unmasked. Fixed: `mask-storage.ts` over the bridge, written when a run finishes.
 
+Two more, found only by running it:
+
+- **Opening a project waited fifteen seconds for the sidecar.** `openFolder` awaited `startSidecar`,
+  so on a machine without the sidecar's dependencies every launch showed "no project open" for the
+  whole timeout. It starts in the background now and reports on `IPC_EVENTS.sidecarStatus`.
+- **The last project was remembered in `localStorage` on a `file://` origin**, which Chromium does
+  not guarantee to persist — it survived some restarts here and not others. It lives in `userData`
+  now, written by the main process inside `openFolder`.
+
 ### The check that actually finds these
 
 Two of the five were unreachable UI and three were wrong output. Grepping for a document field with no
 writer finds the first kind. The second needs a different question, and it is the one worth asking
 here: **does the export do exactly what the preview does?** Anywhere the two paths are written
 separately, they will diverge, and the divergence is invisible until a render finishes.
+
+And the third kind is found by neither: **launch it and watch the clock.** A fifteen-second stall and
+a setting that persists only sometimes are both invisible to every test in this repository, because
+each component behaves correctly in isolation.
+
+To run it against a fixture rather than a folder picker: the shell remembers the last project in
+`~/.config/@nos/desktop/session.json`, so writing a path there and launching opens it. Give
+`--remote-debugging-port` a port well clear of anything else on the machine — the sidecar takes an
+ephemeral one, but other tooling may not.
 
 One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
 graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
