@@ -108,7 +108,7 @@ import {
   Timeline,
 } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
-import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { MeterReading } from '@nos/audio';
 import type { Transport } from './use-transport.js';
@@ -151,6 +151,7 @@ import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
 import { describeEditError } from './edit-errors.js';
+import { useEffectLibrary } from './use-effect-library.js';
 import { useConfirmation } from './use-confirmation.js';
 import { SHORTCUT_GROUPS } from './shortcuts.js';
 import { bridge } from './bridge.js';
@@ -274,7 +275,10 @@ export function App(): ReactNode {
 
   // One registry for the window: the preview, the export and the inspector must agree about which
   // effects exist and which of them compile.
-  const effectRegistry = useMemo(() => createEffectRegistry(BUILTIN_EFFECTS), []);
+  // The builtins plus whatever the project's `effects/` folder holds, which §4 reserves for exactly
+  // that and which nothing read until now.
+  const effects = useEffectLibrary(project?.root);
+  const effectRegistry = effects.registry;
 
   const commitDocument = useCallback(
     (label: string, next: TimelineDocument) => {
