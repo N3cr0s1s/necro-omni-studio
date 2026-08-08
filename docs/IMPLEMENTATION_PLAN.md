@@ -503,6 +503,19 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- Provenance exists to be **fed back**, not only read. `recallRun` turns a record into a
+  request: with the seed it reproduces, without it only the seed moves and everything
+  that made the take is kept.
+- A recall must **name what it dropped**. A manifest is a file a user edits, so by the
+  time a take is recalled a parameter may have been renamed and a preset deleted, and
+  silently dropping them sets up a run that is not the one the user pointed at.
+- Reproducing writes the seed into the **parameters** as well as pinning it. The record
+  keeps the seed in its own field, so pinning alone left the lock on and the field
+  showing its default — the run using one number while the panel said another.
+- A panel whose tab the shell needs to switch must be **controlled by the shell**. Owning
+  it locally and reporting changes upward gives the shell a mirror it can write to with
+  no effect, and the actions that switch tabs fail silently.
+
 - A variant is identified by its **candidate key**, never by its run. A batched submit
   is one run carrying several variants, so a run id names all of them at once — and
   since no key ever equals a run id, code that mixed them up silently fell back to the
