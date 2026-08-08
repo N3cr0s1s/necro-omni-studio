@@ -2,9 +2,12 @@ import type { PresetId } from '@nos/core';
 import {
   type GeneratorManifest,
   type GeneratorParam,
+  type GraphLiteral,
   applyTemplate,
   patchPointer,
 } from '@nos/generators';
+
+export type { GraphLiteral };
 
 /**
  * Graph patching.
@@ -189,14 +192,6 @@ export function readLiteral(graph: unknown, pointer: string): unknown {
  * to another node and cannot be a parameter. Offering them would produce manifests that patch a value the
  * graph immediately overwrites.
  */
-export interface GraphLiteral {
-  readonly pointer: string;
-  readonly nodeId: string;
-  readonly nodeClass: string;
-  readonly input: string;
-  readonly value: string | number | boolean;
-}
-
 export function collectLiterals(graph: unknown): readonly GraphLiteral[] {
   if (graph === null || typeof graph !== 'object' || Array.isArray(graph)) return [];
 

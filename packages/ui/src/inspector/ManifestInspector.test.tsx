@@ -1,0 +1,245 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { GraphLiteral, ManifestDraft } from '@nos/generators';
+import { addOutput, editParam, emptyDraft, promote } from '@nos/generators';
+import { ManifestInspector } from './ManifestInspector.js';
+
+afterEach(cleanup);
+
+const literals: readonly GraphLiteral[] = [
+  { pointer: '/3/inputs/seed', nodeId: '3', nodeClass: 'KSampler', input: 'seed', value: 4471 },
+  { pointer: '/3/inputs/steps', nodeId: '3', nodeClass: 'KSampler', input: 'steps', value: 20 },
+  { pointer: '/7/inputs/text', nodeId: '7', nodeClass: 'CLIPTextEncode', input: 'text', value: 'a drone' },
+];
+
+const usable = (): ManifestDraft =>
+  addOutput(
+    emptyDraft({ id: 'my_gen', name: 'My Generator', graph: 'g.json', surfaces: ['media_browser'] }),
+    { key: 'image', type: 'image', node: '9' },
+  );
+
+const renderInspector = (overrides: Partial<Parameters<typeof ManifestInspector>[0]> = {}) =>
+  render(<ManifestInspector draft={usable()} literals={literals} {...overrides} />);
+
+describe('listing the graph', () => {
+  it('groups inputs by node, because a graph has hundreds of them', () => {
+    renderInspector();
+    expect(screen.getByText('KSampler')).toBeDefined();
+    expect(screen.getByText('CLIPTextEncode')).toBeDefined();
+  });
+
+  it('shows each input with its current value', () => {
+    renderInspector();
+    expect(screen.getByLabelText('seed on KSampler 3')).toBeDefined();
+    expect(screen.getByText('4471')).toBeDefined();
+  });
+
+  it('filters by node, input or value', async () => {
+    const user = userEvent.setup();
+    renderInspector();
+
+    await user.type(screen.getByLabelText('Filter graph inputs'), 'CLIPText');
+    expect(screen.queryByLabelText('seed on KSampler 3')).toBeNull();
+    expect(screen.getByLabelText('text on CLIPTextEncode 7')).toBeDefined();
+  });
+
+  it('says so when no graph is loaded, rather than showing an empty column', () => {
+    renderInspector({ literals: [] });
+    expect(screen.getByText(/no graph inputs/)).toBeDefined();
+  });
+});
+
+describe('promoting inputs', () => {
+  it('reports a tick as a promotion', async () => {
+    const user = userEvent.setup();
+    const onPromote = vi.fn();
+    renderInspector({ onPromote });
+
+    await user.click(screen.getByLabelText('steps on KSampler 3'));
+    expect(onPromote).toHaveBeenCalledWith(literals[1]);
+  });
+
+  it('shows a promoted input as ticked', () => {
+    renderInspector({ draft: promote(usable(), literals[1]!) });
+    expect((screen.getByLabelText('steps on KSampler 3') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('reports an untick as a demotion, by the parameter´s id', async () => {
+    const user = userEvent.setup();
+    const onDemote = vi.fn();
+    renderInspector({ draft: promote(usable(), literals[1]!), onDemote });
+
+    await user.click(screen.getByLabelText('steps on KSampler 3'));
+    expect(onDemote).toHaveBeenCalledWith('/3/inputs/steps');
+  });
+});
+
+describe('editing parameters', () => {
+  const withParam = () => promote(usable(), literals[1]!);
+
+  it('offers every parameter type, so the inferred one is a suggestion', () => {
+    renderInspector({ draft: withParam() });
+    const options = [...screen.getByLabelText('Type').querySelectorAll('option')].map((o) => o.value);
+    expect(options).toEqual(expect.arrayContaining(['text', 'int', 'float', 'bool', 'enum', 'seed', 'image']));
+  });
+
+  it('reports a type change', async () => {
+    const user = userEvent.setup();
+    const onEditParam = vi.fn();
+    renderInspector({ draft: withParam(), onEditParam });
+
+    await user.selectOptions(screen.getByLabelText('Type'), 'float');
+    expect(onEditParam).toHaveBeenCalledWith('/3/inputs/steps', { type: 'float' });
+  });
+
+  it('shows the pointer the parameter binds to', () => {
+    renderInspector({ draft: withParam() });
+    expect(screen.getAllByText(/\/3\/inputs\/steps/).length).toBeGreaterThan(0);
+  });
+
+  it('offers a range only for numeric types', () => {
+    renderInspector({ draft: withParam() });
+    expect(screen.getByLabelText('Min')).toBeDefined();
+
+    cleanup();
+    // A minimum on a string is meaningless, and offering meaningless fields teaches users to ignore all
+    // of them.
+    renderInspector({ draft: promote(usable(), literals[2]!) });
+    expect(screen.queryByLabelText('Min')).toBeNull();
+  });
+
+  it('clears a range when the field is emptied', async () => {
+    // A cleared box must remove the bound rather than write 0, which would pin the parameter to a range it
+    // never had.
+    const user = userEvent.setup();
+    const onEditParam = vi.fn();
+    const ranged = editParam(withParam(), '/3/inputs/steps', { min: 5 });
+    renderInspector({ draft: ranged, onEditParam });
+
+    await user.clear(screen.getByLabelText('Min'));
+    expect(onEditParam).toHaveBeenLastCalledWith('/3/inputs/steps', { min: undefined });
+  });
+
+  it('says so when nothing has been promoted yet', () => {
+    renderInspector();
+    expect(screen.getByText(/tick a graph input/)).toBeDefined();
+  });
+});
+
+describe('identity fields', () => {
+  it('reports an edit', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderInspector({ onChange });
+
+    await user.type(screen.getByLabelText('Name'), '!');
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'My Generator!' }));
+  });
+
+  it('parses a comma list into surfaces', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderInspector({ draft: emptyDraft(), onChange });
+
+    // Pasted rather than typed: the field is controlled by the draft, and a spy never feeds a keystroke
+    // back, so typing would assert on the last character rather than on the parse.
+    await user.click(screen.getByLabelText('Surfaces'));
+    await user.paste('a, b');
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ surfaces: ['a', 'b'] }));
+  });
+
+  it('treats an emptied graph field as not connected, not as a file named empty', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderInspector({ draft: emptyDraft({ graph: 'g' }), onChange });
+
+    await user.clear(screen.getByLabelText('Graph file'));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ graph: null }));
+  });
+
+  it('explains both length modes where the choice is made', () => {
+    renderInspector();
+    const options = [...screen.getByLabelText('Length').querySelectorAll('option')].map((o) => o.textContent);
+    expect(options.join(' ')).toContain('a parameter sets it');
+  });
+});
+
+describe('outputs', () => {
+  it('offers the graph´s node ids rather than a free-text field', () => {
+    // A typo in a node id makes the manifest unavailable with a message about a node that never existed.
+    renderInspector({ nodeIds: ['9', '57'] });
+    const options = [...screen.getByLabelText('Node').querySelectorAll('option')].map((o) => o.value);
+    expect(options).toEqual(['', '9', '57']);
+  });
+
+  it('adds an output', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderInspector({ onChange });
+
+    await user.click(screen.getByRole('button', { name: 'Add output' }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ outputs: expect.arrayContaining([expect.objectContaining({ node: null })]) }),
+    );
+  });
+});
+
+describe('problems', () => {
+  it('blocks saving while an error stands', () => {
+    renderInspector({ draft: emptyDraft() });
+    expect(screen.getByRole('button', { name: 'Save manifest' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('lists what is wrong, with the path to the field', () => {
+    renderInspector({ draft: emptyDraft() });
+    const problems = within(screen.getByRole('list', { name: 'Draft problems' }));
+    expect(problems.getByText('/id')).toBeDefined();
+    expect(problems.getByText('an id is required')).toBeDefined();
+  });
+
+  it('lets an unbound manifest be saved, since the spec writes contracts before graphs', () => {
+    // Blocking this would break the workflow the registry's `unbound` status exists for.
+    const unbound = { ...usable(), graph: null };
+    renderInspector({ draft: unbound });
+
+    expect(screen.getByRole('button', { name: 'Save manifest' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByText('unbound')).toBeDefined();
+  });
+
+  it('distinguishes a warning from an error', () => {
+    renderInspector({ draft: { ...usable(), graph: null } });
+    const problems = within(screen.getByRole('list', { name: 'Draft problems' }));
+    expect(problems.getAllByText('warning').length).toBeGreaterThan(0);
+    expect(problems.queryByText('error')).toBeNull();
+  });
+
+  it('reports a save', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderInspector({ onSave });
+    await user.click(screen.getByRole('button', { name: 'Save manifest' }));
+    expect(onSave).toHaveBeenCalled();
+  });
+});
+
+describe('the preview', () => {
+  it('shows the manifest that will be written', () => {
+    // The file is the durable artefact — checked in, hand-edited, diffed — so hiding it would force a
+    // save-and-reopen cycle to find out what the form did.
+    renderInspector({ draft: promote(usable(), literals[0]!) });
+    const preview = screen.getByLabelText('Manifest preview').textContent ?? '';
+    const manifest = JSON.parse(preview) as { params: { bind: string; type: string }[] };
+
+    expect(manifest.params[0]).toMatchObject({ bind: '/3/inputs/seed', type: 'seed' });
+  });
+
+  it('shows an unbound parameter as a null binding', () => {
+    renderInspector({ draft: { ...usable(), graph: null } });
+    const manifest = JSON.parse(screen.getByLabelText('Manifest preview').textContent ?? '') as {
+      status?: string;
+    };
+    expect(manifest.status).toBe('unbound');
+  });
+});
