@@ -53,7 +53,10 @@ export function SegmentationPanel({
         display: 'flex',
         flexDirection: 'column',
         gap: token.space4,
-        width: token.inspectorWidth,
+        // Fills its column rather than dictating it: the panel is mounted inside a resizable inspector,
+        // and a fixed width there overflows by exactly the padding.
+        width: '100%',
+        maxWidth: token.inspectorWidth,
         background: token.bgPanel,
         borderLeft: `1px solid ${token.border}`,
         // Readable while greyed: the point is that the user can see what is wrong, not merely that

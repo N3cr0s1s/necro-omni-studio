@@ -77,7 +77,10 @@ export function GeneratorPanel({
     <section
       aria-label={`${manifest.name} parameters`}
       style={{
-        width: token.inspectorWidth,
+        // Fills its column rather than dictating it: the panel is mounted inside a resizable inspector,
+        // and a fixed width there overflows by exactly the padding.
+        width: '100%',
+        maxWidth: token.inspectorWidth,
         display: 'flex',
         flexDirection: 'column',
         gap: token.space5,

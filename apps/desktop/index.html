@@ -12,6 +12,16 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
     />
     <style>
+      /*
+        Border-box everywhere. The panels size themselves to the inspector width from the mockups, and
+        under the default content-box that width excludes their padding — so every one of them overflowed
+        its column by exactly its padding, cutting off the controls on the right edge.
+      */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
       html,
       body,
       #root {
