@@ -68,6 +68,13 @@ export interface AudioEngine {
 
   /** Current meter reading, for the transport bar. */
   readMeters(): MeterReading;
+  /**
+   * Clears the latched clip indicator.
+   *
+   * On the engine rather than on whatever is displaying the meter: the latch lives with the meter
+   * that set it, and a UI that cleared its own copy would have the clip re-reported on the next poll.
+   */
+  resetMeters(): void;
 
   /** Master output gain, linear. */
   setMasterGain(gain: number): void;

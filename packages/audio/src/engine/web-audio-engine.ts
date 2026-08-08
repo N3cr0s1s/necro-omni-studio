@@ -332,6 +332,10 @@ export function createWebAudioEngine(options: WebAudioEngineOptions): AudioEngin
       return meter.read();
     },
 
+    resetMeters(): void {
+      meter.reset();
+    },
+
     setMasterGain(gain: number): void {
       master.gain.value = Math.max(0, gain);
     },

@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1728 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1749 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1690,3 +1690,38 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   places, removing `V1` leaves the import to find `v2`, a locked track's remove
   button is disabled with its reason, mute still works on it, and undo walks back
   through all of it.
+
+- 2026-08-08: The output meter. The engine has computed peaks with proper decay
+  since M3 and `usePlaybackAudio` exposed them; nothing displayed them, so the only
+  way to know whether a project clipped was to export it and listen. That gap got
+  worse the moment level and pan controls landed — a fader with no meter is a
+  guess.
+
+  Wiring it exposed a real defect rather than only a missing view. `meters` was
+  computed as `engine.readMeters()` **during render**, and that call is not a
+  query: it pushes the analyser's latest block into the peak meter and advances its
+  decay. The reading therefore depended on how often React happened to re-render,
+  and a strict-mode double render would have pushed every block twice. It is polled
+  on an animation frame now, which is the only cadence that means anything for a
+  meter.
+
+  The scale is logarithmic because a meter is read against decibel marks: a linear
+  bar spends nine tenths of its travel in the top 20 dB, where the difference
+  between "present" and "inaudible" would be invisible. Zones change at −6 dBFS —
+  the conventional headroom mark — and again at full scale.
+
+  Two rules that follow from what a meter is for. The bar carries **no transition**:
+  the decay that makes a peak readable is the engine's, applied to the value, and
+  animating on top of it would draw a level that was never measured. And the clip
+  indicator **latches** until acknowledged, because a clip that happened while the
+  editor looked away is exactly the one worth knowing about — clearing it goes
+  through the engine, or the next poll would re-report the clip the user just
+  dismissed.
+
+  Polling continues briefly after playback stops so the meter *falls* at its own
+  rate rather than snapping to zero and hiding the last peak.
+
+  Verified in the running app: silent at rest, −20.8 dBFS during playback of the
+  test tone — which matches the −20.9 dB its measured amplitude implies — and back
+  to silent within a second of stopping. One earlier reading that looked like a
+  stuck meter was the probe restarting playback at the end of a three-second clip.

@@ -40,10 +40,11 @@ import {
   trimClipStart,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
-import { Button, ExportDialog, MediaBrowser, Timeline, createViewport } from '@nos/ui';
+import { Button, ExportDialog, LevelMeter, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
+import type { MeterReading } from '@nos/audio';
 import type { Transport } from './use-transport.js';
 import { KeyframeLanes } from './KeyframeLanes.js';
 import { ManifestAuthoring } from './ManifestAuthoring.js';
@@ -525,6 +526,8 @@ export function App(): ReactNode {
         onSave={() => void save()}
         onExport={openExport}
         autosaveStatus={autosave.status}
+        meters={audio.meters}
+        onClearClip={audio.clearClip}
       />
 
       {autosave.offer !== undefined && (
@@ -695,6 +698,8 @@ function TitleBar({
   onSave,
   onExport,
   autosaveStatus,
+  meters,
+  onClearClip,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -706,6 +711,8 @@ function TitleBar({
   readonly onSave: () => void;
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
+  readonly meters: MeterReading | undefined;
+  readonly onClearClip: () => void;
 }): ReactNode {
   return (
     <header
@@ -753,6 +760,13 @@ function TitleBar({
               is wrong in every hand-rolled timecode. */}
           {formatFrames(transport.frame, frameRate)}
         </span>
+        {/* Beside the timecode, where an editor already looks during playback. A mix with no meter is
+            a mix that can only be checked by exporting it and listening. */}
+        <LevelMeter
+          {...(meters?.peaks !== undefined ? { peaks: meters.peaks } : {})}
+          clipped={meters?.clipped ?? false}
+          onClearClip={onClearClip}
+        />
       </div>
 
       <div style={{ flex: 1 }} />
