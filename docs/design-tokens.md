@@ -1,111 +1,83 @@
 # Design tokens
 
-Extracted from the Claude Design project `Video Editor Mockups.dc.html`
-(8 screens at 1920×1080). This file is the authority for the UI package so later work
-does not need to re-fetch the mockups.
+**This file no longer defines any colour, and neither does the repository.**
 
-Source screens: `1a` main editor · `1b` effect stack + keyframe lanes · `1c` generator
-run panel + job queue · `1d` in-place variant picking · `1e` segmentation ·
-`1f` staging lane (alt) · `1g` stacked ghost variants (alt) · `1h` dense keyframe lane (alt).
+The palette is a shadcn preset, applied verbatim into `packages/ui/src/styles/globals.css` and never
+edited. Everything below describes how to *read* it. The authority is that file and
+`packages/ui/README.md`; this page exists so the older references to `--nos-*` variables have
+somewhere to point.
 
-Design decision from the mockup notes: keep `1f`'s **staging lane** in the main editor,
-so pending generator output provably cannot disturb the cut while jobs run.
+## What replaced the token table
 
-## Surfaces
+Until the shadcn refactor (issue #21) this document was a hand-extracted table of hex values taken
+from the Claude Design mockups — `--bg-app: #0d0e11`, `--surface-2: #1a1d23`, thirty more like them —
+mirrored into `packages/ui/src/tokens/tokens.css` and reached through a typed `token` accessor. That
+file, its accessor and the `Primitives.tsx` built on them are deleted.
 
-| Token                | Value     | Use                                |
-| -------------------- | --------- | ---------------------------------- |
-| `--bg-app`           | `#0d0e11` | window ground                      |
-| `--bg-panel`         | `#101216` | side panels, chrome, transport bar |
-| `--bg-canvas`        | `#0b0c0f` | preview stage, timeline lane area  |
-| `--bg-timeline`      | `#0f1115` | timeline container                 |
-| `--surface-1`        | `#171a20` | inset fields, list rows, cards     |
-| `--surface-2`        | `#1a1d23` | buttons at rest                    |
-| `--surface-3`        | `#1e2229` | raised chips                       |
-| `--surface-selected` | `#182233` | selected browser row               |
-| `--track-active`     | `#141821` | focused track header               |
+The preset in use:
 
-## Borders
+```
+shadcn preset decode b4zkmXhPE
+  style nova · baseColor taupe · theme rose · radius none · icons lucide · font inter
+```
 
-| Token              | Value     | Use                              |
-| ------------------ | --------- | -------------------------------- |
-| `--border`         | `#23262d` | panel separators                 |
-| `--border-subtle`  | `#1f232a` | inner rules, track separators    |
-| `--border-control` | `#2b3038` | control outlines                 |
-| `--border-dashed`  | `#2b3038` | "add from registry" drop targets |
+`style: base-nova` is the registry's current default, which is built on [Base UI](https://base-ui.com)
+— not Radix. Changing the palette means applying a different preset, not editing a variable.
 
-## Text
+## Reading a colour
 
-| Token              | Value     | Use                          |
-| ------------------ | --------- | ---------------------------- |
-| `--text-primary`   | `#e2e6ec` | headings, active values      |
-| `--text-bright`    | `#dfe3ea` | field values                 |
-| `--text-secondary` | `#c3cad6` | labels                       |
-| `--text-muted`     | `#9aa1ad` | inactive controls            |
-| `--text-soft`      | `#8a919e` | parameter names              |
-| `--text-dim`       | `#7d8492` | section captions (uppercase) |
-| `--text-faint`     | `#5a6068` | metadata                     |
-| `--text-ghost`     | `#4f555f` | drag handles, disabled       |
+Never as a value. A component names a **role**, as a Tailwind class, written out in full so Tailwind's
+source scan can see it — an interpolated `text-${tone}` is a class it never compiles.
 
-## Accents — each carries one meaning, consistently
+| Role                                | Means                                                             |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `primary`                           | the playhead, the transport, the thing a click confirms           |
+| `secondary`                         | a control that is on without being the point                      |
+| `destructive`                       | a refusal, a failure, a removal                                   |
+| `muted` / `muted-foreground`        | surfaces behind content, and secondary text                       |
+| `accent`                            | the hover and focus wash the registry applies for itself          |
+| `border` / `input` / `ring`         | edges, fields, focus                                              |
+| `chart-1` … `chart-5`               | **categories**: an asset type, a track kind, a clip's provenance  |
 
-| Token              | Value     | Meaning                                                |
-| ------------------ | --------- | ------------------------------------------------------ |
-| `--accent`         | `#4c9aff` | selection, playhead, snap, video-domain                |
-| `--accent-strong`  | `#2b62b8` | primary button (Export)                                |
-| `--generated`      | `#9b8cff` | **generator output** — anything the framework produced |
-| `--generated-text` | `#cfc6ff` | label on generated clips                               |
-| `--generated-dim`  | `#7a6fb8` | seed / provenance metadata                             |
-| `--ok`             | `#38c1a4` | healthy, audio domain, cached ✓                        |
-| `--ok-text`        | `#8fd8c7` | audio track labels                                     |
-| `--warn`           | `#e0a44a` | text domain, pass-count warning                        |
-| `--warn-text`      | `#e5be7c` | text track labels                                      |
-| `--mask`           | `#ff7a52` | SAM 2 masks                                            |
+Two rules that are not obvious from the list:
 
-Rule the mockups follow and the implementation must keep: **purple always means
-"a generator made this"**. It appears on generated clips, the `generated/` folder, the
-job-count chip and the variant placeholders — never on imported media.
+1. **`chart-4` means "a generator made this"**, everywhere — the browser glyph, the clip body, the
+   variant picker's edge, the seed readout. It is the one categorical role with a fixed meaning.
+2. **There is no warning role, and one has not been invented.** Where a state sits between fine and
+   broken — a meter above −6 dBFS — it is a softened `destructive`. A hand-picked amber would stop
+   being legible the moment the preset changed; an opacity on a role does not.
 
-## Domain colour pairs (clip bodies)
+Dark and light need no thought at all: the same class names resolve differently under `.dark`, which
+`next-themes` puts on the root element. Nothing in the application reads the current mode.
 
-| Domain            | Fill                                                             | Border          |
-| ----------------- | ---------------------------------------------------------------- | --------------- |
-| video (imported)  | `linear-gradient(180deg,#2f3d5c,#26314a)`                        | `#40527a`       |
-| video (selected)  | `linear-gradient(180deg,#33436a,#293656)`                        | `#4c9aff` (2px) |
-| video (generated) | `linear-gradient(180deg,#2c2748,#241f3c)`                        | `#4b4180`       |
-| audio (imported)  | `#17322e`                                                        | `#2f5f56`       |
-| audio (generated) | `#2a2145`                                                        | `#4b4180`       |
-| text              | `#38301d`                                                        | `#5c4c26`       |
-| transition        | `repeating-linear-gradient(45deg,#3d4f7a 0 3px,#2a3556 3px 6px)` | `#56699a`       |
+## Reading a metric
 
-## Typography
+The layout numbers the mockups fixed are now Tailwind's own scale, in the class rather than in a
+variable — `h-98` for the timeline's 392 px, `w-37` for the 148 px track-header column, `h-6.5` for the
+26 px ruler. They are unchanged; they are simply no longer indirected through a name that only one
+file used.
 
-- UI: `system-ui, -apple-system, "Segoe UI", sans-serif`
-- Numeric / time / paths: `ui-monospace, Menlo, monospace` — **every** frame count,
-  timecode, seed, hash and file size uses the mono stack so digits align in columns.
-- Section caption: `600 10px`, `letter-spacing .09em`, uppercase, `--text-dim`
-- Body label: `400 11.5px` · Field value: `500 11px` mono · Clip label: `500 10.5px`
-- Large timecode readout: `600 19px` mono
+`style` is still the right answer for a number that is *computed*: the timeline resolves a clip's
+`left` and `width` per frame from zoom and scroll, and there is no class for a value that changes on
+every pointer move. Everything that is not a computed position is a class.
 
-## Metrics
+## The two literal colours in the repository
 
-| Element             | Size                                           |
-| ------------------- | ---------------------------------------------- |
-| title bar           | 44px                                           |
-| panel header        | 34px                                           |
-| media browser       | 300px wide                                     |
-| inspector           | 340px wide                                     |
-| transport bar       | 52px                                           |
-| timeline panel      | 392px tall                                     |
-| track header column | 148px                                          |
-| timeline ruler      | 26px                                           |
-| track heights       | V 64–84px · A 52–60px · T 46px                 |
-| control height      | 26px · small 24px · badge 19px                 |
-| radius              | 3px inset · 4px control · 5px card · 8px panel |
+Neither is styling, and both are documented where they live:
 
-## Motion
+- `apps/desktop/src/main/main.ts` — the `BrowserWindow` background, painted before a stylesheet
+  exists. It mirrors the preset's dark background and is the one value that has to follow a palette
+  change.
+- `apps/desktop/src/renderer/clip-strips.ts` — the waveform body. That is pixels, rasterised into a
+  PNG and cached beside the audio; it can no more follow a runtime theme than a video frame can.
 
-The mockups are static, so motion is unspecified by them. Constraint from the spec's
-16 ms timeline budget: no transition on anything that moves during a drag (clips,
-playhead, keyframe markers). Transitions are allowed only on hover/focus tint and
-panel open/close, capped at 120 ms.
+## What the mockups are still the authority for
+
+Layout and behaviour, not colour. The source screens remain worth reading for what goes where:
+
+`1a` main editor · `1b` effect stack + keyframe lanes · `1c` generator run panel + job queue ·
+`1d` in-place variant picking · `1e` segmentation · `1f` staging lane · `1g` stacked ghost variants ·
+`1h` dense keyframe lane.
+
+The decision from the mockup notes still holds: keep `1f`'s **staging lane** in the main editor, so
+pending generator output provably cannot disturb the cut while jobs run.

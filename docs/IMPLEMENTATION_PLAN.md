@@ -69,7 +69,8 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] TypeScript sidecar client implementing the `@nos/media` contracts
       (`@nos/sidecar-client`: transport with typed errors, `.peaks` decoder,
       `MediaClient`; 36 unit tests + 14 integration tests against the live sidecar)
-- [x] `@nos/ui`: design tokens (CSS variables + typed accessors), primitives,
+- [x] `@nos/ui`: the shadcn registry (Base UI) and the panels composed from it. Was a
+      hand-built token layer until issue #21; see `docs/design-tokens.md`. Primitives,
       media browser with keyboard tree navigation and watcher status (27 tests,
       visually verified against mockup 1a via a Playwright screenshot)
 
@@ -220,15 +221,34 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2244 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2303 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
-Committed on branch `build/foundation` (local only, not pushed).
+Branch `build/foundation`, and `refactor/shadcn-baseui` on top of it (pushed).
+
+### A caution about the check marks above
+
+Every box in this plan was ticked while two capabilities the spec requires were **not reachable from
+the application**, and the difference was invisible from here: both had an engine, tests, and no
+control. "The engine is done" and "a user can do it" are different claims, and this document was only
+ever tracking the first.
+
+- **A keyframe's value could not be changed.** Markers could be created, dragged in time, cycled
+  through easings and deleted. The inspector disables a parameter's slider once it is animated —
+  correctly — so between the two, a number became unreachable the moment it was keyframed. Fading a
+  title out was not expressible. Fixed: `editKeyframe` in `@nos/core`, a field in the lane.
+- **A clip's framing could not be set.** The compositor has evaluated x, y, scale, rotation and
+  opacity per frame since M4 and the shader honours all five; nothing could write one, so every clip
+  sat centred, unscaled and fully opaque forever. Fixed: `@nos/editing/clip-transform` and a framing
+  section in the clip inspector.
+
+The lesson worth keeping: when this plan says a milestone is done, check that a *user* can reach it,
+not that the package exports it. Grep for a document field that nothing writes.
 
 Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/compositor`,
 `@nos/effects`, `@nos/audio`, `@nos/text`, `@nos/export`, `@nos/generators`,
-`@nos/backend-comfyui`, `@nos/masks`, `@nos/ui` (tokens + components),
+`@nos/backend-comfyui`, `@nos/masks`, `@nos/ui` (the shadcn registry + composed panels),
 `apps/sidecar` (Python). Generator library in `generators/`.
 
 The **Electron shell** (`apps/desktop`) now exists and runs: `cd apps/desktop &&
