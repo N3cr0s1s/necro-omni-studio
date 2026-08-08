@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1891 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1903 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1950,3 +1950,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   a whole scene onto the first frame. Delete, copy, cut and duplicate now take
   linked partners along too — deleting the picture and leaving its sound playing
   over the next shot is never what was meant.
+
+- 2026-08-08: The project's rate and resolution can be changed. Both have been in
+  the document since M1 and neither could be changed after a project was created —
+  a decision most editors make *after* seeing their material, not before.
+
+  Resolution is the easy half, and stays easy because transforms are normalized to
+  `[0, 1]` of the output: a resolution change moves nothing.
+
+  Rate is the difficult half. Every time in the document — clip spans, keyframe
+  positions, markers, the in/out range — is a **frame index at the project rate**,
+  so changing the rate without rebasing them would silently retime the whole
+  programme: a cut two seconds in at 24 fps would land at 1.6 seconds at 30. All of
+  it is rebased through the time layer's exact conversion, with durations rounding
+  **up** and positions to nearest — the pairing that keeps a clip from losing its
+  tail. The one thing deliberately left alone is a clip's *source* rate: it
+  describes the file rather than the timeline, and rebasing it would make every
+  frame read from the wrong place.
+
+  The change is armed rather than applied, and says what it will cost first. It is
+  irreversible in a way undo does not fix — converting 30 → 24 and back does not
+  return the original positions — so it gets the only confirmation step in this
+  application.
+
+  The cost is measured on the **exact rational**, not by converting and back. Frame
+  1 at 30 fps becomes 0.8 of a frame at 24, which rounds to 1 and converts back to
+  1: a round trip that looks lossless while the position has in fact moved. The
+  first implementation did exactly that and reported nothing was lost; a test that
+  expected a loss is what caught it.

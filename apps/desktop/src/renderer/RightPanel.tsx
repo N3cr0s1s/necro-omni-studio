@@ -14,6 +14,7 @@ import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/ma
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
 import { ClipInspector } from './ClipInspector.js';
 import { TextInspector } from './TextInspector.js';
+import { ProjectSettings } from './ProjectSettings.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
 
@@ -153,6 +154,8 @@ function InspectorTab({
         onChange={onChangeDocument}
         onReject={onReject}
       />
+
+      <ProjectSettings document={document} onChange={onChangeDocument} onReject={onReject} />
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Button onClick={onSplit} disabled={selectedClip === undefined} title="Split at the playhead (S)">
