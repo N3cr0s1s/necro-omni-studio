@@ -30,6 +30,8 @@ export type BackendMode = 'comfyui' | 'mock';
 export interface GeneratorRuntime {
   readonly mode: BackendMode;
   readonly detail: string;
+  /** Why the last run could not start. Cleared by the next successful one. */
+  readonly error: string | undefined;
   readonly capabilities: BackendCapabilities | undefined;
   readonly snapshot: QueueSnapshot;
   run(request: {
@@ -112,6 +114,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const [detail, setDetail] = useState('checking for a ComfyUI backend');
   const [capabilities, setCapabilities] = useState<BackendCapabilities | undefined>(undefined);
   const [snapshot, setSnapshot] = useState<QueueSnapshot>(EMPTY_SNAPSHOT);
+  const [error, setError] = useState<string | undefined>(undefined);
 
   // One id per window, so ComfyUI's shared event socket can be filtered to this client's jobs.
   const clientId = useRef(`nos-${Math.random().toString(36).slice(2, 10)}`);
@@ -205,8 +208,13 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const run = useCallback<GeneratorRuntime['run']>(
     (request) => {
       try {
-        return queue.enqueue(request);
-      } catch {
+        const group = queue.enqueue(request);
+        setError(undefined);
+        return group;
+      } catch (failure) {
+        // Reported, never swallowed. A Generate button that does nothing and says nothing is the exact
+        // failure mode this project treats as a defect everywhere else.
+        setError(failure instanceof Error ? failure.message : String(failure));
         return undefined;
       }
     },
@@ -215,5 +223,5 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
 
   const cancelGroup = useCallback((group: JobGroupId) => queue.cancelGroup(group), [queue]);
 
-  return { mode, detail, capabilities, snapshot, run, cancelGroup };
+  return { mode, detail, error, capabilities, snapshot, run, cancelGroup };
 }

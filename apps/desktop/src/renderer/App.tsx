@@ -7,9 +7,11 @@ import {
   FRAME_RATES,
   createDocument,
   createDocumentStore,
+  clipId,
   documentEnd,
   formatFrames,
   frameIndex,
+  jobRunId,
   loadDocument,
   locateClip,
   projectId,
@@ -18,7 +20,8 @@ import {
   trackId,
 } from '@nos/core';
 import { buildTree } from '@nos/media';
-import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
+import { insertGenerated, moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
+import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
 import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
@@ -226,6 +229,66 @@ export function App(): ReactNode {
     [selected, store],
   );
 
+  /**
+   * Lands an accepted variant on the timeline.
+   *
+   * The insertion rule lives in `@nos/editing` because it is a document transform, not a UI decision —
+   * and it is two rules: a declared-length output lands where it was staged and reports a collision,
+   * while a discovered-length one moves to a free track rather than shifting anything a user has cut.
+   */
+  const acceptVariant = useCallback(
+    (outcome: SelectionOutcome, manifest: GeneratorManifest) => {
+      if (outcome.kind !== 'accept') return;
+
+      // A media-browser target means the output belongs in the project folder, not on the timeline —
+      // it is already written to `generated/`, and the browser shows it. Inserting anyway would drop a
+      // clip the user never asked to place, at whatever position happened to be under the playhead.
+      if (outcome.target.kind !== 'timeline') {
+        setError(undefined);
+        tree.refresh();
+        return;
+      }
+
+      const kind = manifest.produces === 'audio' ? 'audio' : 'video';
+      const length = placeholderLength({
+        manifest,
+        params: {},
+        frameRate: document.frameRate,
+      });
+      const target = outcome.target;
+
+      store.commit('accept variant', (current) => {
+        const result = insertGenerated(current, {
+          asset: outcome.output.path,
+          kind,
+          sourceRate: current.frameRate,
+          length: length.frames,
+          at: target.at,
+          track: target.track,
+          duration: manifest.duration,
+          id: clipId(`gen_${outcome.run}`),
+          label: manifest.name,
+          provenance: {
+            generator: manifest.id,
+            run: jobRunId(outcome.run),
+            seed: outcome.seed,
+            // A display-only timestamp, per the provenance contract: never used for ordering or cache
+            // invalidation, so reading the clock here cannot affect a result.
+            createdAt: new Date().toISOString(),
+          },
+        });
+
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        setError(undefined);
+        return result.value.document;
+      });
+    },
+    [document.frameRate, store, tree],
+  );
+
   const razor = useCallback(() => {
     const target = [...selected][0];
     if (target === undefined) return;
@@ -252,6 +315,7 @@ export function App(): ReactNode {
         dirty={store.getSnapshot().dirty}
         transport={transport}
         frameRate={document.frameRate}
+        jobs={runtime.snapshot.activeCount}
         onOpen={() => void openProject()}
         onSave={() => void save()}
       />
@@ -311,6 +375,7 @@ export function App(): ReactNode {
           canRedo={store.getSnapshot().canRedo}
           onSplit={razor}
           onNudge={nudge}
+          onAcceptVariant={acceptVariant}
           onUndo={() => store.undo()}
           onRedo={() => store.redo()}
         />
@@ -325,6 +390,7 @@ function TitleBar({
   dirty,
   transport,
   frameRate,
+  jobs,
   onOpen,
   onSave,
 }: {
@@ -333,6 +399,7 @@ function TitleBar({
   readonly dirty: boolean;
   readonly transport: Transport;
   readonly frameRate: FrameRate;
+  readonly jobs: number;
   readonly onOpen: () => void;
   readonly onSave: () => void;
 }): ReactNode {
@@ -385,6 +452,21 @@ function TitleBar({
       </div>
 
       <div style={{ flex: 1 }} />
+      {/* The spec's job chip: generation runs for minutes, and a user who cannot see that something is
+          running assumes nothing happened and starts again. */}
+      {jobs > 0 && (
+        <span
+          style={{
+            font: '500 11px ui-monospace, monospace',
+            color: 'var(--nos-generated-text)',
+            background: 'rgba(155, 140, 255, 0.16)',
+            borderRadius: 3,
+            padding: '2px 6px',
+          }}
+        >
+          {`${jobs} job${jobs === 1 ? '' : 's'}`}
+        </span>
+      )}
       {/* The sidecar's state is shown rather than hidden: without it there are no proxies, no
           waveforms and no export, and a user who cannot see that will blame the application. */}
       <span

@@ -42,6 +42,14 @@ export interface VariantSelection {
   readonly current?: VariantCandidate;
   readonly readyCount: number;
   readonly totalCount: number;
+  /**
+   * Variants the user asked for.
+   *
+   * Not always `totalCount`: a **batched** run is one submit carrying several seeds, so while it is still
+   * running it contributes a single pending candidate. Reporting "1 variant" there would tell the user
+   * one is coming when three are.
+   */
+  readonly requestedCount: number;
   /** True while any run could still produce a candidate. */
   readonly pending: boolean;
   /** Every run finished and none produced an output. */
@@ -86,6 +94,7 @@ export function buildSelection(request: SelectionRequest): VariantSelection {
     ...(current !== undefined ? { current } : {}),
     readyCount: ready.length,
     totalCount: candidates.length,
+    requestedCount: Math.max(group.variantCount, candidates.length),
     pending: candidates.some((candidate) => isPending(candidate.status)),
     exhausted:
       candidates.length > 0 &&
@@ -250,7 +259,11 @@ export function describeSelection(selection: VariantSelection): string {
   if (selection.totalCount === 0) return 'no variants';
   if (selection.exhausted) return 'every variant failed';
   if (selection.current === undefined) {
-    return selection.pending ? `generating ${selection.totalCount} variants` : 'no variant is ready';
+    // The requested count, not the candidate count: a batched run in flight is one candidate carrying
+    // however many variants were asked for.
+    return selection.pending
+      ? `generating ${selection.requestedCount} variant${selection.requestedCount === 1 ? '' : 's'}`
+      : 'no variant is ready';
   }
 
   const position = `${selection.current.ordinal} / ${selection.totalCount}`;

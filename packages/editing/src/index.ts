@@ -8,3 +8,4 @@ export * from './errors.js';
 export * from './snap.js';
 export * from './mutate.js';
 export * from './clip-ops.js';
+export * from './insert-generated.js';

@@ -1,7 +1,13 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { type FrameIndex, type PresetId, clipId, frameIndex, spanFromBounds } from '@nos/core';
-import type { GeneratorRegistry, JobTarget, RegistryRecord } from '@nos/generators';
-import { buildSelection } from '@nos/generators';
+import { type FrameIndex, type PresetId, clipId, frameIndex, spanFromBounds, trackId } from '@nos/core';
+import type {
+  GeneratorManifest,
+  GeneratorRegistry,
+  JobTarget,
+  RegistryRecord,
+  SelectionOutcome,
+} from '@nos/generators';
+import { acceptSelection, buildSelection } from '@nos/generators';
 import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/masks';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
@@ -23,6 +29,8 @@ export type PanelTab = 'inspector' | 'generate' | 'variants' | 'segment';
 
 export interface RightPanelProps {
   readonly registry: GeneratorRegistry | undefined;
+  /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
+  readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
   readonly libraryProblems: readonly LibraryProblem[];
   readonly runtime: GeneratorRuntime;
   readonly playhead: FrameIndex;
@@ -136,18 +144,33 @@ function ClipInspector({
  * which is the spec's explicit rule. A tool that silently disappears turns "where is my generator" into
  * an afternoon of debugging.
  */
-function GenerateTab({ registry, libraryProblems, runtime }: RightPanelProps): ReactNode {
+function GenerateTab({ registry, libraryProblems, runtime, playhead }: RightPanelProps): ReactNode {
   const records = registry?.all() ?? [];
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [preset, setPreset] = useState<PresetId | undefined>(undefined);
   const [params, setParams] = useState<Readonly<Record<string, string | number | boolean>>>({});
   const [variantCount, setVariantCount] = useState<number | undefined>(undefined);
   const [lockedSeed, setLockedSeed] = useState<number | undefined>(undefined);
+  const [destination, setDestination] = useState<'media-browser' | 'timeline'>('media-browser');
 
   const record: RegistryRecord | undefined =
     records.find((entry) => entry.manifest.id === selectedId) ?? records[0];
 
-  const target: JobTarget = { kind: 'media-browser' };
+  /**
+   * Where the output goes.
+   *
+   * Offered rather than inferred. The manifest's surfaces say where the *action* appears; they do not
+   * say whether this particular run is material for the bin or a clip for the cut, and that is a
+   * decision only the user makes.
+   */
+  const target: JobTarget =
+    destination === 'timeline' && record !== undefined
+      ? {
+          kind: 'timeline',
+          track: record.manifest.produces === 'audio' ? trackId('A1') : trackId('V1'),
+          at: playhead,
+        }
+      : { kind: 'media-browser' };
 
   if (records.length === 0) {
     return (
@@ -164,6 +187,27 @@ function GenerateTab({ registry, libraryProblems, runtime }: RightPanelProps): R
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <Mono tone={runtime.mode === 'comfyui' ? 'var(--nos-ok)' : 'var(--nos-warn)'}>{runtime.detail}</Mono>
+        {runtime.error !== undefined && <Mono tone="var(--nos-danger)">{runtime.error}</Mono>}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ font: '400 11px system-ui', color: 'var(--nos-text-soft)' }}>Send to</span>
+          <select
+            aria-label="Destination"
+            value={destination}
+            onChange={(event) => setDestination(event.target.value as 'media-browser' | 'timeline')}
+            style={{
+              flex: 1,
+              height: 24,
+              background: 'var(--nos-surface-1)',
+              border: '1px solid var(--nos-border-control)',
+              borderRadius: 4,
+              color: 'var(--nos-text-bright)',
+              font: '400 11px system-ui, sans-serif',
+            }}
+          >
+            <option value="media-browser">the media browser</option>
+            <option value="timeline">the timeline, at the playhead</option>
+          </select>
+        </label>
         <select
           aria-label="Generator"
           value={record?.manifest.id ?? ''}
@@ -231,7 +275,7 @@ function GenerateTab({ registry, libraryProblems, runtime }: RightPanelProps): R
  * is the behaviour the spec asks for and the reason the picker is driven by a derived selection rather
  * than by a "generation finished" event.
  */
-function VariantsTab({ runtime, registry }: RightPanelProps): ReactNode {
+function VariantsTab({ runtime, registry, onAcceptVariant }: RightPanelProps): ReactNode {
   const [current, setCurrent] = useState<string | undefined>(undefined);
 
   const group = runtime.snapshot.groups[runtime.snapshot.groups.length - 1];
@@ -266,6 +310,12 @@ function VariantsTab({ runtime, registry }: RightPanelProps): ReactNode {
           const index = ready.findIndex((candidate) => candidate.run === selection.current?.run);
           const next = ready[(((index + delta) % ready.length) + ready.length) % ready.length];
           if (next !== undefined) setCurrent(next.run);
+        }}
+        onAccept={() => {
+          const outcome = acceptSelection(selection);
+          // `acceptSelection` returns nothing when no variant is ready; the picker disables the control
+          // in that case, so this guard is for the keyboard path.
+          if (outcome !== undefined && manifest !== undefined) onAcceptVariant(outcome, manifest);
         }}
         onDiscard={() => runtime.cancelGroup(selection.group)}
       />
