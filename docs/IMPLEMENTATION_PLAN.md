@@ -145,10 +145,13 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [ ] Manifest inspector
 
 ### Phase 8 — M10: ComfyUI backend
-- [ ] Graph patching (bind pointers, `also` templates, preset pins)
-- [ ] `/prompt`, `/ws`, `/history`, `/view`, `/upload/image`, `/object_info`
-- [ ] Output collection + type-dispatched importers
-- [ ] Manifests for the four supplied graphs
+- [x] Graph patching (bind pointers, `also` templates, preset pins, batch size),
+      **verified against the real graphs in `docs/comfy/`**. 21 tests.
+- [x] `/prompt`, `/ws`, `/history`, `/upload/image`, `/object_info`, cancel.
+      22 tests with a scripted transport.
+- [x] Output collection keyed by node, so the manifest decides what an output means
+- [ ] Manifests for the four supplied graphs (the two the spec documents are
+      exercised by the tests; the other two need authoring)
 
 ### Phase 9 — M11: SAM 2 masks
 - [ ] Mask model, RLE/PNG-sequence cache
@@ -162,10 +165,12 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–6 complete (M1–M8). Phase 7 nearly complete — the whole generator
-framework works end to end against the mock backend; only the panel UI, in-place
-variant picking and the manifest inspector remain.**
-**951 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–6 complete (M1–M8). Phase 7 and 8 substantially done — the generator
+framework works end to end against the mock backend, and the ComfyUI backend
+implements the contract with its patching verified against the real graphs.
+Remaining: the generator panel UI, in-place variant picking, the manifest
+inspector, and M11 (SAM 2 masks).**
+**994 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -175,7 +180,7 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 components), `apps/sidecar` (Python).
 
 Next: the registry-driven parameter panel and in-place variant picking (mockups
-1c and 1d), then M10 — the ComfyUI backend implementing `GeneratorBackend`. The Electron shell
+1c and 1d), then M11 — SAM 2 masks. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -321,6 +326,34 @@ the media browser plus a full timeline from mockup 1a.
 - The `GraphPatcher` is injected, so the queue is testable with a mock backend and
   no graph at all — which is exactly how the spec wants M9 verified before M10
   exists.
+
+### ComfyUI backend rules (keep these)
+
+- Patch order is fixed: defaults, then user values, then **preset pins last**, then
+  the seed, then batch size. A preset's purpose is to *fix* a parameter, so letting
+  a stale user value win would make it a suggestion rather than a definition.
+- `also` targets are patched alongside the primary pointer. Patching only the
+  literal leaves a dependent expression computing from a stale value — the spec's
+  fps example produces a clip of the wrong duration, which looks like a backend bug
+  and is not.
+- Asset parameters are **not** patched during the pure pass: the graph must
+  reference the filename the *server* assigns, which only exists after upload.
+  `patchUploadedAsset` writes it afterwards, keeping the pure part pure and
+  offline-testable.
+- A required parameter with no value **throws** rather than submitting. Submitting
+  would silently use whatever the graph author last saved.
+- A ComfyUI 200 is **not** proof of acceptance: it answers 200 with a validation
+  error body for a bad graph, so the absence of `prompt_id` is a rejection.
+- Socket events are filtered by `prompt_id`. ComfyUI multiplexes every client onto
+  one stream, so without it a second window's job drives this one's progress bar.
+- Unknown socket event types are **ignored**, not treated as errors — ComfyUI adds
+  new ones across versions and a server upgrade must not break generation.
+- Cancel calls **both** `/interrupt` and `/queue` delete: ComfyUI distinguishes
+  them, and `interrupt` alone would stop whatever is currently executing — possibly
+  someone else's job — instead of removing a queued one.
+- `collectLiterals` excludes connections (array-valued inputs) from the inspector.
+  Offering one would produce a manifest that patches a value the graph immediately
+  overwrites.
 
 ### Export rules (keep these)
 
@@ -849,6 +882,18 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   most of its value. `failSubmitOn` takes specific run indices rather than a
   fail-everything switch, because the case worth testing is one variant of three
   failing — which is what exercises the `partial` status.
+
+- 2026-08-08: ComfyUI backend (M10). 43 tests. Graph patching is pure and verified
+  by writing into the **real** supplied graphs and reading the values back —
+  including the `also` template substituting fps into the length expression twice,
+  and a preset pin overriding a user value. A hand-written fixture would only have
+  proved the patcher self-consistent.
+
+  The protocol tests use a scripted transport rather than a live server, which is
+  what lets them assert the awkward parts: that a ComfyUI 200 with no `prompt_id` is
+  a rejection, that socket events for another prompt are filtered out, that an
+  unknown event type is ignored rather than fatal, and that the socket is closed
+  even when the consumer breaks out of `for await` early.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

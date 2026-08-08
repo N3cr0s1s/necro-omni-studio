@@ -32,6 +32,9 @@
       "path": "packages/generators"
     },
     {
+      "path": "packages/backend-comfyui"
+    },
+    {
       "path": "packages/ui"
     }
   ]

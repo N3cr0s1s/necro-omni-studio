@@ -1,0 +1,13 @@
+{
+  "name": "@nos/backend-comfyui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ComfyUI implementation of the GeneratorBackend contract: graph patching, submit, progress, collection.",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@nos/core": "*",
+    "@nos/generators": "*"
+  },
+  "scripts": { "typecheck": "tsc --build" }
+}
