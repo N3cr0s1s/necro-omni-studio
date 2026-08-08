@@ -274,13 +274,9 @@ running application.** Keyframe editing is in — one lane per animated paramete
 one drag one undo step (verified: a marker dragged from frame 300 to 420 returns
 to 300 with a single undo).
 
-The remaining opportunity is export throughput, and it is now *measured* rather
-than guessed: decode 3%, render 1%, readback 3%, **upload 78%**. The ingest path
-runs at roughly 12 MB/s over loopback HTTP, and a 1080p frame is 8 MB. The upload
-is pipelined so rendering no longer waits for it, but the ceiling is the transport
-itself — the next step is to move frames to the sidecar over a pipe from the main
-process rather than as HTTP request bodies. WebCodecs, previously assumed to be
-the fix, is not: a seek costs 2.4 ms and a texture upload 0.1 ms.
+Export throughput is fixed, and the fix came from measurement rather than
+intuition: frames now leave through the main process, and a 1080p 120-frame
+export went from about **85 s to 5.1 s**.
 
 ### Editing rules (keep these)
 
@@ -1246,3 +1242,25 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   and a 1080p frame is 8 MB. Moving frames to the sidecar over a pipe from the main
   process, rather than as HTTP request bodies, is the next step — and now it is the
   step the evidence points at rather than the one that sounded plausible.
+
+- 2026-08-08: The export is roughly **17× faster**, and the whole episode is worth
+  keeping as a record of how not to guess.
+
+  The first hypothesis, written into this ledger with some confidence, was that
+  decoding dominated and WebCodecs was the answer. Instrumenting the run gave
+  decode **3%**, render **1%**, readback **3%**, upload **78%** — so that was
+  wrong. The second hypothesis was that the sidecar's ingest was the ceiling, at
+  the ~12 MB/s the numbers implied. That was wrong too: `curl` posted 16 MB to the
+  same endpoint in **0.02 s**, about 800 MB/s.
+
+  What was actually slow was `fetch` **in the renderer**. Chromium copies a large
+  request body across its network-service boundary, and a 16 MB body cost roughly
+  1.3 s from a page versus 0.02 s from Node. The frames now go over IPC to the main
+  process, which posts them with Node's client. A 1080p 120-frame export went from
+  about 85 s to **5.1 s**; a 640×360 30-frame one from 2.9 s to **0.3 s**. Output
+  byte-identical in shape: 1920×1080, 120 frames, exactly 4.000000 s.
+
+  Two hypotheses, both plausible, both wrong, and each would have cost a day to
+  implement. Each was refuted in minutes by a measurement that took one command.
+  The timing breakdown stays in the product for that reason — it is not debug
+  scaffolding, it is the thing that makes the next report actionable.
