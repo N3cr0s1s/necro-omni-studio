@@ -23,6 +23,9 @@
       "path": "packages/audio"
     },
     {
+      "path": "packages/text"
+    },
+    {
       "path": "packages/ui"
     }
   ]

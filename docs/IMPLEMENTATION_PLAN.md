@@ -101,9 +101,14 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       Screenshot-verified against mockup 1b.
 
 ### Phase 5 — M7: Text layer
-- [ ] Text clip model + rasterization cache
-- [ ] Animation presets as keyframe generators
-- [ ] Typewriter advance-list mechanism
+- [x] Text rasterization cache contracts + cache key over exactly the
+      non-animatable properties (`@nos/text`). 25 tests.
+- [x] Animation presets as pure keyframe generators, with merge/remove that
+      preserve hand-authored animation. 35 tests.
+- [x] Typewriter advance-list mechanism + word wrapping with character fallback.
+      26 tests.
+- [ ] Canvas 2D rasterizer implementation (contracts and consumers are done;
+      only the browser-side glyph measurement remains)
 
 ### Phase 6 — M8: Export
 - [ ] Offscreen render loop reusing the compositor
@@ -138,8 +143,9 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–4 complete (M1–M6).**
-**712 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–4 complete (M1–M6). Phase 5 nearly done — only the Canvas 2D
+rasterizer implementation remains.**
+**798 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions (including every shipped built-in effect).**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -148,8 +154,8 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: Phase 5 (M7) — the text layer: rasterization cache, animation presets as
-keyframe generators, and the typewriter advance-list mechanism. The Electron shell
+Next: the Canvas 2D rasterizer, then Phase 6 (M8) — ffmpeg export reusing the
+compositor. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -232,6 +238,33 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Text layer rules (keep these)
+
+- An animation preset is a **keyframe generator**, never a runtime behaviour.
+  Applying one writes real, editable keyframes; nothing consults a preset at render
+  time. The `TextAnimation` record only remembers what was applied. The spec is
+  emphatic, and the practical payoff is that a user can apply "slide up" and then
+  drag one marker to overshoot — impossible if the preset were interpreted.
+- A preset animates toward the clip's **authored rest values**, not toward zero, or
+  applying one would yank a deliberately offset title back to centre.
+- Presets touch only the channels they need. `slide` must not pin opacity, or it
+  would silently undo a hand-authored fade.
+- `mergeGeneratedKeyframes` replaces only the generated *range* and keeps keyframes
+  outside it, so applying an in-animation cannot destroy an out-animation.
+  `removeRange` identifies by range, not by id, because the user may have dragged
+  the markers since.
+- Typewriter reveals **in reading order**, one line completing before the next
+  starts; revealing lines in parallel looks like a wipe, not typing. The count is
+  **floored** so a character appears only once fully earned, with an explicit case
+  at exactly 1 so the last character is not left hidden.
+- The rasterization cache key covers **exactly** the non-animatable properties.
+  Too narrow renders stale pixels; too wide re-rasterizes an animated clip every
+  frame. `letterSpacing` and `lineHeight` are in the key despite being keyframable,
+  because both change glyph layout — animating them is honestly slower.
+- The key includes a **hash of the full text**, not just a length and a prefix:
+  two long texts differing past the truncation point otherwise collide, and a
+  colliding key renders the wrong text from cache.
 
 ### Effect and keyframe UI rules (keep these)
 
@@ -627,6 +660,16 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   lacking it the handler threw and the marker became undraggable. Rewritten to attach
   listeners to the window as well as the element, with capture as a guarded
   enhancement — and a test now asserts a drag starts where capture is unavailable.
+
+- 2026-08-08: `@nos/text` — rasterization cache contracts, animation presets as
+  keyframe generators, typewriter advance mechanism. 86 tests.
+
+  A test caught a **real cache collision**: the key truncated the text to 48
+  characters and relied on the length to disambiguate, so two long texts differing
+  only past that point produced identical keys — the cache would render the wrong
+  text, with nothing in the symptom pointing at the cause. Added an FNV-1a hash of
+  the full string while keeping the readable prefix, plus tests for a
+  differs-in-the-middle case and a transposition.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than
