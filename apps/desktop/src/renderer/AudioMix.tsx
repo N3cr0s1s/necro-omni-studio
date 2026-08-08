@@ -13,8 +13,11 @@ import {
   staticNumber,
 } from '@nos/core';
 import { GAIN_FLOOR_DB, dbToGain, formatDb, gainToDb } from '@nos/audio';
-import { Button, Mono, SectionCaption } from '@nos/ui';
-import { token } from '@nos/ui';
+import { AudioLinesIcon, DiamondIcon, RotateCcwIcon } from 'lucide-react';
+import { Button } from '@nos/ui/components/ui/button';
+import { Slider } from '@nos/ui/components/ui/slider';
+import { Toggle } from '@nos/ui/components/ui/toggle';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * Level and pan for an audio clip.
@@ -85,8 +88,11 @@ export function AudioMix({ document, clip, playhead, onChange }: AudioMixProps):
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <SectionCaption>Audio</SectionCaption>
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-2">
+        <AudioLinesIcon className="size-3.5 text-chart-2" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Audio</span>
+      </div>
 
       <Channel
         label="gain"
@@ -100,18 +106,22 @@ export function AudioMix({ document, clip, playhead, onChange }: AudioMixProps):
           )
         }
       >
-        <input
-          type="range"
+        <Slider
           aria-label="Gain in decibels"
           min={GAIN_RANGE_DB.min}
           max={GAIN_RANGE_DB.max}
           step={0.5}
           disabled={isAnimated(audio.gain)}
-          value={clampGainDb(gainToDb(gain))}
-          onChange={(event) =>
-            write('set gain', 'gain', staticNumber(dbToGain(clampGainDb(Number(event.target.value)))))
+          // The array form even for one value: given a scalar the registry falls back to
+          // `[min, max]` and renders a second thumb.
+          value={[clampGainDb(gainToDb(gain))]}
+          onValueChange={(next) =>
+            write(
+              'set gain',
+              'gain',
+              staticNumber(dbToGain(clampGainDb(Array.isArray(next) ? (next[0] ?? 0) : next))),
+            )
           }
-          style={{ width: '100%' }}
         />
       </Channel>
 
@@ -127,35 +137,41 @@ export function AudioMix({ document, clip, playhead, onChange }: AudioMixProps):
           )
         }
       >
-        <input
-          type="range"
+        <Slider
           aria-label="Pan"
           min={-1}
           max={1}
           step={0.01}
           disabled={isAnimated(audio.pan)}
-          value={pan}
-          onChange={(event) => write('set pan', 'pan', staticNumber(snapPan(Number(event.target.value))))}
-          style={{ width: '100%' }}
+          value={[pan]}
+          onValueChange={(next) =>
+            write('set pan', 'pan', staticNumber(snapPan(Array.isArray(next) ? (next[0] ?? 0) : next)))
+          }
         />
       </Channel>
 
       {/* Unity is a position a fader has to be able to return to exactly. Dragging back to 0.0 dB by
           hand is a coin flip, and being 0.5 dB off is inaudible until it is summed with everything
           else. */}
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div className="flex gap-2">
         <Button
+          variant="outline"
+          size="sm"
           disabled={isAnimated(audio.gain)}
           onClick={() => write('reset gain', 'gain', staticNumber(1))}
           title="Return the level to unity"
         >
+          <RotateCcwIcon />
           0 dB
         </Button>
         <Button
+          variant="outline"
+          size="sm"
           disabled={isAnimated(audio.pan)}
           onClick={() => write('centre pan', 'pan', staticNumber(0))}
           title="Return the pan to centre"
         >
+          <RotateCcwIcon />
           centre
         </Button>
       </div>
@@ -177,23 +193,29 @@ function Channel({
   readonly children: ReactNode;
 }): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ font: token.textLabel, color: token.textSoft }}>{label}</span>
-        <div style={{ flex: 1 }} />
-        <Mono tone={animated ? token.accent : token.textBright}>{readout}</Mono>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className={cn('ml-auto font-mono text-xs tabular-nums', animated && 'text-primary')}>
+          {readout}
+        </span>
         {/* Animating is an explicit act, as it is for effect parameters: a value that silently became
             keyframed on first edit would surprise anyone who only meant to change it once. */}
-        <Button
-          onClick={onToggleAnimation}
+        <Toggle
+          size="sm"
+          pressed={animated}
+          onPressedChange={onToggleAnimation}
+          aria-label={animated ? `Stop animating ${label}` : `Animate ${label}`}
           title={animated ? 'Return this to a constant value' : 'Animate this with keyframes'}
         >
-          {animated ? 'un-animate' : 'animate'}
-        </Button>
+          <DiamondIcon />
+        </Toggle>
       </div>
       {children}
       {animated && (
-        <Mono tone={token.textGhost}>edited in the keyframe lane, so one value cannot win over another</Mono>
+        <p className="font-mono text-xs text-muted-foreground">
+          edited in the keyframe lane, so one value cannot win over another
+        </p>
       )}
     </div>
   );

@@ -404,7 +404,9 @@ function ParamControl({
               min={param.min}
               max={param.max}
               step={param.step ?? (param.type === 'int' ? 1 : 0.01)}
-              value={Number(value ?? param.default ?? param.min)}
+              // The array form even for one value: given a scalar the registry falls back to
+              // `[min, max]` and renders a second thumb.
+              value={[Number(value ?? param.default ?? param.min)]}
               onValueChange={(next) => onChange?.(param.key, Array.isArray(next) ? (next[0] ?? 0) : next)}
               className="flex-1"
             />

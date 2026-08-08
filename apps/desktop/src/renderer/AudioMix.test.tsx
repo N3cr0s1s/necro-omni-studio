@@ -85,6 +85,18 @@ function mount(clip: Clip = audioClip(), playhead = 0) {
   return { onChange, document };
 }
 
+/**
+ * The range input inside a slider's thumb.
+ *
+ * Base UI puts the accessible name on the group and a real `<input type="range">` inside the thumb, so
+ * that is what a change is dispatched at — the group itself has no value to set.
+ */
+function slider(label: string): HTMLInputElement {
+  const found = screen.getByLabelText(label).querySelector('input[type="range"]');
+  if (found === null) throw new Error(`no range input inside ${label}`);
+  return found as HTMLInputElement;
+}
+
 /** The clip as the last commit left it. */
 function committed(onChange: ReturnType<typeof vi.fn>): AudioClip {
   const next = onChange.mock.calls.at(-1)?.[1] as TimelineDocument;
@@ -109,7 +121,7 @@ describe('decibels at the boundary', () => {
 
   it('writes a linear gain, because that is what the mix graph reads', () => {
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Gain in decibels'), { target: { value: '-6' } });
+    fireEvent.change(slider('Gain in decibels'), { target: { value: '-6' } });
 
     const gain = committed(onChange).gain;
     expect(isAnimated(gain)).toBe(false);
@@ -120,14 +132,14 @@ describe('decibels at the boundary', () => {
     // The control has to be able to mute a clip, not merely approach it — the range bottoms out at
     // the mix graph's own floor, where gain is defined to be zero.
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Gain in decibels'), { target: { value: '-60' } });
+    fireEvent.change(slider('Gain in decibels'), { target: { value: '-60' } });
 
     expect(evaluateAt(committed(onChange).gain, frameIndex(0))).toBe(0);
   });
 
   it('returns to unity exactly, which dragging a fader cannot', () => {
     const { onChange } = mount(audioClip({ gain: staticNumber(0.3) }));
-    screen.getByText('0 dB').click();
+    screen.getByRole('button', { name: /0 dB/ }).click();
 
     expect(evaluateAt(committed(onChange).gain, frameIndex(0))).toBe(1);
   });
@@ -141,8 +153,7 @@ describe('decibels at the boundary', () => {
     // A document can hold any number — a preset, a hand-edited file. The control must show something
     // rather than render an out-of-range slider that appears to be at zero.
     mount(audioClip({ gain: staticNumber(1000) }));
-    const slider = screen.getByLabelText('Gain in decibels') as HTMLInputElement;
-    expect(Number(slider.value)).toBe(12);
+    expect(Number(slider('Gain in decibels').value)).toBe(12);
   });
 });
 
@@ -154,21 +165,21 @@ describe('pan', () => {
 
   it('snaps to centre near the middle, where a fader is hard to place', () => {
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Pan'), { target: { value: '0.01' } });
+    fireEvent.change(slider('Pan'), { target: { value: '0.01' } });
 
     expect(evaluateAt(committed(onChange).pan, frameIndex(0))).toBe(0);
   });
 
   it('does not snap a deliberate small offset away', () => {
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Pan'), { target: { value: '0.2' } });
+    fireEvent.change(slider('Pan'), { target: { value: '0.2' } });
 
     expect(evaluateAt(committed(onChange).pan, frameIndex(0))).toBeCloseTo(0.2, 3);
   });
 
   it('centres exactly on request', () => {
     const { onChange } = mount(audioClip({ pan: staticNumber(0.8) }));
-    screen.getByText('centre').click();
+    screen.getByRole('button', { name: /centre/ }).click();
 
     expect(evaluateAt(committed(onChange).pan, frameIndex(0))).toBe(0);
   });
@@ -177,14 +188,14 @@ describe('pan', () => {
 describe('animation', () => {
   it('is an explicit act, not something a first edit causes', () => {
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Gain in decibels'), { target: { value: '-3' } });
+    fireEvent.change(slider('Gain in decibels'), { target: { value: '-3' } });
 
     expect(isAnimated(committed(onChange).gain)).toBe(false);
   });
 
   it('starts from the value that is there', () => {
     const { onChange } = mount(audioClip({ gain: staticNumber(0.5) }));
-    screen.getAllByText('animate')[0]?.click();
+    screen.getByLabelText('Animate gain').click();
 
     const gain = committed(onChange).gain;
     expect(isAnimated(gain)).toBe(true);
@@ -201,7 +212,7 @@ describe('animation', () => {
       }),
     );
 
-    expect((screen.getByLabelText('Gain in decibels') as HTMLInputElement).disabled).toBe(true);
+    expect(slider('Gain in decibels').disabled).toBe(true);
   });
 
   it('reads out what is heard at the playhead, not the first keyframe', () => {
@@ -230,7 +241,7 @@ describe('animation', () => {
       }),
       100,
     );
-    screen.getByText('un-animate').click();
+    screen.getByLabelText('Stop animating gain').click();
 
     const gain = committed(onChange).gain;
     expect(isAnimated(gain)).toBe(false);
@@ -254,7 +265,7 @@ describe('animation', () => {
 describe('history', () => {
   it('labels each change as what it was, so undo names something recognisable', () => {
     const { onChange } = mount();
-    fireEvent.change(screen.getByLabelText('Pan'), { target: { value: '0.5' } });
+    fireEvent.change(slider('Pan'), { target: { value: '0.5' } });
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('set pan');
   });
