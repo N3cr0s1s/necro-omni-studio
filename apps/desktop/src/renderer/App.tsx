@@ -416,6 +416,9 @@ export function App(): ReactNode {
   // The browser's footer. The cache size is re-read as proxies land, because a number that only
   // updated on relaunch would be wrong for exactly as long as it mattered.
   const [browserSelection, setBrowserSelection] = useState<AssetPath | undefined>(undefined);
+  // One clip open at a time. Several would push the tracks below it off screen, and the lanes of two
+  // clips on different tracks cannot be compared anyway — they are read against their own clip.
+  const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
@@ -643,21 +646,28 @@ export function App(): ReactNode {
               onClipPointerDown={(clip, event) => drag.begin('move', clip, event)}
               onTrimStart={(clip, event) => drag.begin('trim-start', clip, event)}
               onTrimEnd={(clip, event) => drag.begin('trim-end', clip, event)}
+              {...(expandedClip !== undefined ? { expandedClip } : {})}
+              onToggleExpandClip={(clip) =>
+                setExpandedClip((current) => (current === clip ? undefined : clip))
+              }
+              lanes={
+                expandedClip === undefined ? undefined : (
+                  <KeyframeLanes
+                    document={drag.document}
+                    clip={expandedClip}
+                    effects={effectRegistry}
+                    viewport={viewport}
+                    playhead={playhead}
+                    onChange={commitDocument}
+                  />
+                )
+              }
               onToggleSnap={() => setSnap((value) => !value)}
               onToggleRipple={() => setRipple((value) => !value)}
               onZoom={(next, anchorPx) => {
                 setFramesPerPixel(next);
                 setScrollFrame(frameIndex(Math.max(0, scrollFrame + anchorPx * (framesPerPixel - next))));
               }}
-            />
-
-            <KeyframeLanes
-              document={drag.document}
-              {...([...selected][0] !== undefined ? { clip: [...selected][0] } : {})}
-              effects={effectRegistry}
-              viewport={viewport}
-              playhead={playhead}
-              onChange={commitDocument}
             />
           </div>
         </main>

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo, useRef } from 'react';
+import { Fragment, type ReactNode, useCallback, useMemo, useRef } from 'react';
 import {
   type Clip,
   type ClipId,
@@ -69,6 +69,18 @@ export interface TimelineProps {
   readonly onTrackRemove?: (track: TrackId) => void;
   /** Adds a track of a kind. The toolbar offers one button per kind the spec allows N of. */
   readonly onAddTrack?: (kind: TrackKind) => void;
+
+  /**
+   * The opened clip, and what to draw beneath its track.
+   *
+   * The spec's §6.1 puts a clip's parameter lanes *under the clip*, which means under its track and
+   * not at the bottom of the panel: a lane is read against the clip it belongs to, and one drawn
+   * three tracks away is a lane the user has to correlate by eye. The content is injected so this
+   * component stays presentational and learns nothing about keyframes.
+   */
+  readonly expandedClip?: ClipId;
+  readonly lanes?: ReactNode;
+  readonly onToggleExpandClip?: (clip: ClipId) => void;
 
   /** In/out marks. Absent handlers hide the controls rather than showing dead ones. */
   readonly onMarkIn?: () => void;
@@ -166,19 +178,29 @@ export function Timeline(props: TimelineProps): ReactNode {
 
           <div style={{ position: 'relative' }}>
             {document.sequence.tracks.map((track) => (
-              <TrackLane
-                key={track.id}
-                track={track}
-                viewport={viewport}
-                selectedClips={props.selectedClips}
-                {...(props.strips !== undefined ? { strips: props.strips } : {})}
-                {...(props.onClipPointerDown !== undefined
-                  ? { onClipPointerDown: props.onClipPointerDown }
-                  : {})}
-                {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
-                {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
-                {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
-              />
+              <Fragment key={track.id}>
+                <TrackLane
+                  track={track}
+                  viewport={viewport}
+                  selectedClips={props.selectedClips}
+                  {...(props.strips !== undefined ? { strips: props.strips } : {})}
+                  {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
+                  {...(props.onToggleExpandClip !== undefined
+                    ? { onToggleExpandClip: props.onToggleExpandClip }
+                    : {})}
+                  {...(props.onClipPointerDown !== undefined
+                    ? { onClipPointerDown: props.onClipPointerDown }
+                    : {})}
+                  {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
+                  {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
+                  {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
+                />
+                {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
+                  <div data-clip-lanes={props.expandedClip} style={{ position: 'relative' }}>
+                    {props.lanes}
+                  </div>
+                )}
+              </Fragment>
             ))}
           </div>
 
@@ -603,11 +625,18 @@ function TimelineRuler({
   );
 }
 
+/** Whether a track holds a clip, which decides where the opened clip's lanes are drawn. */
+function holdsClip(track: Track, clip: ClipId | undefined): boolean {
+  return clip !== undefined && trackClips(track).some((candidate) => candidate.id === clip);
+}
+
 function TrackLane({
   track,
   viewport,
   selectedClips,
   strips,
+  expandedClip,
+  onToggleExpandClip,
   onClipPointerDown,
   onSelectClip,
   onTrimStart,
@@ -617,6 +646,8 @@ function TrackLane({
   readonly viewport: TimelineViewport;
   readonly selectedClips: ReadonlySet<string>;
   readonly strips?: ReadonlyMap<string, ClipStrip>;
+  readonly expandedClip?: ClipId;
+  readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -646,6 +677,8 @@ function TrackLane({
           heightPx={track.height}
           selected={selectedClips.has(clip.id)}
           {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
+          expanded={expandedClip === clip.id}
+          {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
           onPointerDown={(clipId, event) => {
             onSelectClip?.(clipId, event.shiftKey || event.metaKey);
             onClipPointerDown?.(clipId, event);

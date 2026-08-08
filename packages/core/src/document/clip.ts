@@ -11,7 +11,7 @@ import {
   type MaskId,
   type PresetId,
 } from './ids.js';
-import { type AnimatableNumber, type RgbaColor, type StaticValue } from './params.js';
+import { type AnimatableNumber, type RgbaColor, type StaticValue, isAnimated } from './params.js';
 
 /**
  * Where a clip's pixels or samples come from.
@@ -250,6 +250,27 @@ export function clipSpeed(clip: Clip): number {
 /** Every clip kind except text carries a transform; audio has none. */
 export function clipTransform(clip: Clip): ClipTransform | undefined {
   return clip.kind === 'audio' ? undefined : clip.transform;
+}
+
+/**
+ * Whether a clip has anything animated on it.
+ *
+ * Every place a keyframe can live, in one predicate: the transform, a text clip's reveal channel, an
+ * audio clip's level and pan, and any effect parameter. The spec's §6.1 makes a clip *openable* to
+ * show its parameter lanes, and the honest condition for offering that is "there is something to
+ * show" — an empty disclosure is a control that punishes the user for using it.
+ */
+export function hasAnimation(clip: Clip): boolean {
+  const transform = clipTransform(clip);
+  if (transform !== undefined && Object.values(transform).some(isAnimated)) return true;
+  if (clip.kind === 'text' && clip.reveal !== undefined && isAnimated(clip.reveal)) return true;
+  if (clip.kind === 'audio' && (isAnimated(clip.gain) || isAnimated(clip.pan))) return true;
+
+  // A parameter may hold a static value of a non-numeric kind — a colour, say — which cannot be
+  // animated at all. Narrowing on the discriminant rather than casting keeps that honest.
+  return clip.effects.some((instance) =>
+    Object.values(instance.params).some((value) => value.kind === 'animated'),
+  );
 }
 
 /** Count of render passes a clip contributes, for the spec's 8-pass warning. */

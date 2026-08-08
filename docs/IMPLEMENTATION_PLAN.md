@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1749 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1756 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1725,3 +1725,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   test tone — which matches the −20.9 dB its measured amplitude implies — and back
   to silent within a second of stopping. One earlier reading that looked like a
   stuck meter was the probe restarting playback at the end of a three-second clip.
+
+- 2026-08-08: A clip can be opened. Spec §6.1 is specific — *a klip kinyitható:
+  alatta megjelennek az effekt paraméter-sávok keyframe jelölőkkel* — and the lanes
+  existed, worked, and were drawn **at the foot of the whole panel**, three tracks
+  away from the clip they described. A lane is read against its own clip; one drawn
+  somewhere else has to be correlated by eye, which is most of the value gone.
+
+  The lanes now render inside the timeline, directly beneath the track holding the
+  opened clip. `Timeline` takes the clip id and the lane content as a slot, so it
+  stays presentational and still knows nothing about keyframes — the same
+  arrangement the media browser's detail pane uses.
+
+  The disclosure appears **only on a clip that has something to show**. That needed
+  a single honest predicate rather than a UI-side guess, so `hasAnimation` joins the
+  document model: transform channels, a text clip's reveal, an audio clip's level
+  and pan, and any effect parameter — every place a keyframe can live, in one
+  place. An empty disclosure is a control that punishes the user for using it.
+
+  Two details that only matter once it is in the hand. The disclosure stops its own
+  pointer-down, because it sits on a clip body whose pointer-down *begins a move
+  gesture* — without that, opening a clip would nudge it. And one clip is open at a
+  time: several would push the tracks below off screen, and the lanes of two clips
+  on different tracks cannot be compared anyway.
+
+  Verified in the running app by measurement rather than by eye: with nothing
+  animated there is no disclosure at all; animating the audio clip's gain makes one
+  appear on that clip only; opening it puts the lane container at y=864, between
+  the audio track at 804 and the text track at 917 — under its own track, as the
+  spec asks — and closing removes it.

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -292,6 +292,91 @@ describe('ruler', () => {
   it('renders labelled ticks', () => {
     renderTimeline();
     expect(screen.getByText('00:00')).toBeDefined();
+  });
+});
+
+describe('opening a clip', () => {
+  const animated = (id: string) =>
+    video(id, 0, 300, {
+      transform: {
+        ...transform,
+        opacity: {
+          kind: 'animated',
+          keyframes: [
+            { id: 'k0', frame: 0, value: 1, ease: 'linear' },
+            { id: 'k1', frame: 100, value: 0, ease: 'linear' },
+          ],
+        },
+      },
+    } as Partial<Clip>);
+
+  it('offers a disclosure only on a clip with something to show', () => {
+    // An empty disclosure punishes the user for using it.
+    const doc = makeDocument([animated('moving'), video('still', 400, 700)]);
+    renderTimeline({ document: doc, onToggleExpandClip: vi.fn() });
+
+    expect(document.querySelector('[data-clip-disclosure="moving"]')).not.toBeNull();
+    expect(document.querySelector('[data-clip-disclosure="still"]')).toBeNull();
+  });
+
+  it('offers none at all when nothing can open a clip', () => {
+    renderTimeline({ document: makeDocument([animated('moving')]) });
+    expect(document.querySelector('[data-clip-disclosure]')).toBeNull();
+  });
+
+  it('reports the toggle rather than performing it', () => {
+    const onToggleExpandClip = vi.fn();
+    renderTimeline({ document: makeDocument([animated('moving')]), onToggleExpandClip });
+
+    (document.querySelector('[data-clip-disclosure="moving"]') as HTMLElement).click();
+    expect(onToggleExpandClip).toHaveBeenCalledWith('moving');
+  });
+
+  it('draws the lanes under the clip´s own track, not at the foot of the panel', () => {
+    // A lane is read against the clip it belongs to; one drawn three tracks away has to be
+    // correlated by eye.
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({
+      document: doc,
+      expandedClip: clipId('moving'),
+      lanes: <div data-testid="lanes" />,
+    });
+
+    const lanes = document.querySelector('[data-clip-lanes="moving"]');
+    const videoLane = document.querySelector('[data-track-id="v1"]');
+    const audioLane = document.querySelector('[data-track-id="a1"]');
+
+    expect(lanes).not.toBeNull();
+    expect(videoLane!.compareDocumentPosition(lanes!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lanes!.compareDocumentPosition(audioLane!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('draws nothing when no clip is open', () => {
+    renderTimeline({ document: makeDocument([animated('moving')]), lanes: <div /> });
+    expect(document.querySelector('[data-clip-lanes]')).toBeNull();
+  });
+
+  it('marks the open clip for assistive technology', () => {
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), onToggleExpandClip: vi.fn() });
+
+    const button = document.querySelector('[data-clip-disclosure="moving"]');
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('does not start a drag when the disclosure is used', () => {
+    // The disclosure sits on a clip body whose pointer-down begins a move gesture.
+    const onClipPointerDown = vi.fn();
+    renderTimeline({
+      document: makeDocument([animated('moving')]),
+      onToggleExpandClip: vi.fn(),
+      onClipPointerDown,
+    });
+
+    const button = document.querySelector('[data-clip-disclosure="moving"]') as HTMLElement;
+    fireEvent.pointerDown(button, { bubbles: true });
+
+    expect(onClipPointerDown).not.toHaveBeenCalled();
   });
 });
 

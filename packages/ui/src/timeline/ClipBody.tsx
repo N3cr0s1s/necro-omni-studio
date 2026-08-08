@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { type Clip, type ClipId, isGenerated, passCount } from '@nos/core';
+import { type Clip, type ClipId, hasAnimation, isGenerated, passCount } from '@nos/core';
 import { token } from '../tokens/tokens.js';
 import type { ClipStrip } from './clip-strip.js';
 import { type SpanGeometry } from './viewport.js';
@@ -26,6 +26,10 @@ export interface ClipBodyProps {
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   /** Above the spec's 8-pass budget, the clip carries a warning badge. */
   readonly passWarningThreshold?: number;
+  /** Whether this clip's parameter lanes are showing beneath its track. */
+  readonly expanded?: boolean;
+  /** Opens or closes the clip. Absent leaves the disclosure off entirely. */
+  readonly onToggleExpand?: (clip: ClipId) => void;
 }
 
 /** Fill and border for a clip, by media kind and provenance. */
@@ -80,6 +84,8 @@ export function ClipBody({
   onTrimStart,
   onTrimEnd,
   passWarningThreshold = 8,
+  expanded = false,
+  onToggleExpand,
 }: ClipBodyProps): ReactNode {
   const palette = clipPalette(clip);
   const passes = passCount(clip);
@@ -145,6 +151,36 @@ export function ClipBody({
         >
           {clip.label}
         </span>
+        {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
+            there is something to show — an empty disclosure punishes the user for using it. */}
+        {onToggleExpand !== undefined && hasAnimation(clip) && (
+          <button
+            type="button"
+            data-clip-disclosure={clip.id}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? 'Hide' : 'Show'} ${clip.label} keyframe lanes`}
+            title={expanded ? 'Hide the parameter lanes' : 'Show the parameter lanes'}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpand(clip.id);
+            }}
+            style={{
+              flex: 'none',
+              width: 12,
+              height: 12,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: token.textSoft,
+              font: `400 8px ${token.fontUi}`,
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            {expanded ? '▾' : '▸'}
+          </button>
+        )}
         {passes > 0 && (
           <ClipChip tone={passes > passWarningThreshold ? 'warn' : 'ok'} label={`fx ${passes}`} />
         )}
