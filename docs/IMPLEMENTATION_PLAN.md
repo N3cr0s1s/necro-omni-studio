@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1756 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1779 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1754,3 +1754,34 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   appear on that clip only; opening it puts the lane container at y=864, between
   the audio track at 804 and the text track at 917 — under its own track, as the
   spec asks — and closing removes it.
+
+- 2026-08-08: Clips can be removed. The plainest gap in the application: it could
+  put clips on a timeline and never take one off. `liftClip`, `rippleDeleteClip`,
+  `setClipEnabled` and `splitAllTracksAt` have all existed in `@nos/editing` since
+  M3, tested, with no way to invoke any of them — and the toolbar's **Ripple**
+  toggle was the same story from the other end, a control whose state nothing read.
+
+  That toggle is what decides between the two removals, which is the only
+  interesting decision here. **Lift** leaves the gap, so everything downstream keeps
+  its timing; **ripple** closes it, pulling the rest of that track back. Neither is
+  a safe default for the other's situation, which is why the choice is a visible,
+  persistent mode rather than a guess — and why holding shift gives the *other* one
+  **without changing the mode**: an editor reaches for it once, for one clip, and
+  does not want the toolbar to have silently flipped afterwards. The button is
+  named for what it will do — `Delete` or `Ripple delete` — rather than leaving the
+  user to remember which mode is on.
+
+  A multi-clip removal is one history entry, because removing three clips is one
+  decision. A refusal — a locked track among the selection — leaves that clip both
+  present *and still selected*, since it is still the thing the user was acting on;
+  the others go, rather than the whole action rolling back work that was wanted.
+
+  `E` reaches `enabled`, which the clip body has drawn at 40% opacity since M3 with
+  nothing able to set it. `Shift+S` cuts every unlocked track at once, which is the
+  point of a cut-all: a razor through one track alone desynchronizes what was
+  deliberately aligned.
+
+  Verified in the running app by position: `S` split the clip into halves at x=448
+  and x=478; `E` took the first to 0.4 opacity; `Delete` with ripple **off** left
+  the second half at 478; with ripple **on** it moved back to 448. The gap closing
+  is the whole difference, and it is now visible in the pixels.

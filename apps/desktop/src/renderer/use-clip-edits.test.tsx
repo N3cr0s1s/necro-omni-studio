@@ -1,0 +1,382 @@
+// @vitest-environment jsdom
+import { act, cleanup, render } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  type Clip,
+  type DocumentStore,
+  type TimelineDocument,
+  type VideoTrack,
+  FRAME_RATES,
+  assetPath,
+  clipId,
+  createDocument,
+  createDocumentStore,
+  endExclusive,
+  frameIndex,
+  locateClip,
+  projectId,
+  sequenceId,
+  spanFromBounds,
+  staticNumber,
+  trackId,
+} from '@nos/core';
+import { type ClipEdits, describeRippleMode, survivingSelection, useClipEdits } from './use-clip-edits.js';
+
+/**
+ * Removing, disabling and cutting clips.
+ *
+ * The operations are `@nos/editing`'s and tested there. What is tested here is the decision this
+ * layer owns — which of the two removals happens — and the wiring an editor feels: that Delete
+ * reaches the selection, that shift gives the other removal *without* changing the mode, and that a
+ * refusal leaves the clip both present and still selected.
+ */
+
+afterEach(cleanup);
+
+const transform = {
+  x: staticNumber(0),
+  y: staticNumber(0),
+  scale: staticNumber(1),
+  rotation: staticNumber(0),
+  opacity: staticNumber(1),
+};
+
+function clip(id: string, start: number, end: number): Clip {
+  return {
+    kind: 'video',
+    id: clipId(id),
+    span: spanFromBounds(frameIndex(start), frameIndex(end)),
+    label: id,
+    enabled: true,
+    effects: [],
+    source: { asset: assetPath('media/a.mp4'), sourceIn: frameIndex(0), sourceRate: FRAME_RATES.WEB_30 },
+    transform,
+    speed: { factor: 1, preservePitch: true },
+  } as Clip;
+}
+
+function documentWith(clips: readonly Clip[]): TimelineDocument {
+  const base = createDocument({
+    id: projectId('p'),
+    sequenceId: sequenceId('s'),
+    name: 'p',
+    frameRate: FRAME_RATES.WEB_30,
+    resolution: { width: 1920, height: 1080 },
+    trackIds: { video: trackId('v1'), audio: trackId('a1'), text: trackId('t1') },
+  });
+  return {
+    ...base,
+    sequence: {
+      ...base.sequence,
+      tracks: base.sequence.tracks.map((track) =>
+        track.kind === 'video' ? ({ ...track, clips } as VideoTrack) : track,
+      ),
+    },
+  };
+}
+
+interface Harness {
+  readonly edits: () => ClipEdits;
+  readonly store: DocumentStore;
+  readonly rejections: string[];
+  readonly removed: string[][];
+}
+
+function mount(options: {
+  clips?: readonly Clip[];
+  selected?: readonly string[];
+  ripple?: boolean;
+  playhead?: number;
+}): Harness {
+  const store = createDocumentStore(documentWith(options.clips ?? [clip('a', 0, 100), clip('b', 200, 300)]));
+  const rejections: string[] = [];
+  const removed: string[][] = [];
+  let latest: ClipEdits | undefined;
+
+  function Host(): null {
+    latest = useClipEdits({
+      store,
+      selected: new Set(options.selected ?? ['a']),
+      playhead: frameIndex(options.playhead ?? 50),
+      ripple: options.ripple ?? false,
+      onReject: (reason) => rejections.push(reason),
+      onRemoved: (clips) => removed.push([...clips]),
+    });
+    return null;
+  }
+
+  render(<Host />);
+  return {
+    edits: () => {
+      if (latest === undefined) throw new Error('not mounted');
+      return latest;
+    },
+    store,
+    rejections,
+    removed,
+  };
+}
+
+function press(key: string, modifiers: { shift?: boolean; ctrl?: boolean } = {}): void {
+  act(() => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key,
+        shiftKey: modifiers.shift ?? false,
+        ctrlKey: modifiers.ctrl ?? false,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+}
+
+/**
+ * The video track's clips, in timeline order.
+ *
+ * Sorted here rather than assumed: clips are not *stored* in timeline order — a move or a split
+ * appends — and asserting on storage order would pin down something the document deliberately does
+ * not promise.
+ */
+function spans(store: DocumentStore): readonly [string, number, number][] {
+  const track = store.getDocument().sequence.tracks[0];
+  return (track?.clips ?? [])
+    .map((entry): [string, number, number] => [
+      entry.id as string,
+      entry.span.start,
+      endExclusive(entry.span),
+    ])
+    .sort((left, right) => left[1] - right[1]);
+}
+
+describe('the two removals', () => {
+  it('leaves the gap with ripple off, so everything downstream keeps its timing', () => {
+    const harness = mount({ ripple: false });
+    act(() => harness.edits().remove());
+
+    expect(spans(harness.store)).toEqual([['b', 200, 300]]);
+  });
+
+  it('closes the gap with ripple on', () => {
+    const harness = mount({ ripple: true });
+    act(() => harness.edits().remove());
+
+    expect(spans(harness.store)).toEqual([['b', 100, 200]]);
+  });
+
+  it('gives the other removal on shift, without changing the mode', () => {
+    // An editor reaches for it once, for one clip, and does not want the toolbar to have silently
+    // flipped afterwards.
+    const harness = mount({ ripple: false });
+    act(() => harness.edits().removeOtherWay());
+
+    expect(spans(harness.store)).toEqual([['b', 100, 200]]);
+  });
+
+  it('records one history entry for a multi-clip removal', () => {
+    // Removing three clips is one decision, so undo should put all three back at once.
+    const harness = mount({ selected: ['a', 'b'] });
+    act(() => harness.edits().remove());
+    expect(spans(harness.store)).toEqual([]);
+
+    act(() => harness.store.undo());
+    expect(spans(harness.store)).toHaveLength(2);
+  });
+
+  it('does nothing with nothing selected', () => {
+    const harness = mount({ selected: [] });
+    act(() => harness.edits().remove());
+
+    expect(spans(harness.store)).toHaveLength(2);
+    expect(harness.store.getSnapshot().canUndo).toBe(false);
+  });
+});
+
+describe('a refusal', () => {
+  const lockedHarness = () => {
+    const harness = mount({});
+    act(() => {
+      harness.store.commit('lock', (current) => ({
+        ...current,
+        sequence: {
+          ...current.sequence,
+          tracks: current.sequence.tracks.map((track) =>
+            track.kind === 'video' ? { ...track, locked: true } : track,
+          ),
+        },
+      }));
+    });
+    return harness;
+  };
+
+  it('keeps the clip and says why', () => {
+    const harness = lockedHarness();
+    act(() => harness.edits().remove());
+
+    expect(spans(harness.store)).toHaveLength(2);
+    expect(harness.rejections[0]).toContain('track locked');
+  });
+
+  it('leaves the selection alone, because the clip is still there to act on', () => {
+    const harness = lockedHarness();
+    act(() => harness.edits().remove());
+
+    expect(harness.removed).toEqual([]);
+  });
+
+  it('reports what did go when only part of a selection could', () => {
+    const harness = mount({ selected: ['a', 'b'] });
+    act(() => harness.edits().remove());
+
+    expect(harness.removed).toEqual([['a', 'b']]);
+  });
+});
+
+describe('disabling', () => {
+  it('takes a clip out of the composite without removing it', () => {
+    const harness = mount({});
+    act(() => harness.edits().toggleEnabled());
+
+    const located = locateClip(harness.store.getDocument(), clipId('a'));
+    expect(located?.clip.enabled).toBe(false);
+    expect(spans(harness.store)).toHaveLength(2);
+  });
+
+  it('turns a disabled clip back on', () => {
+    const harness = mount({});
+    act(() => harness.edits().toggleEnabled());
+    act(() => harness.edits().toggleEnabled());
+
+    expect(locateClip(harness.store.getDocument(), clipId('a'))?.clip.enabled).toBe(true);
+  });
+});
+
+describe('cutting', () => {
+  it('splits the selected clip at the playhead', () => {
+    const harness = mount({ playhead: 50 });
+    act(() => harness.edits().split());
+
+    expect(spans(harness.store)).toEqual([
+      ['a', 0, 50],
+      ['a_b', 50, 100],
+      ['b', 200, 300],
+    ]);
+  });
+
+  it('cuts every track at once when asked, keeping layers aligned', () => {
+    // The point of a cut-all: a razor through one track alone desynchronizes what was aligned.
+    const harness = mount({ playhead: 50, selected: [] });
+    act(() => harness.edits().splitAllTracks());
+
+    expect(spans(harness.store).map(([, start]) => start)).toEqual([0, 50, 200]);
+  });
+
+  it('produces the same document for the same cut, so undo and a saved file are comparable', () => {
+    const first = mount({ playhead: 50, selected: [] });
+    const second = mount({ playhead: 50, selected: [] });
+    act(() => first.edits().splitAllTracks());
+    act(() => second.edits().splitAllTracks());
+
+    expect(spans(first.store)).toEqual(spans(second.store));
+  });
+});
+
+describe('the keys', () => {
+  it('removes on delete and on backspace', () => {
+    for (const key of ['Delete', 'Backspace']) {
+      const harness = mount({});
+      press(key);
+      expect(spans(harness.store)).toHaveLength(1);
+      cleanup();
+    }
+  });
+
+  it('gives the other removal on shift+delete', () => {
+    const harness = mount({ ripple: false });
+    press('Delete', { shift: true });
+    expect(spans(harness.store)).toEqual([['b', 100, 200]]);
+  });
+
+  it('toggles enabled on E', () => {
+    const harness = mount({});
+    press('e');
+    expect(locateClip(harness.store.getDocument(), clipId('a'))?.clip.enabled).toBe(false);
+  });
+
+  it('splits on S and cuts every track on shift+S', () => {
+    const harness = mount({ playhead: 50 });
+    press('s');
+    expect(spans(harness.store)).toHaveLength(3);
+
+    cleanup();
+    const all = mount({ playhead: 50, selected: [] });
+    press('S', { shift: true });
+    expect(spans(all.store)).toHaveLength(3);
+  });
+
+  it('ignores a key typed into a text field', () => {
+    // Delete must never take a clip while the user is editing a prompt.
+    const harness = mount({});
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    });
+
+    expect(spans(harness.store)).toHaveLength(2);
+    input.remove();
+  });
+
+  it('leaves modified keys to the application', () => {
+    const harness = mount({});
+    press('Delete', { ctrl: true });
+    expect(spans(harness.store)).toHaveLength(2);
+  });
+
+  it('acts on the selection as it is now, not as it was at mount', () => {
+    // The listener is attached once; a closure over the mounting props would delete the wrong clip.
+    const store = createDocumentStore(documentWith([clip('a', 0, 100), clip('b', 200, 300)]));
+    let selected = new Set(['a']);
+
+    function Host(): null {
+      useClipEdits({
+        store,
+        selected,
+        playhead: frameIndex(50),
+        ripple: false,
+        onReject: () => undefined,
+        onRemoved: () => undefined,
+      });
+      return null;
+    }
+    const view = render(<Host />);
+
+    selected = new Set(['b']);
+    view.rerender(<Host />);
+    press('Delete');
+
+    expect(spans(store).map(([id]) => id)).toEqual(['a']);
+  });
+});
+
+describe('what the mode promises', () => {
+  it('says which removal is about to happen', () => {
+    expect(describeRippleMode(true)).toContain('closes the gap');
+    expect(describeRippleMode(false)).toContain('leaves a gap');
+  });
+});
+
+describe('pruning a selection', () => {
+  it('drops ids nothing answers to any more', () => {
+    const document = documentWith([clip('a', 0, 100)]);
+    expect([...survivingSelection(document, new Set(['a', 'gone']))]).toEqual(['a']);
+  });
+
+  it('returns the same set when everything survives, so React sees no change', () => {
+    const document = documentWith([clip('a', 0, 100)]);
+    const selection = new Set(['a']);
+    expect(survivingSelection(document, selection)).toBe(selection);
+  });
+});

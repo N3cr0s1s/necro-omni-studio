@@ -250,8 +250,17 @@ function TimelineToolbar({
       <Button
         tone={rippleEnabled ? 'active' : 'default'}
         onClick={onToggleRipple}
+        // A mode, not a verb: it changes what Delete does, and saying so on the control is the
+        // difference between a toggle a user trusts and one they experiment with.
+        title={
+          rippleEnabled
+            ? 'Ripple on: deleting closes the gap, pulling the rest of the track back'
+            : 'Ripple off: deleting leaves a gap, so everything downstream keeps its timing'
+        }
+        aria-pressed={rippleEnabled}
         style={{ height: token.controlHeightSm }}
       >
+        {rippleEnabled && <StatusDot color={token.accent} size={6} />}
         Ripple
       </Button>
 

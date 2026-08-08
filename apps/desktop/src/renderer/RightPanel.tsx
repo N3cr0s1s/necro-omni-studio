@@ -47,6 +47,13 @@ export interface RightPanelProps {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly onSplit: () => void;
+  readonly onSplitAllTracks: () => void;
+  /** Removes the selection. The Ripple toggle decides whether the gap closes. */
+  readonly onRemoveClip: () => void;
+  readonly onToggleClipEnabled: () => void;
+  /** What removal will do right now, so the button can say it rather than imply it. */
+  readonly removeLabel: string;
+  readonly removeHint: string;
   readonly onNudge: (delta: number) => void;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
@@ -117,6 +124,11 @@ function InspectorTab({
   canUndo,
   canRedo,
   onSplit,
+  onSplitAllTracks,
+  onRemoveClip,
+  onToggleClipEnabled,
+  removeLabel,
+  removeHint,
   onNudge,
   onUndo,
   onRedo,
@@ -143,9 +155,33 @@ function InspectorTab({
       />
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button onClick={onSplit} disabled={selectedClip === undefined}>
+        <Button onClick={onSplit} disabled={selectedClip === undefined} title="Split at the playhead (S)">
           Split at playhead
         </Button>
+        <Button onClick={onSplitAllTracks} title="Cut every unlocked track at the playhead (Shift+S)">
+          Split all tracks
+        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Named for what it will do, not for the key that does it. Which of the two removals is
+              about to happen is the Ripple toggle's state, and a button that said only "Delete"
+              would leave the user to remember it. */}
+          <Button
+            onClick={onRemoveClip}
+            disabled={selectedClip === undefined}
+            title={removeHint}
+            style={{ flex: 1 }}
+          >
+            {removeLabel}
+          </Button>
+          <Button
+            onClick={onToggleClipEnabled}
+            disabled={selectedClip === undefined}
+            title="Take the clip out of the composite without removing it (E)"
+            style={{ flex: 1 }}
+          >
+            Enable / disable
+          </Button>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button
             onClick={() => onNudge(-1)}

@@ -35,7 +35,6 @@ import {
   nextTrackId,
   removeTrack,
   toggleTrackFlag,
-  splitClip,
   trimClipEnd,
   trimClipStart,
 } from '@nos/editing';
@@ -55,6 +54,7 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { describeProxies, useProxies } from './use-proxies.js';
+import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
 import { useCacheStats } from './use-cache-stats.js';
 import { BrowserDetail } from './BrowserDetail.js';
@@ -498,14 +498,16 @@ export function App(): ReactNode {
     [store],
   );
 
-  const razor = useCallback(() => {
-    const target = [...selected][0];
-    if (target === undefined) return;
-    store.commit('split clip', (current) => {
-      const result = splitClip(current, target as ClipId, playhead, `${target}_b` as ClipId);
-      return result.ok ? result.value : current;
-    });
-  }, [playhead, selected, store]);
+  // Every one of these has existed in the editing layer since M3 and none could be invoked: the
+  // application could put clips on a timeline and never take one off.
+  const clipEdits = useClipEdits({
+    store,
+    selected,
+    playhead,
+    ripple,
+    onReject: setError,
+    onRemoved: () => setSelected(new Set()),
+  });
 
   return (
     <div
@@ -683,7 +685,12 @@ export function App(): ReactNode {
           selectedClip={[...selected][0]}
           canUndo={store.getSnapshot().canUndo}
           canRedo={store.getSnapshot().canRedo}
-          onSplit={razor}
+          onSplit={clipEdits.split}
+          onSplitAllTracks={clipEdits.splitAllTracks}
+          onRemoveClip={clipEdits.remove}
+          onToggleClipEnabled={clipEdits.toggleEnabled}
+          removeLabel={ripple ? 'Ripple delete' : 'Delete'}
+          removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
           onNudge={nudge}
           onAuthorManifest={() => setAuthoring(true)}
           onAcceptVariant={acceptVariant}
