@@ -221,7 +221,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2359 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2374 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Branch `build/foundation`, and `refactor/shadcn-baseui` on top of it (pushed).
@@ -254,6 +254,22 @@ ever tracking the first.
 - **A note was never shown.** §4 asks the browser to display markdown and reserves `notes/` for it;
   the browser showed the filename. Fixed: `@nos/media/notes/markdown` parses to a structure — never to
   an HTML string — and `NoteView` renders it.
+- **Every title was silently absent from every export.** Not an unreachable feature but a *wrong
+  result*: the export built its own plan without a text cache key and never called `registerText`, so
+  the plan asked for titles by clip id while the rasterizer stored them by content hash. The preview
+  showed the title; the delivered file did not. Fixed by `frame-render.ts`, which both paths now go
+  through — one compositor turns out to be necessary and not sufficient, because the two *preparations*
+  had drifted.
+- **Masks were never written to disk.** The content-addressed cache existed and was never given a
+  storage, so segmentation lived in React state alone and a reopened project rendered a bound effect
+  unmasked. Fixed: `mask-storage.ts` over the bridge, written when a run finishes.
+
+### The check that actually finds these
+
+Two of the five were unreachable UI and three were wrong output. Grepping for a document field with no
+writer finds the first kind. The second needs a different question, and it is the one worth asking
+here: **does the export do exactly what the preview does?** Anywhere the two paths are written
+separately, they will diverge, and the divergence is invisible until a render finishes.
 
 One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
 graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
