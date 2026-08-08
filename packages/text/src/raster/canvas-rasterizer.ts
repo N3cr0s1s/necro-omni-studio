@@ -6,6 +6,7 @@ import {
   contentCacheKey,
 } from '../contracts/text-raster.js';
 import { buildAdvances, wrapText } from './typewriter.js';
+import { clamp01 } from '@nos/core';
 
 /**
  * Canvas 2D text rasterization.
@@ -186,11 +187,6 @@ function outlineExtent(content: TextContent, pixelRatio: number): number {
 function toCss(color: RgbaColor): string {
   const channel = (value: number): number => Math.round(clamp01(value) * 255);
   return `rgba(${channel(color.r)}, ${channel(color.g)}, ${channel(color.b)}, ${clamp01(color.a)})`;
-}
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
 }
 
 function get2d(

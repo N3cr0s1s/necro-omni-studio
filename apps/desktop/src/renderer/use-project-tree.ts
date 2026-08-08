@@ -10,6 +10,7 @@ import {
 } from '@nos/media';
 import { assetPath } from '@nos/core';
 import type { DesktopBridge, FolderEntry } from '../main/ipc-contract.js';
+import { bridge } from './bridge.js';
 
 /**
  * The project folder tree.
@@ -39,10 +40,6 @@ export interface ProjectTree {
   readonly watcher: WatcherStatus;
   readonly truncated: boolean;
   refresh(): void;
-}
-
-function bridge(): DesktopBridge | undefined {
-  return (globalThis as { nos?: DesktopBridge }).nos;
 }
 
 export async function walkProject(

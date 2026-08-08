@@ -13,6 +13,7 @@ import {
 import { createComfyUiBackend, patchGraph } from '@nos/backend-comfyui';
 import type { DesktopBridge } from '../main/ipc-contract.js';
 import { socketMessages } from './socket-messages.js';
+import { bridge } from './bridge.js';
 
 /**
  * The generator runtime.
@@ -110,10 +111,6 @@ export function parseUpload(
   } catch {
     return undefined;
   }
-}
-
-function bridge(): DesktopBridge | undefined {
-  return (globalThis as { nos?: DesktopBridge }).nos;
 }
 
 export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRuntime {

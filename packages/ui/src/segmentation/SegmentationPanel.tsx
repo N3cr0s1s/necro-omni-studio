@@ -8,7 +8,14 @@ import {
   SquareDashedIcon,
   XIcon,
 } from 'lucide-react';
-import { type FrameIndex, type FrameSpan, endExclusive, frameIndex, spanFromBounds } from '@nos/core';
+import {
+  type FrameIndex,
+  type FrameSpan,
+  endExclusive,
+  frameIndex,
+  spanFromBounds,
+  clamp01,
+} from '@nos/core';
 import {
   type MaskPrompt,
   type MaskSession,
@@ -412,8 +419,4 @@ export function MaskPointOverlay({
       })}
     </div>
   );
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
 }

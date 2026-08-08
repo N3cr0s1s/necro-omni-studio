@@ -6,6 +6,7 @@
  * nothing but the language.
  */
 export * from './lang/brand.js';
+export * from './lang/numbers.js';
 export * from './lang/result.js';
 export * from './lang/validate.js';
 export * from './time/index.js';

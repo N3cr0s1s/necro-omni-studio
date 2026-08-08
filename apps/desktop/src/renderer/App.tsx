@@ -144,6 +144,7 @@ import { useProjectTree } from './use-project-tree.js';
 import { describeEditError } from './edit-errors.js';
 import { useConfirmation } from './use-confirmation.js';
 import { SHORTCUT_GROUPS } from './shortcuts.js';
+import { bridge } from './bridge.js';
 
 /**
  * The application shell.
@@ -175,11 +176,6 @@ function emptyProject(name: string): TimelineDocument {
 function parentFolder(path: string): string {
   const index = path.lastIndexOf('/');
   return index === -1 ? '' : path.slice(0, index);
-}
-
-/** The bridge, or `undefined` when the UI runs in a plain browser (the visual harness). */
-function bridge(): DesktopBridge | undefined {
-  return (globalThis as { nos?: DesktopBridge }).nos;
 }
 
 /**

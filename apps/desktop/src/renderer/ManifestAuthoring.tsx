@@ -18,8 +18,8 @@ import { Button } from '@nos/ui/components/ui/button';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Spinner } from '@nos/ui/components/ui/spinner';
-import type { DesktopBridge } from '../main/ipc-contract.js';
 import { GENERATORS_FOLDER } from './use-generator-library.js';
+import { bridge } from './bridge.js';
 
 /**
  * Authoring a manifest (spec §5.9).
@@ -39,10 +39,6 @@ export interface ManifestAuthoringProps {
   readonly onClose: () => void;
   /** Called after a successful write, so the library reloads and the registry revalidates. */
   readonly onSaved: () => void;
-}
-
-function bridge(): DesktopBridge | undefined {
-  return (globalThis as { nos?: DesktopBridge }).nos;
 }
 
 export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthoringProps): ReactNode {

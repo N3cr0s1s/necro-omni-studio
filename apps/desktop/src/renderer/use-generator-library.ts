@@ -6,6 +6,7 @@ import {
   parseManifestFile,
 } from '@nos/generators';
 import type { DesktopBridge } from '../main/ipc-contract.js';
+import { bridge } from './bridge.js';
 
 /**
  * The project's generator library.
@@ -98,10 +99,6 @@ export interface LibraryOptions {
   /** Node classes the backend reports. `undefined` means it has not answered yet. */
   readonly installedNodeClasses?: ReadonlySet<string>;
   readonly backends?: ReadonlySet<string>;
-}
-
-function bridge(): DesktopBridge | undefined {
-  return (globalThis as { nos?: DesktopBridge }).nos;
 }
 
 export function useGeneratorLibrary(

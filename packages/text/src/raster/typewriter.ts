@@ -1,4 +1,5 @@
 import type { GlyphAdvances, LineAdvances } from '../contracts/text-raster.js';
+import { clamp01 } from '@nos/core';
 
 /**
  * The typewriter reveal.
@@ -229,9 +230,4 @@ function alignOrigin(lineWidth: number, boxWidth: number, align: 'left' | 'cente
     default:
       return 0;
   }
-}
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
 }
