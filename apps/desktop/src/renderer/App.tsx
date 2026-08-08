@@ -34,6 +34,7 @@ import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
+import { useMediaImport } from './use-media-import.js';
 import { defaultRange, describeTiming, useExportRun } from './use-export.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
@@ -354,6 +355,14 @@ export function App(): ReactNode {
     });
   }, [playhead, store]);
 
+  const mediaImport = useMediaImport({
+    document,
+    sidecar,
+    videoTrack: TRACKS.video,
+    audioTrack: TRACKS.audio,
+    commit: commitDocument,
+  });
+
   const razor = useCallback(() => {
     const target = [...selected][0];
     if (target === undefined) return;
@@ -418,7 +427,7 @@ export function App(): ReactNode {
         </div>
       )}
 
-      {(error ?? drag.rejection ?? exportRun.error) !== undefined && (
+      {(error ?? drag.rejection ?? exportRun.error ?? mediaImport.error) !== undefined && (
         <div
           role="alert"
           style={{
@@ -428,12 +437,23 @@ export function App(): ReactNode {
             font: '500 11px ui-monospace, monospace',
           }}
         >
-          {error ?? drag.rejection ?? exportRun.error}
+          {error ?? drag.rejection ?? exportRun.error ?? mediaImport.error}
         </div>
       )}
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <MediaBrowser tree={tree.tree ?? buildTree([])} watcher={tree.watcher} onActivate={() => undefined} />
+        <MediaBrowser
+          tree={tree.tree ?? buildTree([])}
+          watcher={tree.watcher}
+          onRescan={tree.refresh}
+          onActivate={(asset) => {
+            void mediaImport.run(asset, playhead).then((id) => {
+              // Selected on arrival, because the next thing a user does with a clip they just added is
+              // almost always to it.
+              if (id !== undefined) setSelected(new Set([id]));
+            });
+          }}
+        />
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Preview document={drag.document} frame={playhead} sidecar={sidecar} />
