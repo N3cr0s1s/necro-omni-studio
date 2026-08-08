@@ -16,6 +16,7 @@ import {
 import { Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
 import { token } from '../tokens/tokens.js';
 import { ClipBody } from './ClipBody.js';
+import type { ClipStrip } from './clip-strip.js';
 import {
   type RulerTick,
   type TimelineViewport,
@@ -47,8 +48,8 @@ export interface TimelineProps {
   readonly snapEnabled: boolean;
   readonly rippleEnabled: boolean;
 
-  /** Filmstrip/waveform URLs by clip id, supplied as derivations complete. */
-  readonly stripUrls?: ReadonlyMap<string, string>;
+  /** Filmstrips and waveforms by clip id, supplied as derivations complete. */
+  readonly strips?: ReadonlyMap<string, ClipStrip>;
 
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
@@ -151,7 +152,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                 track={track}
                 viewport={viewport}
                 selectedClips={props.selectedClips}
-                {...(props.stripUrls !== undefined ? { stripUrls: props.stripUrls } : {})}
+                {...(props.strips !== undefined ? { strips: props.strips } : {})}
                 {...(props.onClipPointerDown !== undefined
                   ? { onClipPointerDown: props.onClipPointerDown }
                   : {})}
@@ -461,7 +462,7 @@ function TrackLane({
   track,
   viewport,
   selectedClips,
-  stripUrls,
+  strips,
   onClipPointerDown,
   onSelectClip,
   onTrimStart,
@@ -470,7 +471,7 @@ function TrackLane({
   readonly track: Track;
   readonly viewport: TimelineViewport;
   readonly selectedClips: ReadonlySet<string>;
-  readonly stripUrls?: ReadonlyMap<string, string>;
+  readonly strips?: ReadonlyMap<string, ClipStrip>;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -499,7 +500,7 @@ function TrackLane({
           geometry={spanGeometry(viewport, clip.span)}
           heightPx={track.height}
           selected={selectedClips.has(clip.id)}
-          {...(stripUrls?.get(clip.id) !== undefined ? { stripUrl: stripUrls.get(clip.id)! } : {})}
+          {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
           onPointerDown={(clipId, event) => {
             onSelectClip?.(clipId, event.shiftKey || event.metaKey);
             onClipPointerDown?.(clipId, event);

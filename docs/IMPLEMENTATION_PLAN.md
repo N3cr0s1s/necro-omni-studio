@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1508 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1546 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1400,3 +1400,35 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   otherwise. The editing layer refuses a collision, as it does for every other
   operation; finding the first free frame first is what turns that refusal into the
   result the user wanted rather than an error they have to resolve by hand.
+
+- 2026-08-08: Filmstrips and waveforms on clips. The `stripUrls` prop had been
+  wired to nothing since the timeline was built, so every clip was a flat
+  rectangle — the sidecar produced strips that nothing displayed.
+
+  Wiring it exposed a contract gap worth more than the feature. A filmstrip covers
+  a whole **asset**, but a clip shows a **range** of one, so the image can only be
+  placed if its span is known — and the renderer cannot recover that: the requested
+  rate is not what came back, because a long source is capped to 900 columns and
+  resampled. So `/media/derive` now reports what a filmstrip actually spans, on the
+  reused path as well as the fresh one, and stores it in a dotted sibling file so a
+  cache hit stays a cache hit. A strip whose span is unknown is **not drawn at
+  all** — it could only be stretched or tiled, and both put pictures under moments
+  they do not belong to, which is worse than a blank clip: the strip is what an
+  editor reads to find the frame to cut on.
+
+  `ClipStrip` states the placement in *clip widths* rather than pixels or seconds,
+  because the pixel width changes with every zoom and the placement does not. It
+  renders as an `<img>` inside a clipping box rather than a background image, since
+  CSS background percentages resolve against the difference between image and box —
+  percentage `width`/`left` on a child resolve against the box, which is exactly the
+  arithmetic the model describes. Verified live: splitting a clip at its midpoint
+  gives two halves at `width: 200%`, `left: 0%` and `left: -100%`.
+
+  Waveforms take the other path, because peaks are resolution-independent — one
+  derivation serves every zoom — so the picture is drawn in the renderer at the size
+  the clip is shown. Two rules there came from looking at the result rather than the
+  code: silence draws a **centre line**, not nothing, because nothing is
+  indistinguishable from "not derived yet"; and the drawing is normalised against
+  the **whole file** (capped at 12×), because material mastered at −20 dBFS drew a
+  two-pixel line that read as silence, while normalising per visible range would
+  make the same clip change loudness as it was trimmed.

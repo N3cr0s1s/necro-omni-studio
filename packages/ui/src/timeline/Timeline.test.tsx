@@ -295,6 +295,72 @@ describe('ruler', () => {
   });
 });
 
+describe('strips', () => {
+  function stripImage(clip: string): HTMLImageElement | null {
+    return document.querySelector(`[data-clip-id="${clip}"] img`);
+  }
+
+  it('draws nothing until a derivation arrives', () => {
+    renderTimeline();
+    expect(stripImage('a')).toBeNull();
+  });
+
+  it('places an asset-wide filmstrip against the range the clip shows', () => {
+    // A strip five clip-widths long, starting two widths before the clip: the numbers the placement
+    // model produced have to survive the trip into CSS, or the pictures land under the wrong frames.
+    renderTimeline({
+      strips: new Map([['a', { url: 'file:strip.jpg', widths: 5, offset: 2 }]]),
+    });
+
+    const image = stripImage('a');
+    expect(image?.getAttribute('src')).toBe('file:strip.jpg');
+    expect(image?.style.width).toBe('500%');
+    expect(image?.style.left).toBe('-200%');
+  });
+
+  it('clips the overhang, so a strip stays inside its clip', () => {
+    renderTimeline({
+      strips: new Map([['a', { url: 'file:strip.jpg', widths: 5, offset: 2 }]]),
+    });
+    const layer = document.querySelector('[data-clip-id="a"] [data-strip-kind]');
+    expect((layer as HTMLElement | null)?.style.overflow).toBe('hidden');
+  });
+
+  it('gives a waveform the whole clip and a filmstrip a band', () => {
+    // Different jobs: a waveform *is* the clip's content, a filmstrip sits under a label that has to
+    // stay readable.
+    const doc = makeDocument([video('a', 0, 300)]);
+    const strips = new Map([['a', { url: 'file:strip.jpg', widths: 1, offset: 0 }]]);
+    renderTimeline({ document: doc, strips });
+
+    const layer = document.querySelector('[data-clip-id="a"] [data-strip-kind]') as HTMLElement;
+    expect(layer.dataset['stripKind']).toBe('filmstrip');
+    expect(layer.style.height).toBe('34px');
+  });
+
+  it('keeps the label above the strip', () => {
+    // A full-height waveform painted last would cover the one thing that names the clip.
+    renderTimeline({
+      strips: new Map([['a', { url: 'file:strip.jpg', widths: 1, offset: 0 }]]),
+    });
+
+    const clip = document.querySelector('[data-clip-id="a"]') as HTMLElement;
+    const children = [...clip.children];
+    const strip = children.findIndex((node) => node.hasAttribute('data-strip-kind'));
+    const label = children.findIndex((node) => node.textContent?.includes('a'));
+    expect(strip).toBeLessThan(label);
+  });
+
+  it('leaves a strip out of the accessibility tree', () => {
+    // It carries no information a screen reader can use, and an unlabelled image in every clip would
+    // be noise between the clip's own name and its controls.
+    renderTimeline({
+      strips: new Map([['a', { url: 'file:strip.jpg', widths: 1, offset: 0 }]]),
+    });
+    expect(stripImage('a')?.getAttribute('alt')).toBe('');
+  });
+});
+
 describe('trim handles', () => {
   it('renders grab areas at both edges of a wide clip', () => {
     renderTimeline();

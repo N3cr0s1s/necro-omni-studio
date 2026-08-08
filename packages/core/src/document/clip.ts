@@ -236,6 +236,17 @@ export function clipSource(clip: Clip): MediaSource | undefined {
   return clip.kind === 'text' ? undefined : clip.source;
 }
 
+/**
+ * A clip's retime factor, or 1 for kinds that cannot be retimed.
+ *
+ * Stills and titles have no source rate to stretch, so they answer 1 rather than `undefined`:
+ * callers converting timeline time to source time want a number they can multiply by, and every
+ * one of them having to write `?? 1` is how a missing factor eventually gets forgotten.
+ */
+export function clipSpeed(clip: Clip): number {
+  return clip.kind === 'video' || clip.kind === 'audio' ? clip.speed.factor : 1;
+}
+
 /** Every clip kind except text carries a transform; audio has none. */
 export function clipTransform(clip: Clip): ClipTransform | undefined {
   return clip.kind === 'audio' ? undefined : clip.transform;

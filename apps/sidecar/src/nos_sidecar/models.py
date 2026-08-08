@@ -96,6 +96,20 @@ class DeriveRequest(StrictModel):
     spec: DerivedSpecModel = Field(discriminator="kind")
 
 
+class FilmstripCoverageModel(BaseModel):
+    """What a filmstrip image actually spans.
+
+    Reported rather than assumed, because the renderer cannot recover it from the image: a strip
+    covers the whole asset, so drawing it against a *clip* means knowing how much time it holds.
+    The requested rate is not enough either — a long source is capped to a fixed column count and
+    resampled, so what came back may span the same time at a coarser rate than was asked for.
+    """
+
+    duration_seconds: float
+    columns: int
+    thumbnails_per_second: float
+
+
 class DerivedArtifactModel(BaseModel):
     kind: str
     key: str
@@ -103,6 +117,8 @@ class DerivedArtifactModel(BaseModel):
     """Project-relative path under ``cache/``."""
     reused: bool
     """True when the artifact was already cached, so the UI can skip a progress indicator."""
+    filmstrip: FilmstripCoverageModel | None = None
+    """Present for filmstrips, on both fresh and reused results."""
 
 
 class ScanRequest(StrictModel):

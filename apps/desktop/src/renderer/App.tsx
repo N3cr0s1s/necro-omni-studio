@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type Clip,
   type ClipId,
   type FrameIndex,
   type FrameRate,
@@ -34,6 +35,7 @@ import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
+import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
 import { defaultRange, describeTiming, useExportRun } from './use-export.js';
 import { RightPanel } from './RightPanel.js';
@@ -355,6 +357,14 @@ export function App(): ReactNode {
     });
   }, [playhead, store]);
 
+  // Measured from the same viewport the timeline draws with, so a waveform is rendered at the width it
+  // is actually shown rather than at a guess.
+  const widthForClip = useCallback(
+    (clip: Clip) => Math.max(1, clip.span.duration / Math.max(0.0001, framesPerPixel)),
+    [framesPerPixel],
+  );
+  const strips = useClipStrips({ document, sidecar, framesPerPixel, widthForClip });
+
   const mediaImport = useMediaImport({
     document,
     sidecar,
@@ -441,6 +451,24 @@ export function App(): ReactNode {
         </div>
       )}
 
+      {/* A missing filmstrip is not an error — the clip still edits — but it is not nothing either:
+          without a line saying so, a permanently blank strip reads as a bug in the timeline. */}
+      {strips.failures.length > 0 && (
+        <div
+          role="status"
+          style={{
+            padding: '6px 16px',
+            background: 'rgba(255, 176, 32, 0.10)',
+            color: 'var(--nos-warn)',
+            font: '500 11px ui-monospace, monospace',
+          }}
+        >
+          {strips.failures.length === 1
+            ? `no strip for ${strips.failures[0]}`
+            : `no strip for ${strips.failures.length} clips — ${strips.failures[0]}`}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <MediaBrowser
           tree={tree.tree ?? buildTree([])}
@@ -461,6 +489,7 @@ export function App(): ReactNode {
           <div ref={laneRef} style={{ flex: 'none' }}>
             <Timeline
               document={drag.document}
+              strips={strips.strips}
               viewport={viewport}
               playhead={playhead}
               selectedClips={selected}

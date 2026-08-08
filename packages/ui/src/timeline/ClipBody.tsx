@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { type Clip, type ClipId, isGenerated, passCount } from '@nos/core';
 import { token } from '../tokens/tokens.js';
+import type { ClipStrip } from './clip-strip.js';
 import { type SpanGeometry } from './viewport.js';
 
 /**
@@ -18,8 +19,8 @@ export interface ClipBodyProps {
   readonly geometry: SpanGeometry;
   readonly heightPx: number;
   readonly selected: boolean;
-  /** URL of the filmstrip or waveform image, once derived. Absent means not ready yet. */
-  readonly stripUrl?: string;
+  /** Filmstrip or waveform image and its placement, once derived. Absent means not ready yet. */
+  readonly strip?: ClipStrip;
   readonly onPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -74,7 +75,7 @@ export function ClipBody({
   geometry,
   heightPx,
   selected,
-  stripUrl,
+  strip,
   onPointerDown,
   onTrimStart,
   onTrimEnd,
@@ -115,7 +116,19 @@ export function ClipBody({
       style={style}
       onPointerDown={(event) => onPointerDown?.(clip.id, event)}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space2, minWidth: 0 }}>
+      {/* First, so everything else paints over it: an audio strip fills the clip, and a waveform
+          drawn on top of the label would hide the one thing that names the clip. */}
+      {strip !== undefined && <StripLayer clip={clip} strip={strip} />}
+
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: token.space2,
+          minWidth: 0,
+        }}
+      >
         {isGenerated(clip) && (
           <span aria-hidden="true" style={{ font: '400 9px sans-serif', color: token.generated }}>
             ✦
@@ -152,32 +165,58 @@ export function ClipBody({
         </div>
       )}
 
-      {stripUrl !== undefined && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: clip.kind === 'audio' ? '60%' : 34,
-            backgroundImage: `url(${stripUrl})`,
-            // `repeat-x` on a tiled filmstrip: the strip is rendered once at import and tiles to fill
-            // whatever width the clip currently has, so zooming does not require a re-render.
-            backgroundRepeat: 'repeat-x',
-            backgroundSize: 'auto 100%',
-            opacity: 0.85,
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-
       {showHandles && (
         <>
           <TrimHandle side="start" onPointerDown={(event) => onTrimStart?.(clip.id, event)} />
           <TrimHandle side="end" onPointerDown={(event) => onTrimEnd?.(clip.id, event)} />
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The filmstrip or waveform behind a clip's label.
+ *
+ * An `<img>` inside a clipping box rather than a background image, because the placement is a
+ * fraction of the clip's width and CSS background percentages resolve against the *difference*
+ * between the image and its box, not against the box. Percentage `width` and `left` on a child do
+ * resolve against the box, which is exactly the arithmetic `ClipStrip` describes.
+ *
+ * Audio fills the clip and video sits along the bottom: a waveform is the clip's whole content,
+ * where a filmstrip is a band under a label that still has to be readable.
+ */
+function StripLayer({ clip, strip }: { readonly clip: Clip; readonly strip: ClipStrip }): ReactNode {
+  const audio = clip.kind === 'audio';
+
+  return (
+    <div
+      aria-hidden="true"
+      data-strip-kind={audio ? 'waveform' : 'filmstrip'}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: audio ? '100%' : 34,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}
+    >
+      <img
+        src={strip.url}
+        alt=""
+        draggable={false}
+        style={{
+          position: 'absolute',
+          top: 0,
+          height: '100%',
+          width: `${strip.widths * 100}%`,
+          left: `${-strip.offset * 100}%`,
+          maxWidth: 'none',
+          opacity: 0.85,
+        }}
+      />
     </div>
   );
 }

@@ -208,6 +208,63 @@ class TestFilmstrip:
         assert probed["image"]["height"] == 20
         assert probed["image"]["width"] > 20 * 3
 
+    def test_reports_what_the_strip_spans(self, client: TestClient) -> None:
+        # Without this the renderer cannot place the strip against a clip: the image covers the
+        # whole asset, so drawing the range a trimmed clip shows needs to know how much it holds.
+        artifact = client.post(
+            "/media/derive",
+            json={
+                "asset": "media/landscape.mp4",
+                "spec": {"kind": "filmstrip", "thumbnail_height": 20, "thumbnails_per_second": 2},
+            },
+        ).json()
+
+        coverage = artifact["filmstrip"]
+        assert coverage["columns"] == 4
+        assert coverage["thumbnails_per_second"] == 2
+        assert coverage["duration_seconds"] == pytest.approx(2.0, abs=0.2)
+
+    def test_reports_coverage_from_the_cache_too(self, client: TestClient) -> None:
+        # The second open of a project is the common case, and a reused strip that arrived without
+        # its description would be placed wrongly rather than not at all.
+        request = {
+            "asset": "media/landscape.mp4",
+            "spec": {"kind": "filmstrip", "thumbnail_height": 24, "thumbnails_per_second": 1},
+        }
+        first = client.post("/media/derive", json=request).json()
+        second = client.post("/media/derive", json=request).json()
+
+        assert second["reused"] is True
+        assert second["filmstrip"] == first["filmstrip"]
+
+    def test_reproduces_a_strip_whose_description_was_lost(
+        self, client: TestClient, project: Path
+    ) -> None:
+        request = {
+            "asset": "media/landscape.mp4",
+            "spec": {"kind": "filmstrip", "thumbnail_height": 28, "thumbnails_per_second": 1},
+        }
+        first = client.post("/media/derive", json=request).json()
+        artifact = project / first["path"]
+        artifact.with_name(f".{artifact.name}.meta.json").unlink()
+
+        second = client.post("/media/derive", json=request).json()
+        assert second["reused"] is False
+        assert second["filmstrip"] == first["filmstrip"]
+
+    def test_keeps_the_description_out_of_the_project_view(
+        self, client: TestClient, project: Path
+    ) -> None:
+        client.post(
+            "/media/derive",
+            json={
+                "asset": "media/landscape.mp4",
+                "spec": {"kind": "filmstrip", "thumbnail_height": 32, "thumbnails_per_second": 1},
+            },
+        )
+        entries = client.post("/project/scan", json={}).json()["entries"]
+        assert not any(entry["path"].endswith(".meta.json") for entry in entries)
+
 
 class TestWaveform:
     def test_produces_decodable_peaks(self, client: TestClient, project: Path) -> None:

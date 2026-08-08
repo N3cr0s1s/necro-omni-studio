@@ -8,6 +8,7 @@ keeps this logic testable without HTTP.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -18,6 +19,7 @@ from .models import (
     AudioStreamModel,
     DerivedArtifactModel,
     DerivedSpecModel,
+    FilmstripCoverageModel,
     FilmstripSpecModel,
     ImageModel,
     MediaMetadataModel,
@@ -237,9 +239,18 @@ class MediaService:
         absolute = self._root / relative
 
         if absolute.exists() and absolute.stat().st_size > 0:
-            return DerivedArtifactModel(
-                kind=spec.kind, key=self.cache_key(digest, spec), path=relative, reused=True
-            )
+            coverage = self._read_coverage(absolute) if spec.kind == "filmstrip" else None
+            # A filmstrip without its coverage is unusable — the renderer cannot place it — so a
+            # cache entry written before the sidecar recorded coverage is re-produced rather than
+            # returned. One regeneration per stale entry keeps a single code path downstream.
+            if spec.kind != "filmstrip" or coverage is not None:
+                return DerivedArtifactModel(
+                    kind=spec.kind,
+                    key=self.cache_key(digest, spec),
+                    path=relative,
+                    reused=True,
+                    filmstrip=coverage,
+                )
 
         existing = self._in_flight.get(relative)
         if existing is not None:
@@ -270,6 +281,7 @@ class MediaService:
         # format" — and the dot prefix keeps it hidden and out of the scan either way.
         temporary = destination.with_name(f".{destination.stem}.partial{destination.suffix}")
 
+        coverage: FilmstripCoverageModel | None = None
         try:
             if isinstance(spec, ProxySpecModel):
                 await ffmpeg.run(
@@ -284,13 +296,15 @@ class MediaService:
                     timeout=3600,
                 )
             elif isinstance(spec, FilmstripSpecModel):
-                await self._produce_filmstrip(source, temporary, spec)
+                coverage = await self._produce_filmstrip(source, temporary, spec)
             elif isinstance(spec, WaveformSpecModel):
                 await self._produce_waveform(source, temporary, spec)
             else:  # pragma: no cover - the union is closed
                 raise MediaError("unsupported", f"unknown derivation {spec!r}", status=400)
 
             temporary.replace(destination)
+            if coverage is not None:
+                self._write_coverage(destination, coverage)
         except ffmpeg.FfmpegError as error:
             temporary.unlink(missing_ok=True)
             raise MediaError("derivation-failed", f"{asset}: {error}", status=422) from error
@@ -300,12 +314,39 @@ class MediaService:
             raise
 
         return DerivedArtifactModel(
-            kind=spec.kind, key=self.cache_key(digest, spec), path=relative, reused=False
+            kind=spec.kind,
+            key=self.cache_key(digest, spec),
+            path=relative,
+            reused=False,
+            filmstrip=coverage,
         )
+
+    @staticmethod
+    def _coverage_path(artifact: Path) -> Path:
+        # A dotted sibling rather than a field in a shared index: the description lives and dies
+        # with the file it describes, so deleting a cache entry by hand cannot leave a stale record
+        # behind, and the folder stays free of anything the scan would show.
+        return artifact.with_name(f".{artifact.name}.meta.json")
+
+    def _read_coverage(self, artifact: Path) -> FilmstripCoverageModel | None:
+        try:
+            return FilmstripCoverageModel.model_validate_json(
+                self._coverage_path(artifact).read_bytes()
+            )
+        except (OSError, ValueError):
+            # Missing or corrupt: treated as absent, which re-produces the artifact. Never fatal —
+            # a bad byte in a cache description must not make the project unopenable.
+            return None
+
+    def _write_coverage(self, artifact: Path, coverage: FilmstripCoverageModel) -> None:
+        # The strip itself is already written; losing its description costs one regeneration next
+        # time, which is not worth failing the request over.
+        with contextlib.suppress(OSError):
+            self._coverage_path(artifact).write_text(coverage.model_dump_json(), encoding="utf-8")
 
     async def _produce_filmstrip(
         self, source: Path, destination: Path, spec: FilmstripSpecModel
-    ) -> None:
+    ) -> FilmstripCoverageModel:
         """Render the filmstrip as a single tiled image.
 
         The column count must be computed from the duration, because ``tile`` needs a fixed grid
@@ -334,6 +375,10 @@ class MediaService:
                 columns=thumbnails,
             ),
             timeout=1800,
+        )
+
+        return FilmstripCoverageModel(
+            duration_seconds=duration, columns=thumbnails, thumbnails_per_second=rate
         )
 
     async def _produce_waveform(
