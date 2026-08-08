@@ -729,6 +729,21 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Export rules (keep these)
 
+- The delivered file carries the **sound**. The encoder was sent an audio codec and a bitrate and never
+  an audio stream, so every export was silent — an interface (`OfflineMixRenderer`) declared for the
+  job and never implemented. A codec setting is not an audio path.
+- The mix is rendered from the **same `MixPlan`** playback schedules. WYSIWYG is not only about pixels:
+  a separately-written mix diverges exactly where nobody checks — a solo, an eased fade.
+- Offline, not recorded. `OfflineAudioContext` is deterministic and faster than real time; capturing
+  playback takes as long as the sequence and folds in whatever the device did.
+- 16-bit conversion is **asymmetric on purpose**: two's complement runs to −32768, so scaling both
+  directions by 32768 turns a full-scale peak into its own inverse — the loudest possible click, exactly
+  where the music was loudest.
+- Checking that a stream *exists* is not checking it carries anything. Read the level; digital silence
+  is about −91 dB.
+- Drive the **whole loop**, not its parts. Generate → accept → export found this; every individual step
+  had been tested and passed.
+
 - Export has **no plan builder of its own**. It calls `buildRenderPlan` exactly as
   the preview does; a second builder is precisely how the two would drift and break
   the WYSIWYG guarantee. A test asserts the two plans are identical for a frame.
