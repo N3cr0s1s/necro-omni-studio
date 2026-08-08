@@ -7,6 +7,7 @@
  */
 export * from './tokens/tokens.js';
 export * from './primitives/Primitives.js';
+export * from './primitives/ContextMenu.js';
 export * from './media-browser/MediaBrowser.js';
 export * from './timeline/index.js';
 export * from './transport/index.js';

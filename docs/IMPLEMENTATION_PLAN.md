@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1952 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1992 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2072,3 +2072,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   and routing it through the mixer would mean inventing all three to throw them
   away. Selecting a different variant stops the previous one, which is the one
   thing that would otherwise make an A/B comparison useless.
+
+- 2026-08-08: **Issues #4 and #5** — the link, and the right-click menu.
+
+  #4 asked for three things and had one: linked clips already moved together after
+  this morning's work. What was missing was *seeing* the link and *breaking* it.
+  A chain badge on the clip closes the first — a user whose sound follows their
+  picture without knowing why cannot tell a feature from a fault. Unlinking closes
+  the second, and it breaks **both sides, always**: a one-sided link is worse than
+  none, because every operation that follows one would behave differently depending
+  on which half the user grabbed. Linking is refused when either clip already
+  belongs to a pair, rather than stealing a partner and leaving exactly that state.
+
+  #5 reported that `Ctrl+Z`, `Ctrl+Y` and `Del` did nothing and there was no
+  right-click menu. The keys were wired earlier the same day, after the issue was
+  filed; the menu was genuinely missing, and it is the more interesting half. Every
+  action it offers already exists on a button or behind a shortcut — a context menu
+  is not new capability but the **discoverable** path to what a user can already do.
+
+  Three decisions in it are worth stating. The menu keeps the **same rows whatever
+  the state**, disabling rather than hiding, so it does not change shape under the
+  pointer between right-clicks. Every row **names its shortcut**, so the menu
+  teaches the keyboard instead of competing with it. And right-clicking an
+  unselected clip **selects it first** — acting on something other than what was
+  clicked is the one behaviour a context menu must never have.
+
+  What the menu *offers* is a value, computed from the document, the selection and
+  the clipboard, and tested without rendering anything; the component itself only
+  knows how to be dismissed, chosen from, and kept on screen.

@@ -273,6 +273,19 @@ export function hasAnimation(clip: Clip): boolean {
   );
 }
 
+/**
+ * The clip this one is linked to, if any.
+ *
+ * A video clip and the audio split out of the same file at import are one thing to a user, so an
+ * operation on either reaches both. The link is *stored* on each side rather than inferred from
+ * matching asset paths, because two cuts of the same file must not appear linked.
+ */
+export function linkedPartner(clip: Clip): ClipId | undefined {
+  if (clip.kind === 'video') return clip.linkedAudio;
+  if (clip.kind === 'audio') return clip.linkedVideo;
+  return undefined;
+}
+
 /** Count of render passes a clip contributes, for the spec's 8-pass warning. */
 export function passCount(clip: Clip): number {
   return clip.effects.filter((effect) => effect.enabled).length;

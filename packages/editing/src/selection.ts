@@ -1,8 +1,8 @@
 import {
-  type Clip,
   type ClipId,
   type SelectionRegion,
   type TimelineDocument,
+  linkedPartner,
   overlaps,
   trackClips,
 } from '@nos/core';
@@ -78,15 +78,9 @@ export function withLinkedClips(document: TimelineDocument, selected: readonly C
   for (const track of document.sequence.tracks) {
     for (const clip of trackClips(track)) {
       if (!result.has(clip.id)) continue;
-      const partner = linkedClip(clip);
+      const partner = linkedPartner(clip);
       if (partner !== undefined) result.add(partner);
     }
   }
   return [...result] as ClipId[];
-}
-
-function linkedClip(clip: Clip): ClipId | undefined {
-  if (clip.kind === 'video') return clip.linkedAudio;
-  if (clip.kind === 'audio') return clip.linkedVideo;
-  return undefined;
 }

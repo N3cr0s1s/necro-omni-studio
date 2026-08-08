@@ -69,6 +69,14 @@ export interface TimelineProps {
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
   /**
+   * A right-click on a clip, or on empty timeline when no clip is named.
+   *
+   * Reported with viewport coordinates and the clip under the pointer; *what the menu offers* is the
+   * shell's business, because the answer depends on the selection, the clipboard and the history —
+   * none of which this component knows about.
+   */
+  readonly onContextMenu?: (clip: ClipId | undefined, x: number, y: number) => void;
+  /**
    * A rectangle dragged across empty timeline.
    *
    * Reported as a frame span and the tracks it crossed, never as pixels: which clips that touches is
@@ -250,6 +258,14 @@ export function Timeline(props: TimelineProps): ReactNode {
           <div
             style={{ position: 'relative' }}
             onPointerDown={marquee.begin}
+            onContextMenu={(event) => {
+              if (props.onContextMenu === undefined) return;
+              // Only the background: a clip handles its own, and letting this fire too would open the
+              // menu for the lane behind whichever clip was clicked.
+              if (event.target !== event.currentTarget) return;
+              event.preventDefault();
+              props.onContextMenu(undefined, event.clientX, event.clientY);
+            }}
             onDragOver={(event) => {
               if (props.onDropAsset === undefined) return;
               if (!event.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
@@ -304,6 +320,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                     ? { onClipPointerDown: props.onClipPointerDown }
                     : {})}
                   {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
+                  {...(props.onContextMenu !== undefined ? { onContextMenu: props.onContextMenu } : {})}
                   {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
                   {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
                 />
@@ -1121,6 +1138,7 @@ function TrackLane({
   onToggleExpandClip,
   onClipPointerDown,
   onSelectClip,
+  onContextMenu,
   onTrimStart,
   onTrimEnd,
 }: {
@@ -1132,6 +1150,7 @@ function TrackLane({
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
+  readonly onContextMenu?: (clip: ClipId | undefined, x: number, y: number) => void;
   /**
    * A rectangle dragged across empty timeline.
    *
@@ -1172,6 +1191,7 @@ function TrackLane({
             onSelectClip?.(clipId, event.shiftKey || event.metaKey);
             onClipPointerDown?.(clipId, event);
           }}
+          {...(onContextMenu !== undefined ? { onContextMenu } : {})}
           {...(onTrimStart !== undefined ? { onTrimStart } : {})}
           {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
         />

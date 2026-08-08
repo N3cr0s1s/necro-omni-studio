@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { type Clip, type ClipId, hasAnimation, isGenerated, passCount } from '@nos/core';
+import { type Clip, type ClipId, hasAnimation, isGenerated, linkedPartner, passCount } from '@nos/core';
 import { token } from '../tokens/tokens.js';
 import type { ClipStrip } from './clip-strip.js';
 import { type SpanGeometry } from './viewport.js';
@@ -30,6 +30,8 @@ export interface ClipBodyProps {
   readonly expanded?: boolean;
   /** Opens or closes the clip. Absent leaves the disclosure off entirely. */
   readonly onToggleExpand?: (clip: ClipId) => void;
+  /** A right-click on this clip, reported with viewport coordinates. */
+  readonly onContextMenu?: (clip: ClipId, x: number, y: number) => void;
 }
 
 /** Fill and border for a clip, by media kind and provenance. */
@@ -86,6 +88,7 @@ export function ClipBody({
   passWarningThreshold = 8,
   expanded = false,
   onToggleExpand,
+  onContextMenu,
 }: ClipBodyProps): ReactNode {
   const palette = clipPalette(clip);
   const passes = passCount(clip);
@@ -121,6 +124,13 @@ export function ClipBody({
       data-generated={isGenerated(clip) ? 'true' : 'false'}
       style={style}
       onPointerDown={(event) => onPointerDown?.(clip.id, event)}
+      onContextMenu={(event) => {
+        if (onContextMenu === undefined) return;
+        event.preventDefault();
+        // Stopped, or the lane behind would open its own menu for the empty space under this clip.
+        event.stopPropagation();
+        onContextMenu(clip.id, event.clientX, event.clientY);
+      }}
     >
       {/* First, so everything else paints over it: an audio strip fills the clip, and a waveform
           drawn on top of the label would hide the one thing that names the clip. */}
@@ -185,6 +195,18 @@ export function ClipBody({
           <ClipChip tone={passes > passWarningThreshold ? 'warn' : 'ok'} label={`fx ${passes}`} />
         )}
         {clip.effects.some((effect) => effect.mask !== undefined) && <ClipChip tone="mask" label="mask" />}
+        {/* A link is the reason two clips move as one, so it has to be visible: a user whose sound
+            follows their picture without knowing why cannot tell a feature from a fault. */}
+        {linkedPartner(clip) !== undefined && (
+          <span
+            data-clip-linked="true"
+            aria-hidden="true"
+            title="Linked to its audio or video — they move together"
+            style={{ font: '400 9px sans-serif', color: token.textSoft, flex: 'none' }}
+          >
+            ⛓
+          </span>
+        )}
       </div>
 
       {clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (

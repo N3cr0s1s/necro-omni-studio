@@ -37,12 +37,13 @@ import {
   removeTrack,
   renameTrack,
   setTrackHeight,
+  unlinkClips,
   toggleTrackFlag,
   trimClipEnd,
   trimClipStart,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
-import { Button, ExportDialog, LevelMeter, MediaBrowser, Timeline } from '@nos/ui';
+import { Button, ContextMenu, ExportDialog, LevelMeter, MediaBrowser, Timeline } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
@@ -57,6 +58,7 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { describeProxies, useProxies } from './use-proxies.js';
+import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
@@ -438,6 +440,7 @@ export function App(): ReactNode {
   const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
   /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
   const resizing = useRef(false);
+  const [menu, setMenu] = useState<{ clip: ClipId | undefined; x: number; y: number } | undefined>(undefined);
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
@@ -531,6 +534,63 @@ export function App(): ReactNode {
     onSelect: (clips) => setSelected(new Set(clips as readonly string[])),
   });
 
+  /**
+   * Runs whatever the context menu chose.
+   *
+   * One switch rather than an item-carrying-a-callback list, so the menu stays a value: a description
+   * of what is offered, which can be tested without rendering anything.
+   */
+  const runClipMenuAction = useCallback(
+    (action: ClipMenuAction) => {
+      switch (action) {
+        case 'cut':
+          clipEdits.cut();
+          break;
+        case 'copy':
+          clipEdits.copy();
+          break;
+        case 'paste':
+          clipEdits.paste();
+          break;
+        case 'duplicate':
+          clipEdits.duplicate();
+          break;
+        case 'split':
+          clipEdits.split();
+          break;
+        case 'toggle-enabled':
+          clipEdits.toggleEnabled();
+          break;
+        case 'unlink':
+          store.commit('unlink clips', (current) => {
+            const target = menu?.clip;
+            if (target === undefined) return current;
+            const result = unlinkClips(current, target);
+            if (!result.ok) {
+              setError(describeEdit(result.error));
+              return current;
+            }
+            return result.value;
+          });
+          break;
+        case 'copy-attributes':
+          clipEdits.copyAttributes();
+          break;
+        case 'paste-attributes':
+          clipEdits.pasteAttributes();
+          break;
+        case 'remove':
+          clipEdits.remove();
+          break;
+        default: {
+          const unreachable: never = action;
+          throw new Error(`Unhandled menu action ${String(unreachable)}`);
+        }
+      }
+    },
+    [clipEdits, menu, store],
+  );
+
   return (
     <div
       style={{
@@ -559,6 +619,23 @@ export function App(): ReactNode {
 
       {autosave.offer !== undefined && (
         <RecoveryOffer savedAt={autosave.offeredAt} onAccept={autosave.accept} onDiscard={autosave.discard} />
+      )}
+
+      {menu !== undefined && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={clipMenuItems({
+            document,
+            clip: menu.clip,
+            selectionSize: selected.size,
+            canPaste: clipEdits.canPaste,
+            hasAttributes: clipEdits.attributeSummary !== undefined,
+            ripple,
+          })}
+          onChoose={(action) => runClipMenuAction(action as ClipMenuAction)}
+          onClose={() => setMenu(undefined)}
+        />
       )}
 
       {authoring && (
@@ -703,6 +780,12 @@ export function App(): ReactNode {
                 void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
                   if (id !== undefined) setSelected(new Set([id]));
                 });
+              }}
+              onContextMenu={(clip, x, y) => {
+                // Right-clicking an unselected clip selects it first: acting on something other than
+                // what was clicked is the one behaviour a context menu must never have.
+                if (clip !== undefined && !selected.has(clip)) setSelected(new Set([clip as string]));
+                setMenu({ clip, x, y });
               }}
               onSelectRegion={(region, additive) =>
                 setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))

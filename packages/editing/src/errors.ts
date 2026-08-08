@@ -38,7 +38,9 @@ export type EditError =
   /** A track id already in use. Adding one anyway would replace a track and everything on it. */
   | { readonly kind: 'duplicate-track'; readonly track: TrackId }
   /** A name that is blank, which nothing could be referred to by. */
-  | { readonly kind: 'empty-name'; readonly track?: TrackId; readonly clip?: ClipId };
+  | { readonly kind: 'empty-name'; readonly track?: TrackId; readonly clip?: ClipId }
+  /** A clip that already belongs to a linked pair. Stealing it would leave a one-sided link. */
+  | { readonly kind: 'already-linked'; readonly clip: ClipId };
 
 export function describeEditError(error: EditError): string {
   switch (error.kind) {
@@ -64,6 +66,8 @@ export function describeEditError(error: EditError): string {
       return `Track ${error.track} already exists`;
     case 'empty-name':
       return 'A name cannot be blank';
+    case 'already-linked':
+      return `Clip ${error.clip} is already linked to something else`;
     default: {
       const unreachable: never = error;
       throw new Error(`Unhandled edit error ${JSON.stringify(unreachable)}`);
