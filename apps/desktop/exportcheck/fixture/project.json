@@ -84,7 +84,15 @@
                   "ease": "linear"
                 }
               ]
-            }
+            },
+            "effects": [
+              {
+                "id": "tint_1",
+                "effect": "exportcheck_tint",
+                "enabled": true,
+                "params": {}
+              }
+            ]
           }
         ]
       }

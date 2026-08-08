@@ -15,7 +15,7 @@ import {
   createProgramCache,
   createRenderTargetPool,
 } from '@nos/compositor';
-import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+import type { EffectRegistry } from '@nos/effects';
 import { type GpuSemaphore, withGpu } from '@nos/generators';
 import { buildMixPlan, createOfflineMixRenderer, encodeWav } from '@nos/audio';
 import { createAudioBufferCache } from './audio-buffers.js';
@@ -100,6 +100,15 @@ export interface ExportRunOptions {
    */
   readonly gpu: GpuSemaphore;
   /**
+   * The effects the preview is using, project-local ones included.
+   *
+   * Passed in rather than rebuilt from the builtins. This used to construct its own registry from
+   * `BUILTIN_EFFECTS` alone, so a clip carrying an effect from the project's `effects/` folder rendered
+   * in the preview and fell back to passthrough in the delivered file — the effect simply absent, with
+   * nothing reported. One registry for both paths is the same rule as one compositor for both.
+   */
+  readonly effects: EffectRegistry;
+  /**
    * Where a bound mask's frame comes from, so an export masks what the preview masked.
    *
    * Optional because an export of a project with no masks needs none — but absent when there *are*
@@ -124,7 +133,7 @@ function nextJobSequence(): string {
   return `${Date.now().toString(36)}_${jobSequence}`;
 }
 
-export function useExportRun({ document, sidecar, masks, gpu }: ExportRunOptions): ExportRun {
+export function useExportRun({ document, sidecar, masks, gpu, effects }: ExportRunOptions): ExportRun {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -171,14 +180,14 @@ export function useExportRun({ document, sidecar, masks, gpu }: ExportRunOptions
         message: 'waiting for the GPU',
       });
       void withGpu(gpu, 'export', settings.outputPath, () =>
-        run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks),
+        run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks, effects),
       )
         .catch((failure: unknown) => {
           setError(failure instanceof Error ? failure.message : String(failure));
         })
         .finally(() => setRunning(false));
     },
-    [gpu, running, sidecar, masks],
+    [gpu, running, sidecar, masks, effects],
   );
 
   return { running, progress, error, timing, start, cancel };
@@ -192,6 +201,7 @@ async function run(
   report: (progress: ExportProgress) => void,
   reportTiming: (timing: ExportTiming) => void,
   masks: MaskSource | undefined,
+  effects: EffectRegistry,
 ): Promise<void> {
   const { width, height } = settings.resolution;
   const total = frameCountFor(settings.range);
@@ -205,7 +215,6 @@ async function run(
   gl.getExtension('EXT_color_buffer_float');
   gl.getExtension('OES_texture_float_linear');
 
-  const effects = createEffectRegistry(BUILTIN_EFFECTS);
   const media = createMediaTextures(sidecar);
   const pool = createRenderTargetPool(gl);
   const compositor = createGlCompositor({

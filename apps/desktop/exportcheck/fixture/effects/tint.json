@@ -1,0 +1,9 @@
+{
+  "id": "exportcheck_tint",
+  "name": "Exportcheck tint",
+  "category": "effect",
+  "group": "Colour",
+  "shader": "tint.frag",
+  "samplers": ["source"],
+  "params": []
+}

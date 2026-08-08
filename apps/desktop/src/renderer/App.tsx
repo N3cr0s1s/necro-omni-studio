@@ -893,7 +893,13 @@ export function App(): ReactNode {
 
   // After the mask source, which it needs: an export that could not resolve a bound mask would render
   // it unmasked, and differ from the preview the user approved.
-  const exportRun = useExportRun({ document, sidecar, masks: maskSource, gpu: runtime.gpu });
+  const exportRun = useExportRun({
+    document,
+    sidecar,
+    masks: maskSource,
+    gpu: runtime.gpu,
+    effects: effects.registry,
+  });
 
   /** What an effect on the selected clip may be bound to. */
   const maskChoices: readonly MaskChoice[] = useMemo(() => {

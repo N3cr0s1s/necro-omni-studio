@@ -270,6 +270,52 @@ try {
         else console.log(`✓ the mix reached the delivered file (mean ${level} dB)`);
       }
 
+      /*
+       * The project's own effect, in the delivered file.
+       *
+       * The export built its effect registry from the builtins alone, so a clip carrying an effect from
+       * the project's `effects/` folder rendered in the preview and fell back to passthrough here — the
+       * effect simply absent, with nothing reported. The fixture's effect paints every lit pixel hard
+       * red, which no antialiasing or codec can be blamed for.
+       */
+      const rgb = spawnSync(
+        'ffmpeg',
+        [
+          ...['-v', 'error', '-i', delivered],
+          ...['-vf', 'select=eq(n\\,25)', '-vsync', '0', '-vframes', '1'],
+          ...['-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
+        ],
+        { maxBuffer: 1 << 28 },
+      ).stdout;
+
+      if (rgb.length < width * height * 3) {
+        fail('the delivered frame could not be read as colour');
+      } else {
+        let red = 0;
+        let litPixels = 0;
+        for (let index = 0; index < width * height * 3; index += 3 * 8) {
+          const r = rgb[index] ?? 0;
+          const g = rgb[index + 1] ?? 0;
+          const b = rgb[index + 2] ?? 0;
+          if (r > 40 || g > 40 || b > 40) {
+            litPixels += 1;
+            // Red-dominant by a wide margin, so a grey title cannot be mistaken for a tinted one.
+            if (r > 100 && r > g * 2 && r > b * 2) red += 1;
+          }
+        }
+        const share = litPixels === 0 ? 0 : red / litPixels;
+        if (litPixels === 0) fail('the delivered frame has nothing lit to check the effect against');
+        else if (share < 0.8) {
+          fail(
+            `the project's own effect did not reach the export — ${(share * 100).toFixed(0)}% of lit pixels are red`,
+          );
+        } else {
+          console.log(
+            `✓ a project-local effect reached the delivered file (${(share * 100).toFixed(0)}% red)`,
+          );
+        }
+      }
+
       const early = frameAt(4);
       if (early.length < width * height) {
         fail('the early frame could not be decoded');
