@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type TextClip,
@@ -57,6 +58,137 @@ const renderInspector = (overrides: Partial<Parameters<typeof TextInspector>[0]>
   render(<TextInspector document={withTitle()} clip="t1" onChange={onChange} {...overrides} />);
   return onChange;
 };
+
+/**
+ * The inspector wired to its own output, as the application wires it.
+ *
+ * The plain harness passes a fixed document, which is enough to assert what one edit commits — but not
+ * for anything that depends on the *result* being rendered back, like a section appearing when it is
+ * switched on, or a text field that must not accumulate what was already in it.
+ */
+function renderLive() {
+  const onChange = vi.fn();
+  function Harness(): ReactNode {
+    const [document, setDocument] = useState(withTitle);
+    return (
+      <TextInspector
+        document={document}
+        clip="t1"
+        onChange={(label, next) => {
+          onChange(label, next);
+          setDocument(next);
+        }}
+      />
+    );
+  }
+  render(<Harness />);
+  return onChange;
+}
+
+/** The committed content, for the fields that are about what the rasterizer draws. */
+const contentFrom = (onChange: ReturnType<typeof vi.fn>) => afterChange(onChange).content;
+
+/** A title that already has an outline, for the tests about editing and removing one. */
+function withOutline() {
+  const clip = createTextClip('t1', 0);
+  return {
+    document: documentWith([
+      { ...clip, content: { ...clip.content, outline: { width: 2, color: { r: 0, g: 0, b: 0, a: 1 } } } },
+    ]),
+  };
+}
+
+/**
+ * Outline and shadow.
+ *
+ * The rasterizer has drawn both since M7 — including the subtlety that a shadow is drawn *with* the
+ * outline rather than twice — and neither had a control, so the outline path had never once run. They
+ * are the two fields that make a title legible over footage the editor does not control.
+ */
+describe('outline and shadow', () => {
+  it('offers an outline, which nothing could switch on', async () => {
+    const onChange = renderInspector();
+    await userEvent.click(screen.getByLabelText('Outline'));
+
+    expect(contentFrom(onChange).outline?.width).toBeGreaterThan(0);
+  });
+
+  it('removes the field rather than storing a zero-width one', async () => {
+    // An outline of width zero would keep a colour the user set and cost a stroke pass for nothing;
+    // absence is what the rasterizer reads as "no outline".
+    const onChange = renderInspector(withOutline());
+    await userEvent.click(screen.getByLabelText('Outline'));
+
+    const content = contentFrom(onChange);
+    expect(content.outline).toBeUndefined();
+    expect('outline' in content).toBe(false);
+  });
+
+  it('edits an outline width', async () => {
+    const onChange = renderInspector(withOutline());
+    const field = screen.getByLabelText('Outline width');
+    await userEvent.clear(field);
+    await userEvent.type(field, '6{Enter}');
+
+    expect(contentFrom(onChange).outline?.width).toBe(6);
+  });
+
+  it('never takes a negative outline width, which would stroke inwards', async () => {
+    const onChange = renderInspector(withOutline());
+    const field = screen.getByLabelText('Outline width');
+    await userEvent.clear(field);
+    await userEvent.type(field, '-4{Enter}');
+
+    expect(contentFrom(onChange).outline?.width).toBe(0);
+  });
+
+  it('turns a shadow off, and back on to what it was', async () => {
+    const onChange = renderInspector();
+    await userEvent.click(screen.getByLabelText('Shadow'));
+    expect(contentFrom(onChange).shadow).toBeUndefined();
+  });
+
+  it('edits a shadow offset, including a negative one', async () => {
+    const onChange = renderInspector();
+    const field = screen.getByLabelText('Shadow offset y');
+    await userEvent.clear(field);
+    await userEvent.type(field, '-3{Enter}');
+
+    expect(contentFrom(onChange).shadow?.offsetY).toBe(-3);
+  });
+
+  it('hides a section´s fields while it is off, rather than disabling them', async () => {
+    renderLive();
+    expect(screen.queryByLabelText('Outline width')).toBeNull();
+    await userEvent.click(screen.getByLabelText('Outline'));
+    expect(screen.getByLabelText('Outline width')).toBeDefined();
+  });
+});
+
+describe('the rest of what the rasterizer reads', () => {
+  it('edits the font family', async () => {
+    const onChange = renderLive();
+    const field = screen.getByLabelText('Font');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Georgia, serif');
+
+    expect(contentFrom(onChange).font).toBe('Georgia, serif');
+  });
+
+  it('edits line height and letter spacing', async () => {
+    const onChange = renderInspector();
+
+    const lineHeight = screen.getByLabelText('Line height');
+    await userEvent.clear(lineHeight);
+    await userEvent.type(lineHeight, '1.6{Enter}');
+    expect(contentFrom(onChange).lineHeight).toBe(1.6);
+
+    const spacing = screen.getByLabelText('Letter spacing');
+    await userEvent.clear(spacing);
+    await userEvent.type(spacing, '2.5{Enter}');
+    expect(contentFrom(onChange).letterSpacing).toBe(2.5);
+  });
+});
 
 describe('creating a title', () => {
   it('is legible without further work', () => {

@@ -20,22 +20,42 @@ import {
   mergeGeneratedKeyframes,
 } from '@nos/text';
 import { TypeIcon } from 'lucide-react';
+import { NumberField } from '@nos/ui';
 import { Field, FieldTitle } from '@nos/ui/components/ui/field';
 import { Input } from '@nos/ui/components/ui/input';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { Switch } from '@nos/ui/components/ui/switch';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Textarea } from '@nos/ui/components/ui/textarea';
 
 /**
  * Text clip properties (spec §6.5).
  *
- * Font, size, colour, outline, shadow — the fields that decide what the rasterizer produces — plus the
- * in and out animation presets.
+ * Font, size, colour, line height, letter spacing, outline and shadow — every field the rasterizer
+ * reads — plus the in and out animation presets.
+ *
+ * All of it, now. Until this the panel offered five of the eleven, and its own comment claimed
+ * otherwise: outline and shadow had been rasterized since M7 with no control anywhere, which meant the
+ * outline path had never once run. They are the two fields that make a title legible over footage the
+ * editor does not control, so their absence was not cosmetic.
  *
  * The rule the presets follow, and the reason they are worth having: **a preset generates keyframes**.
  * It does not hide a curve behind a name. What "slide in" produces appears in the keyframe lane as
  * ordinary markers the user can drag, retime or delete, so there is no animation in this application
  * that cannot be edited. A preset that stayed opaque would be a second, invisible animation system.
  */
+
+/**
+ * A change to a text clip's content.
+ *
+ * Widened from `Partial<TextContent>` so that `outline` and `shadow` can be *cleared*: under
+ * `exactOptionalPropertyTypes` a `Partial` refuses an explicit `undefined`, which is exactly the value
+ * that means "no outline" here.
+ */
+type ContentPatch = Partial<Omit<TextContent, 'outline' | 'shadow'>> & {
+  readonly outline?: TextContent['outline'] | undefined;
+  readonly shadow?: TextContent['shadow'] | undefined;
+};
 
 export interface TextInspectorProps {
   readonly document: TimelineDocument;
@@ -56,6 +76,26 @@ export const DEFAULT_TEXT: TextContent = {
   // A soft shadow rather than none: white text over a bright shot is unreadable, and a title that
   // disappears on some footage is worse than one that is slightly heavier than necessary.
   shadow: { color: { r: 0, g: 0, b: 0, a: 0.65 }, blur: 12, offsetX: 0, offsetY: 2 },
+};
+
+/**
+ * What turning an outline on gives you.
+ *
+ * Black at 2 px, because an outline exists to separate a title from whatever is behind it and a thin
+ * dark edge does that on almost any footage. A user who wants something else changes two fields; one
+ * who wanted the default gets a legible title from one click.
+ */
+const DEFAULT_OUTLINE: NonNullable<TextContent['outline']> = {
+  width: 2,
+  color: { r: 0, g: 0, b: 0, a: 1 },
+};
+
+/** The same shadow a new title already carries, so turning it back on restores what was there. */
+const DEFAULT_SHADOW: NonNullable<TextContent['shadow']> = {
+  color: { r: 0, g: 0, b: 0, a: 0.65 },
+  blur: 12,
+  offsetX: 0,
+  offsetY: 2,
 };
 
 /** Frames a new title occupies: three seconds at 30 fps, the length of a readable lower third. */
@@ -90,8 +130,20 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
     onChange(label, replaceClip(document, next));
   };
 
-  const setContent = (patch: Partial<TextContent>): void => {
-    const content = { ...text.content, ...patch };
+  const setContent = (patch: ContentPatch): void => {
+    // An explicit `undefined` in the patch means *remove*, not "hold a key whose value is undefined".
+    // The two are the same to the rasterizer, which checks `!== undefined` — but not to the
+    // serializer, and a `project.json` carrying `"outline": null` would read back as a value rather
+    // than as an absence. So the two optional fields are rebuilt rather than spread.
+    const { outline: _outline, shadow: _shadow, ...rest } = { ...text.content, ...patch };
+    const outline = 'outline' in patch ? patch.outline : text.content.outline;
+    const shadow = 'shadow' in patch ? patch.shadow : text.content.shadow;
+
+    const content: TextContent = {
+      ...rest,
+      ...(outline !== undefined ? { outline } : {}),
+      ...(shadow !== undefined ? { shadow } : {}),
+    };
     // The label follows the text, because a timeline of clips all labelled "Title" is unreadable and
     // nobody renames them by hand.
     write('edit text', { ...text, content, label: content.text.slice(0, 40) || 'Title' });
@@ -161,6 +213,133 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
           />
         </Labelled>
       </div>
+
+      <Labelled label="Font">
+        {/*
+          A typed family rather than a list. The fonts on this machine are not enumerable without a
+          permission prompt, and a hardcoded menu would offer families the system may not have —
+          which fails silently, because canvas substitutes rather than refusing. A CSS family list
+          with a generic at the end is the honest control: `Inter, sans-serif` degrades on purpose.
+        */}
+        <Input
+          aria-label="Font"
+          value={text.content.font}
+          placeholder="system-ui, sans-serif"
+          onChange={(event) => setContent({ font: event.target.value })}
+        />
+      </Labelled>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Labelled label="Line height">
+          <NumberField
+            aria-label="Line height"
+            step={0.05}
+            value={text.content.lineHeight}
+            onCommit={(lineHeight) => setContent({ lineHeight })}
+            className="font-mono tabular-nums"
+          />
+        </Labelled>
+        <Labelled label="Letter spacing">
+          <NumberField
+            aria-label="Letter spacing"
+            step={0.5}
+            value={text.content.letterSpacing}
+            onCommit={(letterSpacing) => setContent({ letterSpacing })}
+            className="font-mono tabular-nums"
+          />
+        </Labelled>
+      </div>
+
+      {/*
+        Outline and shadow are what make a title legible over footage the editor does not control, and
+        the rasterizer has drawn both since M7 — including the subtlety that a shadow is drawn with the
+        outline rather than twice. Neither had a control, so the outline path had never run at all.
+      */}
+      <OptionalSection
+        label="Outline"
+        enabled={text.content.outline !== undefined}
+        onToggle={(on) => setContent({ outline: on ? DEFAULT_OUTLINE : undefined })}
+      >
+        {text.content.outline !== undefined && (
+          <div className="grid grid-cols-2 gap-2">
+            <Labelled label="Width">
+              <NumberField
+                aria-label="Outline width"
+                min={0}
+                step={0.5}
+                value={text.content.outline.width}
+                onCommit={(width) =>
+                  setContent({ outline: { ...text.content.outline!, width: Math.max(0, width) } })
+                }
+                className="font-mono tabular-nums"
+              />
+            </Labelled>
+            <Labelled label="Colour">
+              <Input
+                type="color"
+                aria-label="Outline colour"
+                value={toHex(text.content.outline.color)}
+                onChange={(event) =>
+                  setContent({ outline: { ...text.content.outline!, color: fromHex(event.target.value) } })
+                }
+                className="p-0.5"
+              />
+            </Labelled>
+          </div>
+        )}
+      </OptionalSection>
+
+      <OptionalSection
+        label="Shadow"
+        enabled={text.content.shadow !== undefined}
+        onToggle={(on) => setContent({ shadow: on ? DEFAULT_SHADOW : undefined })}
+      >
+        {text.content.shadow !== undefined && (
+          <div className="grid grid-cols-2 gap-2">
+            <Labelled label="Blur">
+              <NumberField
+                aria-label="Shadow blur"
+                min={0}
+                step={1}
+                value={text.content.shadow.blur}
+                onCommit={(blur) =>
+                  setContent({ shadow: { ...text.content.shadow!, blur: Math.max(0, blur) } })
+                }
+                className="font-mono tabular-nums"
+              />
+            </Labelled>
+            <Labelled label="Colour">
+              <Input
+                type="color"
+                aria-label="Shadow colour"
+                value={toHex(text.content.shadow.color)}
+                onChange={(event) =>
+                  setContent({ shadow: { ...text.content.shadow!, color: fromHex(event.target.value) } })
+                }
+                className="p-0.5"
+              />
+            </Labelled>
+            <Labelled label="Offset x">
+              <NumberField
+                aria-label="Shadow offset x"
+                step={1}
+                value={text.content.shadow.offsetX}
+                onCommit={(offsetX) => setContent({ shadow: { ...text.content.shadow!, offsetX } })}
+                className="font-mono tabular-nums"
+              />
+            </Labelled>
+            <Labelled label="Offset y">
+              <NumberField
+                aria-label="Shadow offset y"
+                step={1}
+                value={text.content.shadow.offsetY}
+                onCommit={(offsetY) => setContent({ shadow: { ...text.content.shadow!, offsetY } })}
+                className="font-mono tabular-nums"
+              />
+            </Labelled>
+          </div>
+        )}
+      </OptionalSection>
 
       <AnimationRow
         caption="Animate in"
@@ -289,6 +468,36 @@ function applyPreset(clip: TextClip, phase: 'in' | 'out', animation: TextAnimati
     ...(reveal !== undefined ? { reveal } : {}),
     ...(phase === 'in' ? { animateIn: animation } : { animateOut: animation }),
   };
+}
+
+/**
+ * A group of fields that only exists when it is switched on.
+ *
+ * A switch rather than a checkbox beside a heading, because absence is the meaningful state here:
+ * `outline: undefined` is what the rasterizer reads as "no outline", and the alternative — an outline
+ * of width zero — would keep a colour the user set and quietly cost a stroke pass.
+ */
+function OptionalSection({
+  label,
+  enabled,
+  onToggle,
+  children,
+}: {
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly onToggle: (enabled: boolean) => void;
+  readonly children: ReactNode;
+}): ReactNode {
+  return (
+    <div className="flex flex-col gap-2">
+      <Separator />
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</span>
+        <Switch aria-label={label} checked={enabled} onCheckedChange={onToggle} className="ml-auto" />
+      </div>
+      {children}
+    </div>
+  );
 }
 
 /**
