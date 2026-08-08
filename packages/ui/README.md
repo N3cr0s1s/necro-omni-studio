@@ -56,7 +56,7 @@ There is no "warning" role in the theme, and one has not been invented. Where a 
 fine and broken — a meter above −6 dBFS — it is a softened `destructive`, which stays correct under
 any palette in a way a hand-picked amber would not.
 
-## Two literal colours, and why they are not styling
+## Three literal colours, and why they are not styling
 
 - `apps/desktop/src/main/main.ts` — the `BrowserWindow` background. The main process runs unbundled
   and cannot read a stylesheet; this only colours the frame between the window opening and the
@@ -65,6 +65,10 @@ any palette in a way a hand-picked amber would not.
 - `apps/desktop/src/renderer/clip-strips.ts` — the waveform body. That is _pixels_: rasterised into a
   PNG and cached beside the audio, so it cannot follow a theme that changes at runtime any more than
   a video frame can.
+- `src/media-browser/MediaPreview.tsx` — the letterbox behind a picture. A matte is the _absence_ of
+  image, not a surface, and it has to be the same in both themes: a frame judged against light grey
+  in one theme and near-black in the other is judged twice, differently. Every editor mattes to
+  black for the same reason.
 
 ## Deviations from the registry as shipped
 
