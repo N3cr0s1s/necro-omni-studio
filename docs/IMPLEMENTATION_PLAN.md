@@ -761,6 +761,16 @@ so it can gate a release:
 
 ### Effect registry rules (keep these)
 
+- The project's `effects/` folder is **loaded**, not just created. §4 reserves it and §7
+  asks that no concrete effect be baked in; for a long time the folder existed and
+  nothing read it, so the extension point was theoretical.
+- Project effects are registered **after** the builtins, so a project replaces one by
+  declaring the same id rather than having to pick a different name.
+- A library that reads the project folder must depend on the **open project**, not load
+  once on mount: no project is open at mount, `listFolder` correctly answers empty, and
+  the folder is then never read again. It also has to reload on change, or one project's
+  effects survive into the next.
+
 - A manifest parameter has **both** a `key` (document side) and a `uniform` (shader
   side), and they routinely differ (`amount` vs `u_amount`). Conflating them drops
   every such parameter — an effect that renders but ignores its controls. The
