@@ -278,6 +278,11 @@ Export throughput is fixed, and the fix came from measurement rather than
 intuition: frames now leave through the main process, and a 1080p 120-frame
 export went from about **85 s to 5.1 s**.
 
+**Every component in `@nos/ui` is now mounted in the shell**, including the
+manifest inspector — so a new generative capability really is a JSON file
+authored from inside the application, with no code. Verified against a real
+ComfyUI graph.
+
 ### Editing rules (keep these)
 
 - Every operation is a pure `TimelineDocument -> Result<TimelineDocument,
@@ -1264,3 +1269,19 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   implement. Each was refuted in minutes by a measurement that took one command.
   The timing breakdown stays in the product for that reason — it is not debug
   scaffolding, it is the thing that makes the next report actionable.
+
+- 2026-08-08: The manifest inspector is mounted, which was the last component in
+  `@nos/ui` that existed and was tested but could not be reached from the running
+  application.
+
+  It matters more than a wiring task usually would, because it is the screen that
+  makes the framework's central claim true rather than merely architectural. The
+  loop was verified end to end against a real graph: picking
+  `fish_s2_voiceclone_hu_workflow.json` listed **20 literal inputs**, ticking one
+  made it a parameter, the draft validated clean, saving wrote
+  `authored_tts.manifest.json` into the project's `generators/` folder, and the
+  library reloaded with `authored_tts` in the generator list beside the five
+  shipped ones.
+
+  A new generative capability, created from a ComfyUI export, inside the
+  application, with no code written.
