@@ -14,6 +14,7 @@ import {
   type ProjectInfo,
   type RecoverySnapshot,
   type SidecarInfo,
+  isOpenableLink,
 } from './ipc-contract.js';
 import {
   ProjectPathError,
@@ -423,6 +424,12 @@ function registerHandlers(): void {
 
   ipcMain.handle(IPC.revealInFolder, async (_event, path: unknown): Promise<void> => {
     shell.showItemInFolder(resolveInProject(requireProject(), requireString(path)));
+  });
+
+  ipcMain.handle(IPC.openExternal, async (_event, url: unknown): Promise<boolean> => {
+    if (!isOpenableLink(requireString(url))) return false;
+    await shell.openExternal(requireString(url));
+    return true;
   });
 }
 

@@ -6,3 +6,4 @@
  */
 export * from './contracts/index.js';
 export * from './tree/folder-tree.js';
+export * from './notes/markdown.js';

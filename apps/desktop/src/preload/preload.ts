@@ -45,6 +45,7 @@ const bridge: DesktopBridge = {
   onWatcherStatus: (listener) => subscribe(IPC_EVENTS.watcherStatus, listener),
   sidecarInfo: () => ipcRenderer.invoke(IPC.sidecarInfo),
   revealInFolder: (path) => ipcRenderer.invoke(IPC.revealInFolder, path),
+  openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   backendFetch: (path, init) => ipcRenderer.invoke(IPC.backendFetch, path, init),
   backendUpload: (path, file, field) => ipcRenderer.invoke(IPC.backendUpload, path, file, field),
   writeProvenance: (asset, contents) => ipcRenderer.invoke(IPC.writeProvenance, asset, contents),

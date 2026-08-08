@@ -48,6 +48,8 @@ export const IPC = {
   sidecarInfo: 'sidecar:info',
   /** Reveals a project-relative path in the OS file manager. */
   revealInFolder: 'shell:reveal',
+  /** Opens a web link in the user's browser, never in this window. */
+  openExternal: 'shell:open-external',
   /** Performs an HTTP call against the generator backend, from the main process. */
   backendFetch: 'backend:fetch',
   /** Uploads a project file to the backend as multipart form data. */
@@ -221,6 +223,15 @@ export interface DesktopBridge {
   watcherStatus(): Promise<WatcherStatus>;
   sidecarInfo(): Promise<SidecarInfo>;
   revealInFolder(path: string): Promise<void>;
+  /**
+   * Opens a link in the user's browser.
+   *
+   * Resolves to `false` for anything the main process refuses. The URL comes from a note in the
+   * project folder — a file that arrived from a client, a download or a generator — so it is
+   * untrusted input, and the *scheme* is the whole of the danger: `file:` would open a local path
+   * through the shell, and on Windows several schemes are handler-invocable with arguments.
+   */
+  openExternal(url: string): Promise<boolean>;
 
   /**
    * Calls the generator backend through the main process.
@@ -260,4 +271,25 @@ export interface DesktopBridge {
 
 declare global {
   var nos: DesktopBridge | undefined;
+}
+
+/**
+ * Whether a link from a note may be handed to the shell.
+ *
+ * An allow-list of two schemes, checked in the *main* process where the decision cannot be bypassed by
+ * anything the renderer runs. The URL comes from a markdown file in the project folder, which arrives
+ * from a client, a download or a generator — so the scheme is the whole of the danger. `file:` would
+ * open a local path through the shell; on Windows a registered handler can be invoked with arguments;
+ * and `javascript:` is refused here as well as by the renderer never using an `href`.
+ *
+ * Exported so the rule is tested rather than trusted.
+ */
+export function isOpenableLink(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    // Not a URL at all — a relative path, or prose that looked like one. Nothing to open.
+    return false;
+  }
 }

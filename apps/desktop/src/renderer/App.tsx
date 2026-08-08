@@ -899,7 +899,15 @@ export function App(): ReactNode {
           onRescan={tree.refresh}
           {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
           onSelect={setBrowserSelection}
-          detail={<BrowserDetail asset={assetDetail} cache={cache} />}
+          detail={
+            <BrowserDetail
+              asset={assetDetail}
+              cache={cache}
+              // Through the shell, so a link in a note opens in the system browser rather than
+              // navigating this window away from the editor.
+              onOpenLink={(href) => void bridge()?.openExternal(href)}
+            />
+          }
           menu={browserMenu}
           {...(renamingPath !== undefined ? { renamingPath } : {})}
           onRename={(path, name) => {

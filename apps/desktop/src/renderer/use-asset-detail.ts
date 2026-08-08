@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetPath } from '@nos/core';
 import { type AssetProvenance, parseProvenance, provenancePath } from '@nos/generators';
+import { type MarkdownBlock, isMarkdown, parseMarkdown } from '@nos/media';
 import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 import { shouldProxy } from './use-proxies.js';
 
@@ -31,6 +32,15 @@ export interface AssetDetail {
    * nothing to reconstruct a prompt or a seed from.
    */
   readonly provenance: AssetProvenance | undefined;
+  /**
+   * The note's own content, when the selected file is one.
+   *
+   * The spec reserves `notes/` for "szabad tartalom: markdown, referenciák, bármi" and asks the
+   * browser to show it. Parsed here rather than in the panel so the panel stays presentational, and
+   * because a note's *title* — its first heading — is worth having wherever there is room for one line
+   * and not for a document.
+   */
+  readonly note: readonly MarkdownBlock[] | undefined;
 }
 
 export interface AssetDetailOptions {
@@ -69,6 +79,7 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
   const { asset, sidecar, cacheEntries, readText } = options;
   const [probed, setProbed] = useState<Probed | undefined>(undefined);
   const [provenance, setProvenance] = useState<AssetProvenance | undefined>(undefined);
+  const [note, setNote] = useState<readonly MarkdownBlock[] | undefined>(undefined);
 
   // Looked for on every file, not only those under `generated/`: a generated clip the user moved or
   // renamed keeps its record beside it, and refusing to read one because of where the file now sits
@@ -88,6 +99,29 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
       // A record written by an older version or edited by hand leaves the pane silent rather than
       // broken: the file it describes is still perfectly usable.
       if (parsed.ok) setProvenance(parsed.value);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [asset, readText]);
+
+  // Read whole, because a note is prose: there is no header to sample and no size at which showing
+  // the first half would be more useful than showing none. A note large enough to matter is a note
+  // somebody wrote by hand.
+  useEffect(() => {
+    if (asset === undefined || readText === undefined || !isMarkdown(asset)) {
+      setNote(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setNote(undefined);
+
+    void readText(asset).then((text) => {
+      // An unreadable note leaves the pane as it was rather than reporting a failure: the file is
+      // still in the tree, and the watcher will say if it goes.
+      if (!cancelled && text !== undefined) setNote(parseMarkdown(text));
     });
 
     return () => {
@@ -145,6 +179,7 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
     // generated, and the purple treatment follows the provenance rather than the path.
     isGenerated: isGeneratedAsset(asset) || provenance !== undefined,
     provenance,
+    note,
   };
 }
 

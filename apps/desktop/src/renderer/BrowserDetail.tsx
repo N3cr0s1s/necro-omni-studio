@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { DatabaseIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { provenanceRows } from '@nos/generators';
-import { AssetDetail } from '@nos/ui';
+import { AssetDetail, NoteView } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
@@ -21,6 +21,14 @@ import { type CacheStats, formatCacheSize } from './use-cache-stats.js';
 export interface BrowserDetailProps {
   readonly asset: AssetDetailValue | undefined;
   readonly cache: CacheStats;
+  /**
+   * Opens a link from a note somewhere that is not this window.
+   *
+   * Absent leaves them inert, which is the safe default: this renderer *is* the application, so
+   * following a link in place would replace the editor with a web page and lose unsaved work — in a
+   * window with no back button.
+   */
+  readonly onOpenLink?: ((href: string) => void) | undefined;
 }
 
 /**
@@ -63,7 +71,7 @@ function Provenance({ asset }: { readonly asset: AssetDetailValue }): ReactNode 
   );
 }
 
-export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
+export function BrowserDetail({ asset, cache, onOpenLink }: BrowserDetailProps): ReactNode {
   return (
     <div className="flex flex-col gap-3">
       {asset === undefined ? (
@@ -77,6 +85,18 @@ export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
           {...(asset.hasProxy !== undefined ? { hasProxy: asset.hasProxy } : {})}
           {...(asset.hasFilmstrip !== undefined ? { hasFilmstrip: asset.hasFilmstrip } : {})}
         />
+      )}
+
+      {asset?.note !== undefined && (
+        <>
+          <Separator />
+          {/* Bounded like the provenance block, and for the same reason: a note is prose of any
+              length, and one that grew with the file would push the cache line — which is always
+              relevant — off the screen. */}
+          <ScrollArea className="max-h-64">
+            <NoteView blocks={asset.note} {...(onOpenLink !== undefined ? { onOpenLink } : {})} />
+          </ScrollArea>
+        </>
       )}
 
       {asset?.provenance !== undefined && <Provenance asset={asset} />}
