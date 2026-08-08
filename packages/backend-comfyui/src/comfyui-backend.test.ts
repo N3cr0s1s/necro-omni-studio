@@ -6,6 +6,7 @@ import {
   type ComfyUiTransport,
   createComfyUiBackend,
   enumOptionsOf,
+  graphNodeTitles,
   parseSocketEvent,
   viewQuery,
 } from './comfyui-backend.js';
@@ -256,6 +257,43 @@ describe('progress', () => {
     expect(events).toHaveLength(0);
   });
 
+  it('names the node it is executing, using the graph that was submitted', async () => {
+    // Observed against a real run: the bar read `executing 30:3` for most of a minute. The graph knows
+    // that node as `KSampler`, and a user reading a footer needs the name, not the address.
+    const transport = fakeTransport({ '/prompt': { prompt_id: 'job1' } }, [
+      { type: 'executing', data: { node: '30:3', prompt_id: 'job1' } },
+      { type: 'executing', data: { node: null, prompt_id: 'job1' } },
+    ]);
+    const backend = backendWith(transport);
+
+    await backend.submit({
+      graph: {
+        '30:3': { class_type: 'KSampler', _meta: { title: 'KSampler' } },
+        '54:14': { class_type: 'ImageRemoveBackground' },
+      },
+      assets: [],
+    });
+
+    const events = [];
+    for await (const event of backend.progress('job1')) events.push(event);
+    expect(events).toEqual([{ stage: 'KSampler' }]);
+  });
+
+  it('falls back to the node id when the graph does not name it', async () => {
+    // A subgraph ComfyUI expanded after submission reports ids we never saw. An opaque stage still
+    // beats one that stops updating.
+    const transport = fakeTransport({ '/prompt': { prompt_id: 'job1' } }, [
+      { type: 'executing', data: { node: '99:1', prompt_id: 'job1' } },
+      { type: 'executing', data: { node: null, prompt_id: 'job1' } },
+    ]);
+    const backend = backendWith(transport);
+    await backend.submit({ graph: { '30:3': { class_type: 'KSampler' } }, assets: [] });
+
+    const events = [];
+    for await (const event of backend.progress('job1')) events.push(event);
+    expect(events).toEqual([{ stage: 'executing 99:1' }]);
+  });
+
   it('closes the socket even when the consumer breaks out early', async () => {
     // A leaked socket per job would accumulate for the session.
     const transport = fakeTransport({}, [
@@ -436,6 +474,44 @@ describe('parseSocketEvent', () => {
     // A NaN fraction would render an empty progress bar with no clue why.
     const event = parseSocketEvent({ type: 'progress', data: {} });
     expect(event).toMatchObject({ kind: 'progress', value: 0, max: 0 });
+  });
+});
+
+describe('reading node names out of a graph', () => {
+  it('prefers the title its author gave a node', () => {
+    // `Remove background?` describes the step better than `PrimitiveBoolean` ever could.
+    const titles = graphNodeTitles({
+      '57': { class_type: 'PrimitiveBoolean', _meta: { title: 'Remove background?' } },
+    });
+    expect(titles.get('57')).toBe('Remove background?');
+  });
+
+  it('falls back to the class when there is no title', () => {
+    expect(graphNodeTitles({ '3': { class_type: 'KSampler' } }).get('3')).toBe('KSampler');
+  });
+
+  it('keeps the ids ComfyUI actually reports, subgraphs included', () => {
+    // `30:3` is how a node inside a subgraph is addressed, and it is what arrives on the socket.
+    const titles = graphNodeTitles({
+      '30:3': { class_type: 'KSampler', _meta: { title: 'KSampler' } },
+      '54:14': { class_type: 'Loader', _meta: { title: 'Load Background Removal Model' } },
+    });
+    expect([...titles.keys()]).toEqual(['30:3', '54:14']);
+  });
+
+  it('leaves out a node it cannot name rather than inventing one', () => {
+    const titles = graphNodeTitles({
+      '1': { inputs: {} },
+      '2': { class_type: '' },
+      '3': { class_type: 'VAEDecode' },
+    });
+    expect([...titles.keys()]).toEqual(['3']);
+  });
+
+  it('is empty for anything that is not a graph', () => {
+    for (const value of [null, undefined, 'a string', 42, []]) {
+      expect(graphNodeTitles(value).size, String(value)).toBe(0);
+    }
   });
 });
 

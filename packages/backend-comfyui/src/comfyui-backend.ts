@@ -108,6 +108,37 @@ interface ComfyFileRef {
 }
 
 /**
+ * What each node in a submitted graph is called.
+ *
+ * ComfyUI's `executing` event names a node by **id** — `30:3`, or `54:14` for one inside a subgraph.
+ * Reported as-is that produced status text reading `executing 54:14`, which tells a user nothing about
+ * whether their job is loading a model or writing a file.
+ *
+ * The graph we submitted already holds the answer: every node carries a `_meta.title` the workflow's
+ * author chose, and `30:3` is `KSampler`. Preferring the title over `class_type` is deliberate — an
+ * author who renamed a node to `Remove background?` described that step better than its class does.
+ *
+ * A node that cannot be named is left out rather than guessed at, so the caller can fall back.
+ */
+export function graphNodeTitles(graph: unknown): ReadonlyMap<string, string> {
+  const titles = new Map<string, string>();
+  if (typeof graph !== 'object' || graph === null) return titles;
+
+  for (const [id, node] of Object.entries(graph as Record<string, unknown>)) {
+    if (typeof node !== 'object' || node === null) continue;
+
+    const meta = (node as { _meta?: unknown })._meta;
+    const title = typeof meta === 'object' && meta !== null ? (meta as { title?: unknown }).title : undefined;
+    const className = (node as { class_type?: unknown }).class_type;
+
+    const name = typeof title === 'string' && title !== '' ? title : className;
+    if (typeof name === 'string' && name !== '') titles.set(id, name);
+  }
+
+  return titles;
+}
+
+/**
  * The `/view` query for one output file.
  *
  * `subfolder` and `type` both matter: ComfyUI serves temp and output files from different roots, and
@@ -129,6 +160,11 @@ export function viewQuery(file: {
 export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorBackend {
   const { endpoint, transport, clientId } = options;
   const outputFolder = options.outputFolder ?? 'generated';
+
+  // Node names for jobs in flight, so `progress` can turn a node id into something readable. Kept per
+  // job rather than globally because two runs of different generators are both in the queue and their
+  // ids collide — `30:3` is a KSampler in one graph and a VAE Decode in another.
+  const nodeNames = new Map<string, ReadonlyMap<string, string>>();
 
   function authHeaders(): Record<string, string> {
     if (endpoint.username === undefined || endpoint.password === undefined) return {};
@@ -187,6 +223,9 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
           detail: JSON.stringify(submitted.value.error ?? submitted.value).slice(0, 500),
         });
       }
+
+      // Read from the rewritten graph, which is the one ComfyUI is running.
+      nodeNames.set(promptId, graphNodeTitles(graph));
       return ok(promptId);
     },
 
@@ -210,7 +249,9 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
             };
           } else if (event.kind === 'executing') {
             if (event.node === null) return;
-            yield { stage: `executing ${event.node}` };
+            // The id only when the graph does not name the node — a subgraph ComfyUI expanded after we
+            // submitted, say. Something opaque still beats a stage that stops updating.
+            yield { stage: nodeNames.get(job)?.get(event.node) ?? `executing ${event.node}` };
           } else if (event.kind === 'execution-error') {
             return;
           }
@@ -222,6 +263,11 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
     },
 
     async collect(job: BackendJobId): Promise<Result<readonly BackendOutput[], BackendError>> {
+      // Collecting is the end of a job whichever way it went, so the names it no longer needs go here
+      // rather than in `progress` — a consumer that breaks out of the progress loop early and resumes
+      // would otherwise find the stage had gone back to raw ids.
+      nodeNames.delete(job);
+
       const history = await call<Record<string, HistoryEntry>>(`/history/${job}`);
       if (!history.ok) return history;
 
@@ -266,6 +312,9 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
     },
 
     async cancel(job: BackendJobId): Promise<void> {
+      // A cancelled job may never be collected, so it is dropped here too.
+      nodeNames.delete(job);
+
       // Two calls, because ComfyUI distinguishes them: `interrupt` stops what is executing, `queue` with a
       // delete removes one that has not started. Cancelling a queued job with `interrupt` alone would stop
       // whatever is running instead — someone else's job.
