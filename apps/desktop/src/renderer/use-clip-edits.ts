@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   type ClipId,
   type DocumentStore,
   type FrameIndex,
   type TimelineDocument,
   clipId,
+  frameIndex,
   locateClip,
 } from '@nos/core';
 import {
+  type Clipboard,
   type EditError,
+  EMPTY_CLIPBOARD,
   clearWorkRange,
+  copyClips,
+  firstFreePaste,
+  pasteClips,
   liftClip,
   rippleDeleteRange,
   rippleDeleteClip,
@@ -52,12 +58,21 @@ export interface ClipEdits {
   removeRange(): void;
   /** True when a range is marked, so the control can be offered only when it means something. */
   readonly hasRange: boolean;
+  /** Copies the selection. */
+  copy(): void;
+  /** Copies the selection and removes it, honouring the ripple mode. */
+  cut(): void;
+  /** Pastes at the playhead, or just past whatever is in the way. */
+  paste(): void;
+  /** Copies the selection and pastes it immediately after itself. */
+  duplicate(): void;
+  readonly canPaste: boolean;
   /** True when something is selected, so the shell can disable its buttons honestly. */
   readonly hasSelection: boolean;
 }
 
 /** The verbs, without the state the shell reads off the document. */
-type EditActions = Omit<ClipEdits, 'hasSelection' | 'hasRange'>;
+type EditActions = Omit<ClipEdits, 'hasSelection' | 'hasRange' | 'canPaste'>;
 
 export interface ClipEditOptions {
   readonly store: DocumentStore;
@@ -68,9 +83,15 @@ export interface ClipEditOptions {
   readonly onReject: (reason: string) => void;
   /** Clears a selection that no longer names anything. */
   readonly onRemoved: (clips: readonly ClipId[]) => void;
+  /** Selects what was just pasted, which is what a user acts on next. */
+  readonly onPasted?: (clips: readonly ClipId[]) => void;
 }
 
 export function useClipEdits(options: ClipEditOptions): ClipEdits {
+  // Held in a ref rather than in state: nothing renders differently for its contents, and putting it
+  // in state would re-render the whole editor on every copy.
+  const clipboard = useRef<Clipboard>(EMPTY_CLIPBOARD);
+  const [canPaste, setCanPaste] = useState(false);
   // Read through a ref for the same reason the range actions do: these are reachable from a window
   // key listener that is attached once, and a closure over the mounting props would act on a document
   // and a selection that have both moved on.
@@ -116,6 +137,34 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
           }
           return result.value;
         });
+      },
+
+      copy() {
+        const { store, selected } = latest.current;
+        clipboard.current = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        setCanPaste(clipboard.current.entries.length > 0);
+      },
+
+      cut() {
+        const { store, selected } = latest.current;
+        clipboard.current = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        setCanPaste(clipboard.current.entries.length > 0);
+        removeSelection(latest.current, latest.current.ripple);
+      },
+
+      paste() {
+        pasteAt(latest.current, clipboard.current, latest.current.playhead);
+      },
+
+      duplicate() {
+        // Copy and paste in one action, landing immediately after the original — the shape a user
+        // means by "another one of these", without making them find the gap.
+        const { store, selected } = latest.current;
+        const copied = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        if (copied.entries.length === 0) return;
+
+        const origin = Math.min(...copied.entries.map((entry) => entry.clip.span.start));
+        pasteAt(latest.current, copied, frameIndex(origin + copied.durationFrames));
       },
 
       removeRange() {
@@ -169,9 +218,34 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
 
   return {
     ...actions,
+    canPaste,
     hasSelection: options.selected.size > 0,
     hasRange: options.store.getDocument().sequence.workRange !== undefined,
   };
+}
+
+/**
+ * Pastes a clipboard, moving forward past anything in the way.
+ *
+ * A refusal is turned into the result the user wanted rather than reported: they asked to put
+ * something down, and "there is already a clip there" is a fact they can see. What they cannot see is
+ * where the next gap is, which is the part worth doing for them.
+ */
+function pasteAt(options: ClipEditOptions, clipboard: Clipboard, at: FrameIndex): void {
+  if (clipboard.entries.length === 0) return;
+
+  options.store.commit('paste', (current) => {
+    const target = firstFreePaste(current, clipboard, at);
+    const ids = clipboard.entries.map((entry, index) => clipId(`${entry.clip.id}_copy${target}_${index}`));
+
+    const result = pasteClips(current, clipboard, { at: target, ids });
+    if (!result.ok) {
+      options.onReject(describe(result.error));
+      return current;
+    }
+    options.onPasted?.(result.value.clips);
+    return result.value.document;
+  });
 }
 
 /**
@@ -226,9 +300,33 @@ function useEditKeys(actions: EditActions): void {
       ) {
         return;
       }
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.altKey) return;
 
       const current = latest.current;
+
+      // The clipboard chords. Nothing else in the application claims them, and a user who has ever
+      // used another editor will try them before reading anything.
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key.toLowerCase()) {
+          case 'c':
+            current.copy();
+            break;
+          case 'x':
+            current.cut();
+            break;
+          case 'v':
+            current.paste();
+            break;
+          case 'd':
+            current.duplicate();
+            break;
+          default:
+            return;
+        }
+        event.preventDefault();
+        return;
+      }
+
       switch (event.key) {
         case 'Delete':
         case 'Backspace':

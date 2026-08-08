@@ -80,6 +80,7 @@ interface Harness {
   readonly store: DocumentStore;
   readonly rejections: string[];
   readonly removed: string[][];
+  readonly pasted: string[][];
 }
 
 function mount(options: {
@@ -91,6 +92,7 @@ function mount(options: {
   const store = createDocumentStore(documentWith(options.clips ?? [clip('a', 0, 100), clip('b', 200, 300)]));
   const rejections: string[] = [];
   const removed: string[][] = [];
+  const pasted: string[][] = [];
   let latest: ClipEdits | undefined;
 
   function Host(): null {
@@ -101,6 +103,7 @@ function mount(options: {
       ripple: options.ripple ?? false,
       onReject: (reason) => rejections.push(reason),
       onRemoved: (clips) => removed.push([...clips]),
+      onPasted: (clips) => pasted.push([...clips]),
     });
     return null;
   }
@@ -114,6 +117,7 @@ function mount(options: {
     store,
     rejections,
     removed,
+    pasted,
   };
 }
 
@@ -278,6 +282,89 @@ describe('cutting', () => {
     act(() => second.edits().splitAllTracks());
 
     expect(spans(first.store)).toEqual(spans(second.store));
+  });
+});
+
+describe('copy and paste', () => {
+  it('does nothing with an empty clipboard', () => {
+    const harness = mount({ selected: [] });
+    act(() => harness.edits().paste());
+
+    expect(spans(harness.store)).toHaveLength(2);
+    expect(harness.edits().canPaste).toBe(false);
+  });
+
+  it('pastes at the playhead', () => {
+    const harness = mount({ playhead: 500 });
+    act(() => harness.edits().copy());
+    act(() => harness.edits().paste());
+
+    expect(spans(harness.store).map(([, start]) => start)).toEqual([0, 200, 500]);
+  });
+
+  it('moves past what is in the way rather than refusing', () => {
+    // The user asked to put something down; where the next gap is, is the part worth doing for them.
+    const harness = mount({ playhead: 250 });
+    act(() => harness.edits().copy());
+    act(() => harness.edits().paste());
+
+    const starts = spans(harness.store).map(([, start]) => start);
+    expect(starts).toEqual([0, 200, 300]);
+  });
+
+  it('selects what was pasted, which is what a user acts on next', () => {
+    const harness = mount({ playhead: 500 });
+    act(() => harness.edits().copy());
+    act(() => harness.edits().paste());
+
+    expect(harness.pasted.at(-1)).toHaveLength(1);
+  });
+
+  it('cuts by copying and removing in one action', () => {
+    const harness = mount({});
+    act(() => harness.edits().cut());
+    expect(spans(harness.store)).toHaveLength(1);
+
+    act(() => harness.edits().paste());
+    expect(spans(harness.store)).toHaveLength(2);
+  });
+
+  it('duplicates immediately after the original', () => {
+    const harness = mount({ clips: [clip('a', 0, 100)], selected: ['a'] });
+    act(() => harness.edits().duplicate());
+
+    expect(spans(harness.store)).toEqual([
+      ['a', 0, 100],
+      ['a_copy100_0', 100, 200],
+    ]);
+  });
+
+  it('reports that there is something to paste', () => {
+    const harness = mount({});
+    expect(harness.edits().canPaste).toBe(false);
+    act(() => harness.edits().copy());
+    expect(harness.edits().canPaste).toBe(true);
+  });
+
+  it('is reachable from the clipboard chords', () => {
+    const harness = mount({ playhead: 500 });
+    press('c', { ctrl: true });
+    press('v', { ctrl: true });
+
+    expect(spans(harness.store)).toHaveLength(3);
+  });
+
+  it('leaves a copy in a text field to the text field', () => {
+    const harness = mount({ playhead: 500 });
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }));
+    });
+
+    expect(harness.edits().canPaste).toBe(false);
+    input.remove();
   });
 });
 

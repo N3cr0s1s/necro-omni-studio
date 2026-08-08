@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1804 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1833 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1828,3 +1828,26 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   on a fraction, so **every ctrl+wheel zoom threw** — unnoticed, because nothing was
   watching the renderer's console. Rounding fixes it and a test now covers a whole
   gesture of steps.
+
+- 2026-08-08: Copy, cut, paste and duplicate. Not named in the spec and not
+  optional either — an editor without it makes a user rebuild a three-clip lower
+  third by hand every time they want a second one. It is the one editing capability
+  this project had never *modelled*; everything else existed and merely needed
+  reaching.
+
+  The design turns on what a copied clip remembers: **not its absolute position**,
+  which is the one thing the user is about to change, but its offset from the
+  earliest clip in the copy. That is what makes a multi-clip paste preserve the
+  shape of what was copied — a title and its music cue land the same distance apart
+  wherever they are put down.
+
+  A paste is **all or nothing**. Dropping the clips that fit and skipping the rest
+  would leave a half-pasted lower third, and the user cannot see which half is
+  missing without inspecting a clipboard they have no way to inspect. The check
+  runs against the placements already made as well as against the document, or two
+  clips of one paste could each be reported as fitting and then land on each other.
+
+  A collision is not reported, though: it is turned into the result the user wanted.
+  They asked to put something down, and "there is already a clip there" is a fact
+  they can see — where the next gap is, is the part worth doing for them. Duplicate
+  is that same move with the destination chosen as *immediately after the original*.

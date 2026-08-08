@@ -513,6 +513,8 @@ export function App(): ReactNode {
     ripple,
     onReject: setError,
     onRemoved: () => setSelected(new Set()),
+    // Selected on arrival: what a user does immediately after pasting is act on the copy.
+    onPasted: (clips) => setSelected(new Set(clips as readonly string[])),
   });
 
   return (

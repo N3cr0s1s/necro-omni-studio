@@ -13,3 +13,4 @@ export * from './transition-ops.js';
 export * from './import-media.js';
 export * from './range-ops.js';
 export * from './track-ops.js';
+export * from './clipboard.js';
