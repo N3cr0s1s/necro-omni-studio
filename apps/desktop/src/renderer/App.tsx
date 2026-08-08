@@ -2,10 +2,13 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   type ClipId,
   type FrameIndex,
+  type FrameRate,
   type TimelineDocument,
   FRAME_RATES,
   createDocument,
   createDocumentStore,
+  documentEnd,
+  formatFrames,
   frameIndex,
   loadDocument,
   locateClip,
@@ -18,7 +21,9 @@ import { buildTree } from '@nos/media';
 import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
 import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
+import type { Transport } from './use-transport.js';
 import { Preview } from './Preview.js';
+import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
@@ -60,7 +65,7 @@ function bridge(): DesktopBridge | undefined {
 export function App(): ReactNode {
   const [project, setProject] = useState<ProjectInfo | undefined>(undefined);
   const [sidecar, setSidecar] = useState<SidecarInfo | undefined>(undefined);
-  const [playhead, setPlayhead] = useState<FrameIndex>(frameIndex(0));
+
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [snap, setSnap] = useState(true);
   const [ripple, setRipple] = useState(false);
@@ -72,6 +77,13 @@ export function App(): ReactNode {
   const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
   const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
   useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
+
+  const transport = useTransport({
+    frameRate: document.frameRate,
+    endFrame: documentEnd(document),
+  });
+  useTransportKeys(transport);
+  const playhead = transport.frame;
 
   const tree = useProjectTree(project?.root);
   // The runtime probes ComfyUI once and reports which backend is actually in use; the registry then
@@ -235,6 +247,8 @@ export function App(): ReactNode {
         project={project}
         sidecar={sidecar}
         dirty={store.getSnapshot().dirty}
+        transport={transport}
+        frameRate={document.frameRate}
         onOpen={() => void openProject()}
         onSave={() => void save()}
       />
@@ -267,7 +281,7 @@ export function App(): ReactNode {
               selectedClips={selected}
               snapEnabled={snap}
               rippleEnabled={ripple}
-              onScrub={setPlayhead}
+              onScrub={transport.seek}
               onSelectClip={(clip, additive) =>
                 setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
               }
@@ -306,12 +320,16 @@ function TitleBar({
   project,
   sidecar,
   dirty,
+  transport,
+  frameRate,
   onOpen,
   onSave,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
   readonly dirty: boolean;
+  readonly transport: Transport;
+  readonly frameRate: FrameRate;
   readonly onOpen: () => void;
   readonly onSave: () => void;
 }): ReactNode {
@@ -342,6 +360,27 @@ function TitleBar({
         {project?.name ?? 'no project open'}
         {dirty ? ' •' : ''}
       </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Button onClick={() => transport.step(-1)} title="Previous frame (←)">
+          ◀
+        </Button>
+        <Button
+          tone={transport.playing ? 'active' : 'default'}
+          onClick={transport.toggle}
+          title="Play or pause (space)"
+        >
+          {transport.playing ? 'Pause' : 'Play'}
+        </Button>
+        <Button onClick={() => transport.step(1)} title="Next frame (→)">
+          ▶
+        </Button>
+        <span style={{ font: '600 13px ui-monospace, monospace', color: 'var(--nos-text-primary)' }}>
+          {/* The core formatter, not a local one: it handles drop-frame, which is exactly the rule that
+              is wrong in every hand-rolled timecode. */}
+          {formatFrames(transport.frame, frameRate)}
+        </span>
+      </div>
+
       <div style={{ flex: 1 }} />
       {/* The sidecar's state is shown rather than hidden: without it there are no proxies, no
           waveforms and no export, and a user who cannot see that will blame the application. */}
