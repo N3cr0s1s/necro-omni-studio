@@ -29,6 +29,7 @@ import {
   UndoIcon,
 } from 'lucide-react';
 import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
+import type { MaskChoice } from './ClipInspector.js';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
@@ -74,6 +75,8 @@ export interface RightPanelProps {
    * was edited.
    */
   readonly masks: MaskWorkspace;
+  /** What an effect on the selected clip may bind its `mask` slot to. Empty until one is segmented. */
+  readonly maskChoices?: readonly MaskChoice[] | undefined;
   /** Which panel is open, so the preview knows whether it is placing mask points. */
   readonly onTabChange?: (tab: string) => void;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
@@ -158,6 +161,7 @@ function InspectorTab({
   onChangeDocument,
   playhead,
   selectedClip,
+  maskChoices,
   canUndo,
   canRedo,
   onSplit,
@@ -192,6 +196,7 @@ function InspectorTab({
         playhead={playhead}
         onChange={onChangeDocument}
         onReject={onReject}
+        {...(maskChoices !== undefined ? { masks: maskChoices } : {})}
       />
 
       <ProjectSettings document={document} onChange={onChangeDocument} onReject={onReject} />

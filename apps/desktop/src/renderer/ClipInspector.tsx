@@ -15,10 +15,12 @@ import {
 } from '@nos/core';
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
 import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
+import type { MaskId } from '@nos/core';
 import { DiamondIcon, PlusIcon, WandSparklesIcon, XIcon } from 'lucide-react';
 import { type EffectStackEntry, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
-import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Field, FieldLabel, FieldTitle } from '@nos/ui/components/ui/field';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Input } from '@nos/ui/components/ui/input';
 import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
@@ -49,6 +51,22 @@ export interface ClipInspectorProps {
   readonly onChange: (label: string, next: TimelineDocument) => void;
   /** Surfaces a rejected edit, since a transition can legitimately be refused. */
   readonly onReject?: ((reason: string) => void) | undefined;
+  /**
+   * The masks an effect on this clip may be bound to.
+   *
+   * Supplied rather than derived, because what masks exist is a question about a segmentation session
+   * that this panel does not own — and passing an empty list is the honest state for a clip nobody has
+   * segmented, which is what makes the control say so instead of vanishing.
+   */
+  readonly masks?: readonly MaskChoice[] | undefined;
+}
+
+/** One bindable mask, as the inspector needs to show it. */
+export interface MaskChoice {
+  readonly id: MaskId;
+  readonly label: string;
+  /** False while a mask has been prompted but not yet propagated, so the row can say so. */
+  readonly ready: boolean;
 }
 
 export function ClipInspector({
@@ -58,6 +76,7 @@ export function ClipInspector({
   playhead,
   onChange,
   onReject,
+  masks,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -159,6 +178,7 @@ export function ClipInspector({
         <EffectParams
           instance={stack.find((entry) => entry.id === selected)}
           effects={effects}
+          masks={masks ?? []}
           onChange={(next) =>
             apply(
               'set effect parameter',
@@ -362,17 +382,23 @@ function EffectPicker({
 function EffectParams({
   instance,
   effects,
+  masks,
   onChange,
 }: {
   readonly instance: EffectInstance | undefined;
   readonly effects: EffectRegistry;
+  readonly masks: readonly MaskChoice[];
   readonly onChange: (next: EffectInstance) => void;
 }): ReactNode {
   if (instance === undefined) return null;
 
   const manifest = effects.manifestFor(instance.effect);
   const declared = manifest?.params ?? [];
-  if (declared.length === 0) {
+  // Declaring the `mask` slot is the *entire* coupling between SAM 2 and the effect system, so it is
+  // also the only thing that decides whether this control exists.
+  const takesMask = manifest?.samplers.includes('mask') === true;
+
+  if (declared.length === 0 && !takesMask) {
     return <p className="font-mono text-xs text-muted-foreground">this effect declares no parameters</p>;
   }
 
@@ -381,6 +407,38 @@ function EffectParams({
       <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {manifest?.name ?? instance.effect}
       </span>
+
+      {takesMask && (
+        <Labelled label="Mask">
+          {masks.length === 0 ? (
+            // Said rather than hidden, for the same reason an unavailable generator is greyed with its
+            // reason: an effect that declares a mask slot and offers no way to fill it looks broken.
+            <Input readOnly value="segment this clip to get a mask" />
+          ) : (
+            <NativeSelect
+              aria-label="Mask"
+              className="w-full"
+              value={instance.mask ?? ''}
+              onChange={(event) => {
+                const chosen = event.target.value;
+                // Rebuilt rather than spread: `mask: undefined` would put a key holding undefined in
+                // the document, and `project.json` would read it back as a value rather than an
+                // absence — the same trap the text inspector's optional fields have.
+                const { mask: _mask, ...rest } = instance;
+                onChange(chosen === '' ? rest : { ...rest, mask: chosen as MaskId });
+              }}
+            >
+              <NativeSelectOption value="">not bound</NativeSelectOption>
+              {masks.map((choice) => (
+                <NativeSelectOption key={choice.id} value={choice.id}>
+                  {choice.ready ? choice.label : `${choice.label} — not segmented yet`}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </Labelled>
+      )}
+
       {declared.map((param) => {
         const value = instance.params[param.key];
         const animated = value !== undefined && isAnimated(value as never);
@@ -463,6 +521,21 @@ function EffectParams({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * A caption above a control that already names itself.
+ *
+ * `FieldTitle` rather than `FieldLabel`: the control carries its own `aria-label`, and a second
+ * association would give it two accessible names.
+ */
+function Labelled({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
+  return (
+    <Field className="gap-1">
+      <FieldTitle className="text-xs">{label}</FieldTitle>
+      {children}
+    </Field>
   );
 }
 

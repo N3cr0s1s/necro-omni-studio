@@ -14,6 +14,7 @@ import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
 import { textCacheKeyFor, textClipsOf } from './text-plan.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
+import type { MaskSource } from './mask-source.js';
 
 /**
  * The preview surface.
@@ -52,9 +53,24 @@ export interface PreviewProps {
    * A callback rather than a node so the preview still knows nothing about masks.
    */
   readonly overlay?: (picture: { readonly width: number; readonly height: number }) => ReactNode;
+  /**
+   * The masks an effect may be bound to, and where to find each one's frame.
+   *
+   * A lookup rather than a map of every frame: a propagated mask is one entry per frame of a clip, and
+   * handing the whole set to the preview on every render would copy thousands of run-length arrays to
+   * find the one being drawn.
+   */
+  readonly masks?: MaskSource | undefined;
 }
 
-export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }: PreviewProps): ReactNode {
+export function Preview({
+  document: doc,
+  frame,
+  sidecar,
+  resolveAsset,
+  overlay,
+  masks,
+}: PreviewProps): ReactNode {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [picture, setPicture] = useState<{ width: number; height: number } | undefined>(undefined);
   const compositorRef = useRef<GlCompositor | undefined>(undefined);
@@ -121,6 +137,11 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }
       effects,
       textCacheKey: textCacheKeyFor(doc.resolution),
     });
+    // Masks are registered for *this frame*, before the render that reads them. Like text, the plan
+    // carries only an id — the compositor never learns what a mask is — so the frame the id resolves
+    // to has to be stated here, where the playhead is known.
+    media.registerMasks(masks === undefined ? [] : masks.at(frame));
+
     void media
       .registerText(textClipsOf(doc), doc.resolution)
       .then((problems) => {
@@ -133,7 +154,7 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }
         setPlanned(plan.items.length);
         setStats(current.render(plan, null));
       });
-  }, [doc, frame, effects, media]);
+  }, [doc, frame, effects, media, masks]);
 
   // The picture's own rectangle, which `object-fit: contain` decides and nothing can read back off
   // the element. Measured rather than derived from a stored layout, because the panel is resizable

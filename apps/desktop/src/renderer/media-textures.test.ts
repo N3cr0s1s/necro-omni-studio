@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type AssetPath, assetPath } from '@nos/core';
 import type { RenderPlan } from '@nos/compositor';
-import { createMediaTextures } from './media-textures.js';
+import { createMediaTextures, flipRows } from './media-textures.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 
 /**
@@ -150,5 +150,39 @@ describe('when a proxy arrives mid-session', () => {
 
     expect(created).toHaveLength(1);
     textures.dispose();
+  });
+});
+
+/**
+ * Row order for a mask upload.
+ *
+ * GL's texture origin is bottom-left and a decoded mask's is top-left. The element uploads in this
+ * file hand that to the driver with `UNPACK_FLIP_Y_WEBGL`, which is only specified for DOM sources —
+ * for an `ArrayBufferView` its behaviour has varied. Doing it here cannot be wrong in a way that only
+ * shows up as a mask covering the wrong half of the picture, which is a failure no other test would
+ * catch: an upside-down mask still renders, still has the right area, and is simply on the wrong thing.
+ */
+describe('flipping rows for a texture upload', () => {
+  it('puts the last row first', () => {
+    // Two rows of two RGBA pixels: row 0 all 1s, row 1 all 2s.
+    const pixels = new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2]);
+    expect([...flipRows(pixels, 2, 2)]).toEqual([2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it('leaves a single row alone', () => {
+    const pixels = new Uint8Array([9, 8, 7, 6]);
+    expect([...flipRows(pixels, 1, 1)]).toEqual([9, 8, 7, 6]);
+  });
+
+  it('is its own inverse, which is what makes it safe to reason about', () => {
+    const pixels = Uint8Array.from({ length: 3 * 4 * 4 }, (_, index) => index % 251);
+    expect([...flipRows(flipRows(pixels, 4, 3), 4, 3)]).toEqual([...pixels]);
+  });
+
+  it('keeps each row´s pixels in order, moving whole rows only', () => {
+    // A flip that also reversed within a row would mirror the mask horizontally — visible only as a
+    // mask on the wrong side of the subject.
+    const pixels = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect([...flipRows(pixels, 2, 2)].slice(0, 8)).toEqual([9, 10, 11, 12, 13, 14, 15, 16]);
   });
 });

@@ -14,6 +14,7 @@ import {
   effectInstanceId,
   frameIndex,
   locateClip,
+  maskId,
   projectId,
   sequenceId,
   spanFromBounds,
@@ -21,7 +22,10 @@ import {
   trackId,
 } from '@nos/core';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
-import { ClipInspector } from './ClipInspector.js';
+import { type MaskChoice, ClipInspector } from './ClipInspector.js';
+
+/** The built-in that declares the `mask` sampler — the spec's own example of one. */
+const BLUR_NAME = 'Background Blur';
 
 afterEach(cleanup);
 
@@ -313,5 +317,101 @@ describe('nesting', () => {
     // The stack lists it; its parameters appear only once selected.
     expect(screen.getByText('Film Grain')).toBeDefined();
     expect(screen.queryAllByLabelText('amount')).toHaveLength(0);
+  });
+});
+
+/**
+ * Binding a mask to an effect.
+ *
+ * Declaring the `mask` sampler is the *entire* coupling between SAM 2 and the effect system, and until
+ * now nothing could fill the slot: the built-in blur — the spec's own example — declared it and could
+ * never receive one, so M11's whole pipeline terminated in a file no effect could read.
+ */
+describe('the mask slot', () => {
+  const choices = [{ id: maskId('c1-mask'), label: 'this clip', ready: true }];
+
+  const withBlur = (mask?: string) =>
+    documentWith([
+      videoClip('c1', 0, 100, {
+        effects: [
+          {
+            id: effectInstanceId('fx1'),
+            effect: effectId('background_blur'),
+            enabled: true,
+            params: {},
+            ...(mask !== undefined ? { mask: maskId(mask) } : {}),
+          },
+        ],
+      }),
+    ]);
+
+  function renderWithMasks(document: TimelineDocument, masks: readonly MaskChoice[]) {
+    const onChange = vi.fn();
+    render(
+      <ClipInspector
+        document={document}
+        clip="c1"
+        effects={effects}
+        playhead={0}
+        onChange={onChange}
+        masks={masks}
+      />,
+    );
+    return onChange;
+  }
+
+  /** The effect instance as the last commit left it. */
+  function boundEffect(onChange: ReturnType<typeof vi.fn>) {
+    const next = onChange.mock.calls.at(-1)?.[1] as TimelineDocument;
+    const located = locateClip(next, clipId('c1'));
+    if (located === undefined) throw new Error('no clip');
+    return located.clip.effects[0]!;
+  }
+
+  it('offers the slot only for an effect that declares one', async () => {
+    const withGrain = documentWith([
+      videoClip('c1', 0, 100, {
+        effects: [
+          {
+            id: effectInstanceId('fx1'),
+            effect: effectId('film_grain'),
+            enabled: true,
+            params: { amount: staticNumber(0.3) },
+          },
+        ],
+      }),
+    ]);
+    renderWithMasks(withGrain, choices);
+
+    await userEvent.click(screen.getByText('Film Grain'));
+    expect(screen.queryByLabelText('Mask')).toBeNull();
+  });
+
+  it('says how to get one rather than offering an empty list', async () => {
+    // The same rule an unavailable generator follows: an effect declaring a mask slot with no way to
+    // fill it looks broken.
+    renderWithMasks(withBlur(), []);
+    await userEvent.click(screen.getByText(BLUR_NAME));
+
+    expect(screen.getByDisplayValue(/segment this clip/)).toBeDefined();
+  });
+
+  it('binds a mask onto the effect', async () => {
+    const onChange = renderWithMasks(withBlur(), choices);
+    await userEvent.click(screen.getByText(BLUR_NAME));
+    await userEvent.selectOptions(screen.getByLabelText('Mask'), 'c1-mask');
+
+    expect(boundEffect(onChange).mask).toBe('c1-mask');
+  });
+
+  it('removes the field when unbound, rather than storing an undefined one', async () => {
+    // `project.json` would read a `"mask": null` back as a value rather than as an absence.
+    const onChange = renderWithMasks(withBlur('c1-mask'), choices);
+    await userEvent.click(screen.getByText(BLUR_NAME));
+    await userEvent.selectOptions(screen.getByLabelText('Mask'), '');
+
+    const instance = boundEffect(onChange);
+    expect(instance.mask).toBeUndefined();
+    expect('mask' in instance).toBe(false);
   });
 });

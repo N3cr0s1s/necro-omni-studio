@@ -99,6 +99,8 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { ModeToggle } from './ModeToggle.js';
+import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js';
+import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
@@ -537,6 +539,32 @@ export function App(): ReactNode {
   // times would swallow every click meant for the picture, and the crosshair would be a promise
   // about a mode the user is not in.
   const segmenting = rightTab === 'segment';
+
+  /**
+   * How the preview resolves a mask an effect is bound to.
+   *
+   * From the live session, which is what closes the spec's §6.6: until now the renderer answered
+   * every mask lookup with `undefined`, so a bound mask reached the compositor and drew nothing.
+   * Bound to the *selected* clip's session, because that is the only one held in memory — a mask
+   * survives on disk under `masks/`, and reading it back for an unselected clip is the next step.
+   */
+  const maskSource = useMemo(
+    () => sessionMaskSource(masks.session, clipStartOf(document, selectedClip)),
+    [document, masks.session, selectedClip],
+  );
+
+  /** What an effect on the selected clip may be bound to. */
+  const maskChoices: readonly MaskChoice[] = useMemo(() => {
+    const session = masks.session;
+    if (session === undefined) return [];
+    return [
+      {
+        id: maskIdForClip(session.track.clip),
+        label: session.track.label ?? 'this clip',
+        ready: session.frames.size > 0,
+      },
+    ];
+  }, [masks.session]);
   // Which browser row has its name field open, and which folder is waiting for a name. Two states
   // rather than one: a new folder has no row to edit until it exists on disk.
   const [renamingPath, setRenamingPath] = useState<string | undefined>(undefined);
@@ -900,6 +928,7 @@ export function App(): ReactNode {
             frame={playhead}
             sidecar={sidecar}
             resolveAsset={proxies.resolve}
+            masks={maskSource}
             {...(segmenting && masks.session !== undefined
               ? {
                   overlay: (picture: { readonly width: number; readonly height: number }) => (
@@ -1028,6 +1057,7 @@ export function App(): ReactNode {
         <RightPanel
           projectTree={tree.tree}
           masks={masks}
+          maskChoices={maskChoices}
           onTabChange={setRightTab}
           document={document}
           effects={effectRegistry}

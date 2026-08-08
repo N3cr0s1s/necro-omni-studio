@@ -1,11 +1,13 @@
 import {
   type AssetPath,
   type FrameRate,
+  type MaskId,
   type Resolution,
   type TextClip,
   type TextContent,
   frameRateToNumber,
 } from '@nos/core';
+import { type MaskFrame, toRgba } from '@nos/masks';
 import { type RasterizedText, contentCacheKey, createCanvasRasterizer } from '@nos/text';
 import { textMaxWidth } from './text-plan.js';
 import type { LayerSource, RenderPlan, TextureProvider } from '@nos/compositor';
@@ -47,7 +49,47 @@ export interface MediaTextures {
    * only a cache key and a reveal fraction, deliberately, so the compositor stays ignorant of fonts.
    */
   registerText(clips: readonly TextClip[], resolution: Resolution): Promise<readonly TextRasterProblem[]>;
+  /**
+   * Registers the mask each bound id resolves to **for the frame about to be rendered**.
+   *
+   * Separate from `prepare`, and frame-indexed, for the same reason `registerText` is separate: the
+   * plan carries a `MaskId` and nothing else, deliberately, so the compositor never learns what a mask
+   * is or where it came from. A mask changes every frame, so the caller states which one is current
+   * rather than the registry guessing from a playhead it does not have.
+   *
+   * Registering an empty list is meaningful: it releases every mask texture, which is what happens
+   * when the clip carrying them is deselected.
+   */
+  registerMasks(masks: readonly MaskRegistration[]): void;
   dispose(): void;
+}
+
+/** One bound mask, at the frame being drawn. */
+export interface MaskRegistration {
+  readonly id: MaskId;
+  /** Absent means the mask has no coverage on this frame, and the slot should stay unbound. */
+  readonly frame: MaskFrame | undefined;
+}
+
+/**
+ * The same pixels, bottom row first.
+ *
+ * GL's texture origin is bottom-left and a decoded mask's is top-left, exactly as it is for an image.
+ * The element uploads elsewhere in this file hand that to the driver with `UNPACK_FLIP_Y_WEBGL`, which
+ * is only specified for DOM sources; for an `ArrayBufferView` the flag's behaviour has varied between
+ * implementations. Doing it here is a dozen lines and cannot be wrong in a way that only shows up as a
+ * mask covering the wrong half of the picture.
+ *
+ * Exported because that failure is invisible in a unit test of anything else: a mask applied upside
+ * down still renders, still has the right area, and is simply on the wrong object.
+ */
+export function flipRows(pixels: Uint8Array, width: number, height: number, channels = 4): Uint8Array {
+  const stride = width * channels;
+  const flipped = new Uint8Array(pixels.length);
+  for (let row = 0; row < height; row += 1) {
+    flipped.set(pixels.subarray(row * stride, row * stride + stride), (height - 1 - row) * stride);
+  }
+  return flipped;
 }
 
 /**
@@ -91,6 +133,16 @@ export function createMediaTextures(
   const textures = new Map<string, WebGLTexture>();
   /** Rasterized text by cache key, ready to upload. */
   const rasters = new Map<string, RasterizedText>();
+  /**
+   * Mask textures by bound id, with the frame each was uploaded from.
+   *
+   * The frame is held so an upload can be skipped when nothing changed — the common case, since the
+   * playhead sits still between edits — and repeated when it has. Compared by reference, which is
+   * sound because a `MaskFrame` is immutable and a re-run replaces it.
+   */
+  const maskTextures = new Map<string, { frame: MaskFrame; texture: WebGLTexture }>();
+  /** What each id should be showing right now, set by `registerMasks` before a render. */
+  let boundMasks: readonly MaskRegistration[] = [];
   /** Uploads a driver refused, surfaced on the next `registerText` rather than lost. */
   const uploadFailures = new Map<string, string>();
   let context: WebGL2RenderingContext | undefined;
@@ -184,8 +236,62 @@ export function createMediaTextures(
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
           return texture;
         },
-        maskTexture: () => undefined,
+        maskTexture(mask) {
+          const registration = boundMasks.find((entry) => entry.id === mask);
+          const frame = registration?.frame;
+          // No coverage on this frame is not a failure: the effect's own shader decides what an
+          // unbound slot means, and forcing an empty texture would make "no mask" and "a mask that
+          // happens to be empty here" indistinguishable.
+          if (frame === undefined) return undefined;
+
+          const existing = maskTextures.get(mask);
+          if (existing !== undefined && existing.frame === frame) return existing.texture;
+
+          const texture = existing?.texture ?? gl.createTexture();
+          if (texture === null) return undefined;
+
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          // Row alignment of one: a mask is an arbitrary width, and the default four-byte alignment
+          // shears every row of any width not a multiple of four.
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            frame.width,
+            frame.height,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            flipRows(toRgba(frame.counts, frame.width, frame.height), frame.width, frame.height),
+          );
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+          // Nearest, not linear: a mask is coverage, and interpolating between covered and uncovered
+          // invents a soft edge the segmenter never produced. An effect that wants a feathered edge
+          // blurs the mask itself, where the amount is a parameter rather than a sampling accident.
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+          maskTextures.set(mask, { frame, texture });
+          return texture;
+        },
       };
+    },
+
+    registerMasks(masks) {
+      boundMasks = masks;
+
+      // Textures for ids that are no longer bound are released here rather than on dispose: a mask
+      // session is per clip, and holding every mask a user has ever segmented would grow without
+      // bound over a long edit.
+      const live = new Set(masks.map((entry) => entry.id as string));
+      for (const [id, entry] of maskTextures) {
+        if (live.has(id)) continue;
+        context?.deleteTexture(entry.texture);
+        maskTextures.delete(id);
+      }
     },
 
     async registerText(clips, resolution) {
@@ -252,8 +358,11 @@ export function createMediaTextures(
 
       if (context !== undefined) {
         for (const texture of textures.values()) context.deleteTexture(texture);
+        for (const entry of maskTextures.values()) context.deleteTexture(entry.texture);
       }
       textures.clear();
+      maskTextures.clear();
+      boundMasks = [];
       rasters.clear();
     },
   };
