@@ -107,8 +107,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       preserve hand-authored animation. 35 tests.
 - [x] Typewriter advance-list mechanism + word wrapping with character fallback.
       26 tests.
-- [ ] Canvas 2D rasterizer implementation (contracts and consumers are done;
-      only the browser-side glyph measurement remains)
+- [x] Canvas 2D rasterizer + mark-and-sweep raster cache. Verified against a real
+      font engine: 19/19 assertions
+      (`cd packages/text && npx vite --port 5201 &` then
+      `node packages/text/rastercheck/run.mjs`).
 
 ### Phase 6 — M8: Export
 - [ ] Offscreen render loop reusing the compositor
@@ -143,10 +145,9 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–4 complete (M1–M6). Phase 5 nearly done — only the Canvas 2D
-rasterizer implementation remains.**
+**Phases 1–5 complete (M1–M7).**
 **798 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
-17/17 compositor GL assertions (including every shipped built-in effect).**
+17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
 
@@ -154,8 +155,9 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the Canvas 2D rasterizer, then Phase 6 (M8) — ffmpeg export reusing the
-compositor. The Electron shell
+Next: Phase 6 (M8) — ffmpeg export reusing the compositor. This is where the
+WYSIWYG guarantee gets its real test: export must build the *same* render plan and
+run the *same* executor, differing only in destination and texture provider. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -265,6 +267,17 @@ the media browser plus a full timeline from mockup 1a.
 - The key includes a **hash of the full text**, not just a length and a prefix:
   two long texts differing past the truncation point otherwise collide, and a
   colliding key renders the wrong text from cache.
+
+### Verification harnesses (three of them now)
+
+Each covers a property that cannot be checked in Vitest, and each exits non-zero
+so it can gate a release:
+
+| What | Serve | Run |
+|---|---|---|
+| Compositor pixels (17) | `cd packages/compositor && npm run glcheck:serve` | `npm run glcheck` |
+| Text rasterizer (19) | `cd packages/text && npx vite --port 5201` | `node packages/text/rastercheck/run.mjs` |
+| UI layout (screenshots) | `cd packages/ui && npx vite` | Playwright screenshot, compare to mockups |
 
 ### Effect and keyframe UI rules (keep these)
 
@@ -670,6 +683,27 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   text, with nothing in the symptom pointing at the cause. Added an FNV-1a hash of
   the full string while keeping the readable prefix, plus tests for a
   differs-in-the-middle case and a transposition.
+
+- 2026-08-08: **Phase 5 closed (M7).** Canvas 2D rasterizer and the raster cache,
+  verified against a real font engine — 19 assertions covering advance/width
+  agreement, wrapping inside the box, letter spacing, alignment, baseline spacing,
+  outline and shadow ink, and the typewriter clipping exactly on a glyph boundary.
+
+  Layout code takes injected measurement functions rather than measuring itself.
+  That is not indirection for its own sake: preview and export must reveal the same
+  characters at the same time, and sharing the layout while injecting only the
+  measurement makes that structural rather than coincidental.
+
+  Drawing goes character by character when letter spacing is non-zero, and
+  measurement sums per character to match. `ctx.letterSpacing` and a whole-string
+  `measureText` both apply kerning that per-character drawing does not, so the
+  advances would disagree with the pixels by a pixel per glyph — enough for the
+  typewriter to clip mid-stroke.
+
+  One harness assertion was wrong, not the code: `set` marks an entry touched, so a
+  just-created texture survives the first sweep. That is deliberate — evicting
+  before first use would make a clip re-rasterize on every sweep tick — and the test
+  now asserts both halves of the behaviour.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

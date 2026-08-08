@@ -6,4 +6,5 @@
  */
 export * from './contracts/index.js';
 export * from './raster/typewriter.js';
+export * from './raster/canvas-rasterizer.js';
 export * from './animation/presets.js';
