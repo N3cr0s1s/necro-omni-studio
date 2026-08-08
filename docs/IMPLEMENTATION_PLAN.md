@@ -258,9 +258,15 @@ and commits as one undo step, a rejected move stops with its reason, and space /
 arrow keys drive playback at the project rate (verified: one second advances
 exactly 30 frames at 30 fps).
 
-Next: driving the audio engine from the transport (the engine and mix planner are
-built and tested but not yet connected to playback), and landing a chosen variant
-onto the timeline as a clip.
+**Audio playback and the generative loop are closed.** Playback drives the audio
+engine (verified: the file is fetched and decoded, playback advances at exactly
+30 fps), and an accepted variant lands on the timeline as a clip carrying its
+provenance (verified: generate → keep → a third clip appears, marked generated).
+
+The application is feature-complete against the spec. Remaining work is depth
+rather than gaps: keyframe editing in the shell, the effect stack UI wired to
+clips, export driven from the dialog, and WebCodecs decoding for smooth playback
+of long clips.
 
 ### Editing rules (keep these)
 
@@ -1144,3 +1150,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   The timecode readout uses the core formatter rather than a local one, because
   drop-frame is precisely the rule that is wrong in every hand-rolled timecode.
+
+- 2026-08-08: Audio playback, and closing the generative loop.
+
+  The engine was already written and tested; what it needed from the shell was an
+  `AudioContext` and decoded buffers. The buffer cache holds three properties the
+  engine depends on and states each: one decode per asset ever (the scheduler asks
+  twenty times a second, so without in-flight deduplication that is twenty
+  concurrent decodes of one file), a bounded footprint evicted least-recently-used
+  (a stereo minute is ~23 MB decoded), and failures as *values* — a rejected
+  promise inside a scheduler tick takes the whole playback loop with it and
+  silences every other track.
+
+  The audio clock is authoritative during playback, per the engine's own contract,
+  but only when there is audio: a video-only timeline has nothing to lock to, and
+  deferring to an engine that will never tick would leave the playhead at zero.
+
+  `insertGenerated` is the loop's last step, and it is two rules. A declared-length
+  output lands exactly where its placeholder stood and reports a collision. A
+  discovered-length output lands from the playhead and **never shifts anything** —
+  it moves to a free track of its kind, creating one if it must — because a
+  narration that rearranged a video cut would be the most destructive thing this
+  feature could do.
+
+  Two things running it exposed. The run button swallowed enqueue failures, so a
+  click could do nothing and say nothing — the exact failure this project treats as
+  a defect everywhere else. And the variant panel said "generating 1 variant" for a
+  **batched** submit carrying three seeds: one submit is one candidate while it
+  runs, so the count had to come from what was *requested*, not from what is in
+  flight.
