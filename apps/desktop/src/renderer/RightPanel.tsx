@@ -52,6 +52,10 @@ export interface RightPanelProps {
   /** Removes the selection. The Ripple toggle decides whether the gap closes. */
   readonly onRemoveClip: () => void;
   readonly onToggleClipEnabled: () => void;
+  readonly onCopyAttributes: () => void;
+  readonly onPasteAttributes: () => void;
+  /** What was copied, so the paste control can say what it will apply. */
+  readonly attributeSummary: string | undefined;
   /** What removal will do right now, so the button can say it rather than imply it. */
   readonly removeLabel: string;
   readonly removeHint: string;
@@ -128,6 +132,9 @@ function InspectorTab({
   onSplitAllTracks,
   onRemoveClip,
   onToggleClipEnabled,
+  onCopyAttributes,
+  onPasteAttributes,
+  attributeSummary,
   removeLabel,
   removeHint,
   onNudge,
@@ -201,6 +208,34 @@ function InspectorTab({
             1f ▶
           </Button>
         </div>
+        {/* Grading a scene clip by clip is how a grade drifts: the same eleven-step ritual, subtly
+            different each time. */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            onClick={onCopyAttributes}
+            disabled={selectedClip === undefined}
+            title="Copy this clip's effects, framing, speed and level (Ctrl+Shift+C)"
+            style={{ flex: 1 }}
+          >
+            Copy look
+          </Button>
+          <Button
+            onClick={onPasteAttributes}
+            disabled={selectedClip === undefined || attributeSummary === undefined}
+            title={
+              attributeSummary === undefined
+                ? 'Copy a look first'
+                : `Apply ${attributeSummary} to every selected clip (Ctrl+Shift+V)`
+            }
+            style={{ flex: 1 }}
+          >
+            Paste look
+          </Button>
+        </div>
+        {attributeSummary !== undefined && (
+          <Mono tone="var(--nos-text-faint)">{`clipboard: ${attributeSummary}`}</Mono>
+        )}
+
         <Button onClick={onAddText} title="Add a title at the playhead, on the text track">
           Add title
         </Button>

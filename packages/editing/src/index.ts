@@ -17,3 +17,4 @@ export * from './clipboard.js';
 export * from './selection.js';
 export * from './move-many.js';
 export * from './project-settings.js';
+export * from './attributes.js';

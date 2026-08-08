@@ -16,6 +16,8 @@ import {
   locateClip,
   projectId,
   sequenceId,
+  effectId,
+  effectInstanceId,
   spanFromBounds,
   staticNumber,
   trackId,
@@ -365,6 +367,65 @@ describe('copy and paste', () => {
 
     expect(harness.edits().canPaste).toBe(false);
     input.remove();
+  });
+});
+
+describe('copying a look', () => {
+  const graded = () =>
+    ({
+      ...clip('a', 0, 100),
+      effects: [{ id: effectInstanceId('a_fx'), effect: effectId('levels'), enabled: true, params: {} }],
+    }) as Clip;
+
+  it('says nothing has been copied until something is', () => {
+    const harness = mount({});
+    expect(harness.edits().attributeSummary).toBeUndefined();
+  });
+
+  it('reports what was copied, so a control can say what it will apply', () => {
+    const harness = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['a'] });
+    act(() => harness.edits().copyAttributes());
+
+    expect(harness.edits().attributeSummary).toContain('1 effect');
+  });
+
+  it('applies the look to every selected clip', () => {
+    const harness = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['a'] });
+    act(() => harness.edits().copyAttributes());
+
+    // Re-mounted with a different selection: the look outlives the selection it was taken from.
+    cleanup();
+    const target = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['b'] });
+    act(() => target.edits().copyAttributes());
+    act(() => target.edits().pasteAttributes());
+
+    expect(spans(target.store)).toHaveLength(2);
+  });
+
+  it('does not move the clips it is applied to', () => {
+    // A paste that moved a clip would be indistinguishable from a bug.
+    const harness = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['a'] });
+    const before = spans(harness.store);
+    act(() => harness.edits().copyAttributes());
+    act(() => harness.edits().pasteAttributes());
+
+    expect(spans(harness.store)).toEqual(before);
+  });
+
+  it('is reachable from the shifted clipboard chords', () => {
+    const harness = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['a'] });
+    press('c', { ctrl: true, shift: true });
+
+    expect(harness.edits().attributeSummary).toContain('effect');
+  });
+
+  it('leaves the clip clipboard alone, since the two are different things', () => {
+    // Copying a grade must not lose the clips a user copied a moment earlier.
+    const harness = mount({ clips: [graded(), clip('b', 200, 300)], selected: ['a'] });
+    act(() => harness.edits().copy());
+    act(() => harness.edits().copyAttributes());
+
+    expect(harness.edits().canPaste).toBe(true);
   });
 });
 

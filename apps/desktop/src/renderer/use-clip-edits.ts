@@ -5,16 +5,21 @@ import {
   type FrameIndex,
   type TimelineDocument,
   clipId,
+  effectInstanceId,
   frameIndex,
   locateClip,
 } from '@nos/core';
 import {
+  type ClipAttributes,
   type Clipboard,
   type EditError,
   EMPTY_CLIPBOARD,
   allClips,
   clearWorkRange,
+  copyAttributes,
   copyClips,
+  describeAttributes,
+  pasteAttributes,
   firstFreePaste,
   pasteClips,
   liftClip,
@@ -69,6 +74,12 @@ export interface ClipEdits {
   /** Copies the selection and pastes it immediately after itself. */
   duplicate(): void;
   readonly canPaste: boolean;
+  /** Copies the look of the selected clip: its effects, framing, speed and level. */
+  copyAttributes(): void;
+  /** Applies that look to every selected clip. */
+  pasteAttributes(): void;
+  /** What would be pasted, for a control that can say so. */
+  readonly attributeSummary: string | undefined;
   /** Selects everything on the timeline. */
   selectAll(): void;
   /** Drops the selection, which is what Escape means everywhere. */
@@ -78,7 +89,7 @@ export interface ClipEdits {
 }
 
 /** The verbs, without the state the shell reads off the document. */
-type EditActions = Omit<ClipEdits, 'hasSelection' | 'hasRange' | 'canPaste'>;
+type EditActions = Omit<ClipEdits, 'hasSelection' | 'hasRange' | 'canPaste' | 'attributeSummary'>;
 
 export interface ClipEditOptions {
   readonly store: DocumentStore;
@@ -100,6 +111,10 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
   // in state would re-render the whole editor on every copy.
   const clipboard = useRef<Clipboard>(EMPTY_CLIPBOARD);
   const [canPaste, setCanPaste] = useState(false);
+  // The look, held separately from the clip clipboard: copying a grade must not lose the clips a
+  // user copied a moment earlier, and the two are reached by different keys for that reason.
+  const attributes = useRef<ClipAttributes | undefined>(undefined);
+  const [attributeSummary, setAttributeSummary] = useState<string | undefined>(undefined);
   // Read through a ref for the same reason the range actions do: these are reachable from a window
   // key listener that is attached once, and a closure over the mounting props would act on a document
   // and a selection that have both moved on.
@@ -179,6 +194,37 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
         pasteAt(latest.current, copied, frameIndex(origin + copied.durationFrames));
       },
 
+      copyAttributes() {
+        const { store, selected } = latest.current;
+        const source = [...selected][0] as ClipId | undefined;
+        if (source === undefined) return;
+
+        const copied = copyAttributes(store.getDocument(), source);
+        attributes.current = copied;
+        setAttributeSummary(copied === undefined ? undefined : describeAttributes(copied));
+      },
+
+      pasteAttributes() {
+        const { store, selected, onReject } = latest.current;
+        const source = attributes.current;
+        if (source === undefined || selected.size === 0) return;
+
+        store.commit('paste attributes', (current) => {
+          const result = pasteAttributes(current, {
+            targets: [...selected] as ClipId[],
+            attributes: source,
+            // Derived from the target and the position in the stack, so pasting the same look twice
+            // produces the same document — the property that keeps undo and a saved file comparable.
+            effectId: (target, index) => effectInstanceId(`${target}_attr${index}`),
+          });
+          if (!result.ok) {
+            onReject(describe(result.error));
+            return current;
+          }
+          return result.value.document;
+        });
+      },
+
       selectAll() {
         const { store, onSelect } = latest.current;
         onSelect?.(allClips(store.getDocument()));
@@ -240,6 +286,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
   return {
     ...actions,
     canPaste,
+    attributeSummary,
     hasSelection: options.selected.size > 0,
     hasRange: options.store.getDocument().sequence.workRange !== undefined,
   };
@@ -330,6 +377,23 @@ function useEditKeys(actions: EditActions): void {
       // The clipboard chords. Nothing else in the application claims them, and a user who has ever
       // used another editor will try them before reading anything.
       if (event.ctrlKey || event.metaKey) {
+        // Shift turns the clip clipboard into the *attribute* clipboard, which is how every editor
+        // that has both spells the distinction.
+        if (event.shiftKey) {
+          switch (event.key.toLowerCase()) {
+            case 'c':
+              current.copyAttributes();
+              break;
+            case 'v':
+              current.pasteAttributes();
+              break;
+            default:
+              return;
+          }
+          event.preventDefault();
+          return;
+        }
+
         switch (event.key.toLowerCase()) {
           case 'c':
             current.copy();

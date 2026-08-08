@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1917 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1940 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2003,3 +2003,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   saying so would leave the undo entry open for the rest of the session and swallow
   every later edit into it — which is exactly what happened in the test environment,
   where `releasePointerCapture` does not exist and threw first.
+
+- 2026-08-08: A clip's look can be copied onto others. The gap was not that an
+  effect could not be added — it could — but that adding one to eleven clips meant
+  repeating the same eleven-step ritual and getting the parameters subtly different
+  each time. Grading a scene is the ordinary case, and doing it clip by clip is how
+  a grade drifts.
+
+  The boundary is the whole design: everything describing **how a clip looks or
+  sounds** travels — effects with their keyframes, transform, speed, level and pan —
+  and nothing describing **which material it is or where it sits**. Source, span,
+  label, provenance and links all stay. A paste that moved a clip or swapped its
+  media would be indistinguishable from a bug, so most of the tests are about what
+  must *not* change.
+
+  Two rules follow from what a user meant by the gesture. A transform pasted onto an
+  audio clip is **dropped, not refused**: someone who selected a scene and pasted a
+  look meant it to land wherever it makes sense, not to be told that one of the
+  eleven clips was audio. And a locked target is refused while the rest still
+  receive it — one protected clip must not block an edit to ten unprotected ones,
+  and the refusal is only *reported* when nothing landed at all.
+
+  Effect instance ids are regenerated per target, and required rather than
+  generated internally: two clips sharing an instance id would make the inspector's
+  selection ambiguous and every later edit land on whichever clip was found first.
+  Derived from the target and the stack position, so pasting the same look twice
+  produces the same document.
+
+  The look has its **own** clipboard, reached by the shifted chords — copying a
+  grade must not lose the clips a user copied a moment earlier.

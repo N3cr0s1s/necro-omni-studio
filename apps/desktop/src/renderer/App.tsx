@@ -754,6 +754,9 @@ export function App(): ReactNode {
           onSplitAllTracks={clipEdits.splitAllTracks}
           onRemoveClip={clipEdits.remove}
           onToggleClipEnabled={clipEdits.toggleEnabled}
+          onCopyAttributes={clipEdits.copyAttributes}
+          onPasteAttributes={clipEdits.pasteAttributes}
+          attributeSummary={clipEdits.attributeSummary}
           removeLabel={ripple ? 'Ripple delete' : 'Delete'}
           removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
           onNudge={nudge}
