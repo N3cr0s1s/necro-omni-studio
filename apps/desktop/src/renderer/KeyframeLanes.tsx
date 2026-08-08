@@ -16,8 +16,7 @@ import {
   locateClip,
 } from '@nos/core';
 import { type EffectRegistry } from '@nos/effects';
-import { type TimelineViewport, KeyframeLane, Mono } from '@nos/ui';
-import { token } from '@nos/ui';
+import { type TimelineViewport, KeyframeLane } from '@nos/ui';
 
 /**
  * Keyframe lanes for the selected clip.
@@ -168,7 +167,7 @@ export function KeyframeLanes({
   if (located === undefined || lanes.length === 0) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${token.borderSubtle}` }}>
+    <div className="flex flex-col border-t">
       {lanes.map((target) => (
         <KeyframeLane
           key={target.id}
@@ -210,9 +209,9 @@ export function KeyframeLanes({
           }
         />
       ))}
-      <Mono tone={token.textGhost} style={{ padding: '2px 8px' }}>
+      <p className="px-2 py-0.5 font-mono text-xs text-muted-foreground">
         double-click a lane to add a keyframe · click a marker´s badge to cycle its easing
-      </Mono>
+      </p>
     </div>
   );
 }

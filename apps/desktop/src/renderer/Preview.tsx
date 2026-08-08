@@ -10,7 +10,7 @@ import {
   buildRenderPlan,
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
-import { Mono } from '@nos/ui';
+import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
 import { textCacheKeyFor, textClipsOf } from './text-plan.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
@@ -159,15 +159,7 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }
   }, [doc.resolution.height, doc.resolution.width]);
 
   return (
-    <div
-      style={{
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--nos-bg-canvas)',
-      }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col bg-muted/50">
       {/*
         The canvas is taken out of flow and pinned to this box, and the picture is letterboxed inside
         it by `object-fit` — which a canvas honours like any other replaced element. The framing stays
@@ -182,47 +174,54 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }
         resolves to `auto`. An absolutely positioned box has a definite containing block and cannot
         overflow its parent or disturb a sibling, so the fault is unavailable rather than corrected.
       */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
           aria-label="Preview"
-          style={{
-            position: 'absolute',
-            inset: 12,
-            width: 'calc(100% - 24px)',
-            height: 'calc(100% - 24px)',
-            objectFit: 'contain',
-            background: '#000',
-          }}
+          // Black, and deliberately not a theme role: this is the letterbox around a picture, and a
+          // preview whose surround changed with the theme would misreport what the frame looks like.
+          className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] bg-black object-contain"
         />
 
         {overlay !== undefined && picture !== undefined && (
           // Centred over the canvas at the picture's own size, which is what `object-fit: contain`
           // produces. Sharing the canvas's inset rather than guessing at where it sits is what keeps
           // a placed point on the pixel it was placed on.
-          <div style={{ position: 'absolute', inset: 12, display: 'grid', placeItems: 'center' }}>
-            {overlay(picture)}
-          </div>
+          <div className="absolute inset-3 grid place-items-center">{overlay(picture)}</div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, padding: '4px 12px', alignItems: 'center' }}>
-        {glError !== undefined && <Mono tone="var(--nos-danger)">{glError}</Mono>}
+      <div className="flex items-center gap-3 px-3 py-1 font-mono text-xs text-muted-foreground">
+        {glError !== undefined && (
+          <span className="flex items-center gap-1.5 text-destructive">
+            <CircleAlertIcon className="size-3.5" />
+            {glError}
+          </span>
+        )}
         {glError === undefined && (
           <>
-            <Mono tone="var(--nos-text-faint)">{`frame ${frame}`}</Mono>
-            <Mono tone="var(--nos-text-faint)">{`${planned} layers`}</Mono>
-            <Mono tone="var(--nos-text-faint)">{`${stats?.passesExecuted ?? 0} passes`}</Mono>
+            <span>{`frame ${frame}`}</span>
+            <span>{`${planned} layers`}</span>
+            <span>{`${stats?.passesExecuted ?? 0} passes`}</span>
             {/* Skipped layers are reported rather than hidden: a black preview with no explanation is
                 indistinguishable from a broken one. */}
             {(stats?.layersSkipped ?? 0) > 0 && (
-              <Mono tone="var(--nos-warn)">{`${stats?.layersSkipped} layers still decoding`}</Mono>
+              <span className="flex items-center gap-1.5">
+                <TriangleAlertIcon className="size-3.5" />
+                {`${stats?.layersSkipped} layers still decoding`}
+              </span>
             )}
             {textProblems.length > 0 && (
-              <Mono tone="var(--nos-danger)">{`title: ${textProblems[0]?.detail ?? ''}`}</Mono>
+              <span className="flex items-center gap-1.5 text-destructive">
+                <CircleAlertIcon className="size-3.5" />
+                {`title: ${textProblems[0]?.detail ?? ''}`}
+              </span>
             )}
             {(stats?.passthroughs.length ?? 0) > 0 && (
-              <Mono tone="var(--nos-danger)">{`${stats?.passthroughs.length} effects failed to compile`}</Mono>
+              <span className="flex items-center gap-1.5 text-destructive">
+                <CircleAlertIcon className="size-3.5" />
+                {`${stats?.passthroughs.length} effects failed to compile`}
+              </span>
             )}
           </>
         )}
