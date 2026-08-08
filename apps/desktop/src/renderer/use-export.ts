@@ -16,6 +16,7 @@ import {
   createRenderTargetPool,
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+import { type GpuSemaphore, withGpu } from '@nos/generators';
 import { createMediaTextures } from './media-textures.js';
 import { prepareFrame } from './frame-render.js';
 import type { MaskSource } from './mask-source.js';
@@ -87,6 +88,14 @@ export interface ExportRunOptions {
   readonly document: TimelineDocument;
   readonly sidecar: SidecarInfo | undefined;
   /**
+   * The window's GPU semaphore.
+   *
+   * An export renders every frame through the same WebGL2 compositor the preview uses, for minutes at
+   * a time, so it is a GPU consumer in exactly the sense §7 means — and it ran without ever taking the
+   * lock, straight alongside whatever generation happened to be in flight.
+   */
+  readonly gpu: GpuSemaphore;
+  /**
    * Where a bound mask's frame comes from, so an export masks what the preview masked.
    *
    * Optional because an export of a project with no masks needs none — but absent when there *are*
@@ -98,7 +107,20 @@ export interface ExportRunOptions {
 /** Bytes of frame data per request. Sixteen megabytes is two 1080p frames, or eight at 720p. */
 export const FRAME_BATCH_BYTES = 16 * 1024 * 1024;
 
-export function useExportRun({ document, sidecar, masks }: ExportRunOptions): ExportRun {
+/**
+ * A number no other encode job in this window has used.
+ *
+ * The timestamp alone is not enough: two exports started inside the same millisecond would collide
+ * again, and a counter alone would repeat across a reload while the sidecar — which outlives the
+ * window — still remembers the earlier job.
+ */
+let jobSequence = 0;
+function nextJobSequence(): string {
+  jobSequence += 1;
+  return `${Date.now().toString(36)}_${jobSequence}`;
+}
+
+export function useExportRun({ document, sidecar, masks, gpu }: ExportRunOptions): ExportRun {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -131,13 +153,28 @@ export function useExportRun({ document, sidecar, masks }: ExportRunOptions): Ex
       setError(undefined);
 
       setTiming(undefined);
-      void run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks)
+      /*
+       * Queued behind the semaphore before a single frame is rendered, and said so rather than sitting
+       * silently at zero: an export that waits for a generation to finish is correct behaviour, but an
+       * export that appears frozen for four minutes is a bug report.
+       */
+      setProgress({
+        phase: 'preparing',
+        framesDone: 0,
+        framesTotal: frameCountFor(settings.range),
+        fraction: 0,
+        fps: 0,
+        message: 'waiting for the GPU',
+      });
+      void withGpu(gpu, 'export', settings.outputPath, () =>
+        run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks),
+      )
         .catch((failure: unknown) => {
           setError(failure instanceof Error ? failure.message : String(failure));
         })
         .finally(() => setRunning(false));
     },
-    [running, sidecar],
+    [gpu, running, sidecar, masks],
   );
 
   return { running, progress, error, timing, start, cancel };
@@ -180,7 +217,15 @@ async function run(
   // Reading from the default framebuffer is out too — its contents are undefined after compositing
   // unless `preserveDrawingBuffer` is set, which would cost a copy on every preview frame as well.
   const target = createReadbackTarget(gl, width, height);
-  const jobId = `export_${settings.outputPath.replace(/[^a-z0-9]+/gi, '_')}_${total}`;
+  /*
+   * Unique per run, not per output.
+   *
+   * It used to be the output path and the frame count, both of which are identical every time the same
+   * sequence is exported — so the second export of a session reused the first one's id and the encoder
+   * refused it as a duplicate. Exporting, watching it finish, then exporting again is not an unusual
+   * thing to do; it was simply broken, and the run counter is what makes each attempt its own job.
+   */
+  const jobId = `export_${settings.outputPath.replace(/[^a-z0-9]+/gi, '_')}_${nextJobSequence()}`;
   const call = sidecarCall(sidecar);
 
   const tracker = createProgressTracker(total, performance.now());

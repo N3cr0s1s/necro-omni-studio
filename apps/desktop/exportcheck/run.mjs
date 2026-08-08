@@ -20,7 +20,7 @@
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, cpSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,9 +110,42 @@ try {
     timeout: 180_000,
   });
 
-  if (errors.length > 0) fail(`the renderer raised ${errors.length}: ${errors[0]}`);
-
   const delivered = join(project, 'renders', 'exportcheck.mp4');
+
+  /*
+   * A second export, from the same open window.
+   *
+   * Exporting, watching it finish and exporting again is an ordinary thing to do and it was broken:
+   * the encoder job id was built from the output path and the frame count, so the second attempt
+   * reused the first one's id and the sidecar refused it as a duplicate. The delivered file is removed
+   * first, so its reappearance is proof this render happened rather than the previous artefact.
+   *
+   * The toolbar button is deliberately not clicked again — the dialog is still open, and clicking it
+   * would close it.
+   */
+  rmSync(delivered, { force: true });
+  await page.locator('[role="dialog"]').getByRole('button', { name: 'Export' }).click();
+
+  /*
+   * Existing is not the same as finished: ffmpeg creates the file when it opens the muxer, so reading
+   * it the moment it appears reads a header with no frames behind it. The size settling is the
+   * observable end of the write, and it is what the frame checks below depend on.
+   */
+  let redelivered = false;
+  let lastSize = -1;
+  let settled = 0;
+  for (let waited = 0; waited < 180 && !redelivered; waited += 1) {
+    await page.waitForTimeout(1000);
+    if (!existsSync(delivered)) continue;
+    const size = statSync(delivered).size;
+    settled = size > 0 && size === lastSize ? settled + 1 : 0;
+    lastSize = size;
+    redelivered = settled >= 2;
+  }
+  if (!redelivered) fail('a second export in the same session delivered nothing');
+  else console.log('✓ a second export in the same session delivers too');
+
+  if (errors.length > 0) fail(`the renderer raised ${errors.length}: ${errors[0]}`);
   if (!existsSync(delivered)) {
     fail('no file was delivered');
   } else {
