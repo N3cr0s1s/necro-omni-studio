@@ -31,7 +31,7 @@ import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
-import { defaultRange, useExportRun } from './use-export.js';
+import { defaultRange, describeTiming, useExportRun } from './use-export.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
@@ -352,6 +352,19 @@ export function App(): ReactNode {
           onCancel={exportRun.cancel}
           onClose={() => setExportSettings(undefined)}
         />
+      )}
+
+      {exportRun.timing !== undefined && (
+        <div
+          role="status"
+          style={{
+            padding: '4px 16px',
+            font: '500 11px ui-monospace, monospace',
+            color: 'var(--nos-text-faint)',
+          }}
+        >
+          {describeTiming(exportRun.timing)}
+        </div>
       )}
 
       {(error ?? drag.rejection ?? exportRun.error) !== undefined && (
