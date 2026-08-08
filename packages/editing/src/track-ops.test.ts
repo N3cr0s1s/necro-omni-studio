@@ -23,6 +23,7 @@ import {
   nextTrackId,
   nextTrackName,
   removeTrack,
+  renameTrack,
   toggleTrackFlag,
 } from './track-ops.js';
 
@@ -228,6 +229,46 @@ describe('removing', () => {
     const result = removeTrack(document, trackId('nope'));
     expect(result.ok).toBe(false);
     expect(document.sequence.tracks).toHaveLength(3);
+  });
+});
+
+describe('renaming', () => {
+  it('takes a new name', () => {
+    const result = renameTrack(documentOf(), trackId('a1'), 'A1 · music');
+    expect(result.ok && result.value.sequence.tracks[1]?.name).toBe('A1 · music');
+  });
+
+  it('refuses a blank name, which nothing could be referred to by', () => {
+    const result = renameTrack(documentOf(), trackId('a1'), '   ');
+    expect(result.ok ? '' : result.error.kind).toBe('empty-name');
+  });
+
+  it('trims, so a stray space does not become part of the name', () => {
+    const result = renameTrack(documentOf(), trackId('a1'), '  A1 · music  ');
+    expect(result.ok && result.value.sequence.tracks[1]?.name).toBe('A1 · music');
+  });
+
+  it('renames a locked track, because the label is not on the track', () => {
+    // Locking protects what is *on* a track. Refusing a rename would make locking a finished layer
+    // cost the ability to say what it holds.
+    const base = documentOf();
+    const locked: TimelineDocument = {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        tracks: base.sequence.tracks.map((track) =>
+          track.id === 'v1' ? ({ ...track, locked: true } as Track) : track,
+        ),
+      },
+    };
+
+    expect(renameTrack(locked, trackId('v1'), 'V1 · locked').ok).toBe(true);
+  });
+
+  it('is a no-op when the name has not changed', () => {
+    const document = documentOf();
+    const result = renameTrack(document, trackId('v1'), 'V1');
+    expect(result.ok && result.value).toBe(document);
   });
 });
 

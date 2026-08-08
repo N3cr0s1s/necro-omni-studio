@@ -295,6 +295,50 @@ describe('ruler', () => {
   });
 });
 
+describe('renaming a track', () => {
+  it('is a label until asked, so the header keeps its width for controls', () => {
+    renderTimeline({ onTrackRename: vi.fn() });
+    expect(screen.queryByLabelText('Rename V1')).toBeNull();
+  });
+
+  it('becomes a field on double-click', () => {
+    renderTimeline({ onTrackRename: vi.fn() });
+    fireEvent.doubleClick(screen.getByTitle('V1 — double-click to rename'));
+
+    expect(screen.getByLabelText('Rename V1')).toBeDefined();
+  });
+
+  it('commits on enter', () => {
+    const onTrackRename = vi.fn();
+    renderTimeline({ onTrackRename });
+
+    fireEvent.doubleClick(screen.getByTitle('V1 — double-click to rename'));
+    const field = screen.getByLabelText('Rename V1');
+    fireEvent.change(field, { target: { value: 'V1 · b-roll' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    expect(onTrackRename).toHaveBeenCalledWith('v1', 'V1 · b-roll');
+  });
+
+  it('abandons on escape, so a mistyped name is not committed by looking away', () => {
+    const onTrackRename = vi.fn();
+    renderTimeline({ onTrackRename });
+
+    fireEvent.doubleClick(screen.getByTitle('V1 — double-click to rename'));
+    const field = screen.getByLabelText('Rename V1');
+    fireEvent.change(field, { target: { value: 'oops' } });
+    fireEvent.keyDown(field, { key: 'Escape' });
+
+    expect(onTrackRename).not.toHaveBeenCalled();
+  });
+
+  it('stays a label when nothing can accept a rename', () => {
+    renderTimeline();
+    fireEvent.doubleClick(screen.getByTitle('V1'));
+    expect(screen.queryByLabelText('Rename V1')).toBeNull();
+  });
+});
+
 describe('opening a clip', () => {
   const animated = (id: string) =>
     video(id, 0, 300, {

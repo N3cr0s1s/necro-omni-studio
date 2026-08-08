@@ -113,6 +113,30 @@ export function toggleTrackFlag(
   return ok({ ...document, sequence: { ...document.sequence, tracks } });
 }
 
+/**
+ * Renames a track.
+ *
+ * A blank name is refused rather than accepted and rendered as an empty header: the name is how a
+ * user says "put it on A2", and a row with nothing in it cannot be referred to at all. A **locked**
+ * track can still be renamed — locking protects what is on a track, and the label is not on it.
+ */
+export function renameTrack(
+  document: TimelineDocument,
+  id: TrackId,
+  name: string,
+): Result<TimelineDocument, EditError> {
+  const trimmed = name.trim();
+  const index = document.sequence.tracks.findIndex((track) => track.id === id);
+  const track = document.sequence.tracks[index];
+  if (track === undefined) return err({ kind: 'track-not-found', track: id });
+  if (trimmed === '') return err({ kind: 'empty-name', track: id });
+  if (track.name === trimmed) return ok(document);
+
+  const tracks = [...document.sequence.tracks];
+  tracks[index] = { ...track, name: trimmed } as Track;
+  return ok({ ...document, sequence: { ...document.sequence, tracks } });
+}
+
 /** How many clips a removal would take with it, so the caller can say so before doing it. */
 export function clipsOnTrack(document: TimelineDocument, id: TrackId): number {
   const track = document.sequence.tracks.find((candidate) => candidate.id === id);

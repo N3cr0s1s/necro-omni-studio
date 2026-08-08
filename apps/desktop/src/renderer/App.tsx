@@ -33,6 +33,7 @@ import {
   moveClip,
   nextTrackId,
   removeTrack,
+  renameTrack,
   toggleTrackFlag,
   trimClipEnd,
   trimClipStart,
@@ -638,6 +639,16 @@ export function App(): ReactNode {
               strips={strips.strips}
               onAddTrack={addTrackOfKind}
               onTrackRemove={removeTrackById}
+              onTrackRename={(id, name) => {
+                store.commit('rename track', (current) => {
+                  const result = renameTrack(current, id, name);
+                  if (!result.ok) {
+                    setError(describeEdit(result.error));
+                    return current;
+                  }
+                  return result.value;
+                });
+              }}
               onTrackMute={(id) => toggleTrack(id, 'muted')}
               onTrackSolo={(id) => toggleTrack(id, 'solo')}
               onTrackLock={(id) => toggleTrack(id, 'locked')}

@@ -36,7 +36,9 @@ export type EditError =
   | { readonly kind: 'nothing-to-cut'; readonly track: TrackId }
   | { readonly kind: 'no-free-track'; readonly kindWanted: string }
   /** A track id already in use. Adding one anyway would replace a track and everything on it. */
-  | { readonly kind: 'duplicate-track'; readonly track: TrackId };
+  | { readonly kind: 'duplicate-track'; readonly track: TrackId }
+  /** A name that is blank, which nothing could be referred to by. */
+  | { readonly kind: 'empty-name'; readonly track?: TrackId; readonly clip?: ClipId };
 
 export function describeEditError(error: EditError): string {
   switch (error.kind) {
@@ -60,6 +62,8 @@ export function describeEditError(error: EditError): string {
       return `No free ${error.kindWanted} track is available`;
     case 'duplicate-track':
       return `Track ${error.track} already exists`;
+    case 'empty-name':
+      return 'A name cannot be blank';
     default: {
       const unreachable: never = error;
       throw new Error(`Unhandled edit error ${JSON.stringify(unreachable)}`);

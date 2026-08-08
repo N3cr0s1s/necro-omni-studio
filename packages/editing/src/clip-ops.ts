@@ -569,7 +569,13 @@ export function setClipLabel(
   if (!located.ok) return located;
   const unlocked = assertUnlocked(located.value.track);
   if (!unlocked.ok) return unlocked;
-  if (located.value.clip.label === label) return ok(document);
+  // A blank label would render as an unnamed rectangle the user cannot refer to, so it is refused
+  // rather than stored. Surrounding whitespace is dropped for the same reason.
+  const trimmed = label.trim();
+  if (trimmed === '') return err({ kind: 'empty-name', clip: clipId });
+  if (located.value.clip.label === trimmed) return ok(document);
 
-  return ok(replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, label })));
+  return ok(
+    replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, label: trimmed })),
+  );
 }

@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1833 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1843 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1851,3 +1851,18 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   They asked to put something down, and "there is already a clip there" is a fact
   they can see — where the next gap is, is the part worth doing for them. Duplicate
   is that same move with the destination chosen as *immediately after the original*.
+
+- 2026-08-08: Tracks can be renamed. `A2 · music` is the form the model has always
+  documented and the header could only ever show `A2`, because nothing could write
+  a name. `setClipLabel` had the same shape of gap and gained the same guard.
+
+  Double-click rather than a pencil button: the header is already dense with M/S/L
+  and a remove control, and renaming is rare enough that it does not deserve
+  permanent width. Enter commits, Escape abandons — a field that could only be left
+  by clicking elsewhere leaves the user unsure whether their change took.
+
+  A **blank** name is refused rather than stored. A row with nothing in it cannot be
+  referred to at all, which is the one thing a name is for. A **locked** track can
+  still be renamed: locking protects what is *on* a track, and the label is not on
+  it — refusing would make locking a finished layer cost the ability to say what it
+  holds.

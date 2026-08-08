@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useMemo, useRef } from 'react';
+import { Fragment, type CSSProperties, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import {
   type Clip,
   type ClipId,
@@ -71,6 +71,8 @@ export interface TimelineProps {
   readonly onTrackLock?: (track: TrackId) => void;
   /** Removes a track and everything on it. Absent hides the control rather than showing a dead one. */
   readonly onTrackRemove?: (track: TrackId) => void;
+  /** Renames a track. `A2 · music` is how an editor says which row holds what. */
+  readonly onTrackRename?: (track: TrackId, name: string) => void;
   /** Adds a track of a kind. The toolbar offers one button per kind the spec allows N of. */
   readonly onAddTrack?: (kind: TrackKind) => void;
 
@@ -168,6 +170,7 @@ export function Timeline(props: TimelineProps): ReactNode {
           {...(props.onTrackSolo !== undefined ? { onSolo: props.onTrackSolo } : {})}
           {...(props.onTrackLock !== undefined ? { onLock: props.onTrackLock } : {})}
           {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
+          {...(props.onTrackRename !== undefined ? { onRename: props.onTrackRename } : {})}
         />
 
         <div
@@ -361,6 +364,7 @@ function TrackHeaderColumn({
   onSolo,
   onLock,
   onRemove,
+  onRename,
 }: {
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
@@ -368,6 +372,7 @@ function TrackHeaderColumn({
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
   readonly onRemove?: (track: TrackId) => void;
+  readonly onRename?: (track: TrackId, name: string) => void;
 }): ReactNode {
   return (
     <div
@@ -394,6 +399,7 @@ function TrackHeaderColumn({
           {...(onSolo !== undefined ? { onSolo } : {})}
           {...(onLock !== undefined ? { onLock } : {})}
           {...(onRemove !== undefined ? { onRemove } : {})}
+          {...(onRename !== undefined ? { onRename } : {})}
         />
       ))}
     </div>
@@ -416,6 +422,7 @@ function TrackHeader({
   onSolo,
   onLock,
   onRemove,
+  onRename,
 }: {
   readonly track: Track;
   readonly audible: boolean;
@@ -423,6 +430,7 @@ function TrackHeader({
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
   readonly onRemove?: (track: TrackId) => void;
+  readonly onRename?: (track: TrackId, name: string) => void;
 }): ReactNode {
   const stacked = track.height >= STACKED_HEADER_MIN_HEIGHT;
 
@@ -444,19 +452,13 @@ function TrackHeader({
         overflow: 'hidden',
       }}
     >
-      <span
-        style={{
-          font: `600 11px ${token.fontUi}`,
-          color: trackLabelColor(track),
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          flex: stacked ? 'none' : 1,
-          minWidth: 0,
-        }}
-      >
-        {track.name}
-      </span>
+      <EditableName
+        value={track.name}
+        tone={trackLabelColor(track)}
+        title={`${track.name} — double-click to rename`}
+        style={{ flex: stacked ? 'none' : 1 }}
+        {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
+      />
       <div style={{ display: 'flex', gap: token.space1, flex: 'none' }}>
         <TrackToggle
           label="M"
@@ -494,6 +496,89 @@ function TrackHeader({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A label that becomes a field on double-click.
+ *
+ * Double-click rather than a pencil button: the header is already dense with M/S/L and a remove
+ * control, and renaming is rare enough that it does not deserve permanent width. Escape abandons the
+ * edit and Enter commits it, which is what every inline rename anywhere does — a field that could
+ * only be left by clicking elsewhere would leave the user unsure whether their change took.
+ */
+function EditableName({
+  value,
+  tone,
+  title,
+  style,
+  onCommit,
+}: {
+  readonly value: string;
+  readonly tone: string;
+  readonly title: string;
+  readonly style?: CSSProperties;
+  readonly onCommit?: (name: string) => void;
+}): ReactNode {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (!editing || onCommit === undefined) {
+    return (
+      <span
+        title={onCommit === undefined ? value : title}
+        onDoubleClick={() => {
+          if (onCommit === undefined) return;
+          setDraft(value);
+          setEditing(true);
+        }}
+        style={{
+          font: `600 11px ${token.fontUi}`,
+          color: tone,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minWidth: 0,
+          ...style,
+        }}
+      >
+        {value}
+      </span>
+    );
+  }
+
+  const finish = (commit: boolean): void => {
+    setEditing(false);
+    if (commit) onCommit(draft);
+  };
+
+  return (
+    <input
+      // Focused on appearing: the field exists only because the user just asked for it, and anything
+      // else would need a second click before they could type.
+      autoFocus
+      aria-label={`Rename ${value}`}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') finish(true);
+        else if (event.key === 'Escape') finish(false);
+        else return;
+        event.preventDefault();
+      }}
+      style={{
+        font: `600 11px ${token.fontUi}`,
+        color: token.textBright,
+        background: token.surface1,
+        border: `1px solid ${token.accent}`,
+        borderRadius: token.radiusInset,
+        padding: '1px 3px',
+        minWidth: 0,
+        width: '100%',
+        ...style,
+      }}
+    />
   );
 }
 
