@@ -38,7 +38,9 @@ import {
   insertGenerated,
   linkablePair,
   linkClips,
+  canMoveTrack,
   moveClip,
+  moveTrack,
   nextTrackId,
   removeMarker,
   removeTrack,
@@ -1001,6 +1003,27 @@ export function App(): ReactNode {
     [store],
   );
 
+  /**
+   * Reorders a track among its own kind.
+   *
+   * Layer order is what the compositor reads — video tracks are walked in reverse so a later one
+   * draws on top — and until now it was fixed at creation with nothing able to change it.
+   */
+  const moveTrackBy = useCallback(
+    (id: TrackId, delta: number) => {
+      store.commit('move track', (current) => {
+        const result = moveTrack(current, id, delta);
+        if (!result.ok) {
+          setError(describeEditError(result.error));
+          return current;
+        }
+        setError(undefined);
+        return result.value;
+      });
+    },
+    [store],
+  );
+
   const removeTrackById = useCallback(
     (id: TrackId) => {
       store.commit('remove track', (current) => {
@@ -1056,6 +1079,12 @@ export function App(): ReactNode {
           break;
         case 'collapse-track':
           if (target.track !== undefined) toggleTrack(target.track, 'collapsed');
+          break;
+        case 'move-track-up':
+        case 'move-track-down':
+          if (target.track !== undefined) {
+            moveTrackBy(target.track, action === 'move-track-up' ? -1 : 1);
+          }
           break;
         case 'remove-track':
           if (target.track !== undefined) removeTrackById(target.track);
@@ -1147,6 +1176,12 @@ export function App(): ReactNode {
           canPaste: clipEdits.canPaste,
           hasAttributes: clipEdits.attributeSummary !== undefined,
           canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
+          ...(target.track !== undefined
+            ? {
+                canMoveTrackUp: canMoveTrack(document, target.track, -1),
+                canMoveTrackDown: canMoveTrack(document, target.track, 1),
+              }
+            : {}),
           ripple,
         }),
       onChoose: (target, action) => runClipMenuAction(target, action as ClipMenuAction),

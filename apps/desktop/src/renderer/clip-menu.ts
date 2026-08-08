@@ -10,6 +10,8 @@ import {
   Link2OffIcon,
   PaintBucketIcon,
   PaletteIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   PencilIcon,
@@ -46,6 +48,14 @@ export interface ClipMenuState {
   /** True when removing closes the gap, so the label can say which removal this is. */
   readonly ripple: boolean;
   /**
+   * Whether the clicked lane has a neighbour of its own kind to swap with.
+   *
+   * Decided by the caller, from the document, so the row and the action cannot disagree about
+   * whether a move is possible.
+   */
+  readonly canMoveTrackUp?: boolean;
+  readonly canMoveTrackDown?: boolean;
+  /**
    * True when the selection is exactly one unlinked video and one unlinked audio clip.
    *
    * Decided by the caller because it is a question about the selection and the document, and computed
@@ -60,6 +70,8 @@ export const CLIP_MENU_ACTIONS = [
   'add-text-track',
   'rename-track',
   'collapse-track',
+  'move-track-up',
+  'move-track-down',
   'remove-track',
   'rename-clip',
   'cut',
@@ -116,6 +128,24 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       label: collapsed ? 'Expand track' : 'Collapse track',
       icon: collapsed ? ChevronRightIcon : ChevronDownIcon,
       disabled: track === undefined,
+    },
+    {
+      /*
+       * Layer order, which the compositor reads: video tracks are walked in reverse so a later one
+       * draws on top. Disabled at the ends of its own kind rather than hidden, because a control that
+       * vanishes at the boundary leaves the user hunting for it.
+       */
+      id: 'move-track-up',
+      label: 'Move track up',
+      icon: ArrowUpIcon,
+      disabled: track === undefined || !state.canMoveTrackUp,
+      separated: true,
+    },
+    {
+      id: 'move-track-down',
+      label: 'Move track down',
+      icon: ArrowDownIcon,
+      disabled: track === undefined || !state.canMoveTrackDown,
     },
     {
       id: 'remove-track',

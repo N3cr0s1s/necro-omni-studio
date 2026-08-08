@@ -139,6 +139,57 @@ export function renameTrack(
 }
 
 /**
+ * Moves a track past its neighbour of the same kind.
+ *
+ * Layer order is not cosmetic here: the compositor walks video tracks in reverse so that later ones
+ * draw on top, which makes a track's position in this list the answer to "which picture wins". A
+ * project could add a second video track from the first commit and never decide that — the order was
+ * fixed at creation and nothing could change it.
+ *
+ * **Within its own kind, always.** The timeline reads top-to-bottom as video, then audio, then text,
+ * and `addTrack` places a new one after the last of its kind precisely to keep that. A move that
+ * crossed the boundary would let a video track land below the audio, breaking the reading for every
+ * project it happened in — so one that would leave the group is refused rather than clamped: at the
+ * top of the video group "up" has no meaning, and doing nothing quietly is how a user concludes the
+ * control is broken.
+ *
+ * `delta` counts **neighbours of the same kind**, not list positions. `-1` from the second video
+ * track swaps it with the first whatever sits between them in the list, which is what is on screen.
+ */
+export function moveTrack(
+  document: TimelineDocument,
+  id: TrackId,
+  delta: number,
+): Result<TimelineDocument, EditError> {
+  const tracks = document.sequence.tracks;
+  const track = tracks.find((candidate) => candidate.id === id);
+  if (track === undefined) return err({ kind: 'track-not-found', track: id });
+
+  // Where this kind sits in the list. The move happens among these; everything else is untouched.
+  const positions = tracks.flatMap((candidate, index) => (candidate.kind === track.kind ? [index] : []));
+  const at = positions.indexOf(tracks.indexOf(track));
+  const to = at + Math.trunc(delta);
+  if (to < 0 || to >= positions.length) return err({ kind: 'no-free-track', kindWanted: track.kind });
+
+  const from = positions[at];
+  const onto = positions[to];
+  if (from === undefined || onto === undefined || from === onto) return ok(document);
+
+  // Swapped rather than spliced, so the *slots* a kind occupies stay where they are and a video track
+  // can never end up in an audio one however far it is moved.
+  const next = [...tracks];
+  next[from] = tracks[onto] as Track;
+  next[onto] = tracks[from] as Track;
+
+  return ok({ ...document, sequence: { ...document.sequence, tracks: next } });
+}
+
+/** Whether a track has a neighbour of its own kind to swap with, so a control can disable itself. */
+export function canMoveTrack(document: TimelineDocument, id: TrackId, delta: number): boolean {
+  return moveTrack(document, id, delta).ok;
+}
+
+/**
  * The range a track's height may take.
  *
  * The floor keeps a row tall enough to hold its own controls; the ceiling stops one track from

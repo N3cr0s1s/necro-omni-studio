@@ -20,6 +20,8 @@ import {
   clipsOnTrack,
   createTrack,
   firstTrackOfKind,
+  canMoveTrack,
+  moveTrack,
   nextTrackId,
   setTrackMix,
   TRACK_GAIN_RANGE,
@@ -515,5 +517,87 @@ describe('a track´s level and pan', () => {
     const result = setTrackMix(documentOf(), trackId('v1'), { gain: 0.5 });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('wrong-track-kind');
+  });
+});
+
+/**
+ * Reordering tracks.
+ *
+ * Layer order is not cosmetic: the compositor walks video tracks in reverse so later ones draw on
+ * top, which makes a track's position in the list the answer to "which picture wins". A project could
+ * add a second video track from the first commit and never decide that.
+ *
+ * The assertions are mostly about the boundary between kinds. The timeline reads top-to-bottom as
+ * video, then audio, then text, and a move that could cross that would let a video track land below
+ * the audio — breaking the reading for every project it happened in.
+ */
+describe('moving a track', () => {
+  const ids = (document: TimelineDocument) => document.sequence.tracks.map((track) => track.id);
+
+  /** Two video tracks over one audio and one text, which is the shape the boundary rule is about. */
+  function stacked(): TimelineDocument {
+    const added = addTrack(documentOf(), { kind: 'video', id: trackId('v2') });
+    if (!added.ok) throw new Error('fixture');
+    return added.value.document;
+  }
+
+  it('swaps a track with its neighbour of the same kind', () => {
+    const result = moveTrack(stacked(), trackId('v2'), -1);
+    expect(result.ok && ids(result.value)).toEqual(['v2', 'v1', 'a1', 't1']);
+  });
+
+  it('moves the other way too', () => {
+    const result = moveTrack(stacked(), trackId('v1'), 1);
+    expect(result.ok && ids(result.value)).toEqual(['v2', 'v1', 'a1', 't1']);
+  });
+
+  it('refuses to leave its own kind', () => {
+    // The lowest video track moving down would land among the audio, and the timeline would stop
+    // reading as video-then-audio-then-text for the rest of the project's life.
+    const result = moveTrack(stacked(), trackId('v2'), 1);
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses at the top for the same reason', () => {
+    const result = moveTrack(stacked(), trackId('v1'), -1);
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses rather than doing nothing, so a dead control can say why', () => {
+    // Silently succeeding with no change is how a user concludes the button is broken.
+    const alone = moveTrack(documentOf(), trackId('a1'), -1);
+    expect(alone.ok).toBe(false);
+  });
+
+  it('counts in neighbours of its kind, not in list positions', () => {
+    // `v1` and `v2` are adjacent on screen whatever sits between them in the list.
+    const result = moveTrack(stacked(), trackId('v2'), -1);
+    expect(result.ok && ids(result.value).slice(0, 2)).toEqual(['v2', 'v1']);
+  });
+
+  it('leaves every other track exactly where it was', () => {
+    const result = moveTrack(stacked(), trackId('v2'), -1);
+    expect(result.ok && ids(result.value).slice(2)).toEqual(['a1', 't1']);
+  });
+
+  it('keeps what is on the tracks it moved', () => {
+    const document = stacked();
+    const result = moveTrack(document, trackId('v2'), -1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sequence.tracks).toHaveLength(document.sequence.tracks.length);
+      expect(new Set(ids(result.value))).toEqual(new Set(ids(document)));
+    }
+  });
+
+  it('refuses a track that is not there', () => {
+    const result = moveTrack(documentOf(), trackId('nope'), 1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('track-not-found');
+  });
+
+  it('says whether a control should be offered at all', () => {
+    expect(canMoveTrack(stacked(), trackId('v2'), -1)).toBe(true);
+    expect(canMoveTrack(stacked(), trackId('v1'), -1)).toBe(false);
   });
 });
