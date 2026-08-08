@@ -19,8 +19,11 @@ import {
   generatePreset,
   mergeGeneratedKeyframes,
 } from '@nos/text';
-import { Mono, SectionCaption } from '@nos/ui';
-import { token } from '@nos/ui';
+import { TypeIcon } from 'lucide-react';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
+import { Textarea } from '@nos/ui/components/ui/textarea';
 
 /**
  * Text clip properties (spec §6.5).
@@ -95,74 +98,68 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-      <SectionCaption>Text</SectionCaption>
+    <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex items-center gap-2">
+        <TypeIcon className="size-3.5 text-chart-5" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Text</span>
+      </div>
 
-      <textarea
+      <Textarea
         aria-label="Text"
         rows={3}
         value={text.content.text}
         onChange={(event) => setContent({ text: event.target.value })}
-        style={{
-          background: token.surface1,
-          border: `1px solid ${token.borderControl}`,
-          borderRadius: token.radiusControl,
-          color: token.textBright,
-          font: `400 12px ${token.fontUi}`,
-          padding: token.space3,
-          resize: 'vertical',
-        }}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Field label="Size">
-          <input
+      <div className="grid grid-cols-2 gap-2">
+        <Labelled label="Size">
+          <Input
             type="number"
             aria-label="Size"
             min={8}
             max={400}
             value={text.content.size}
             onChange={(event) => setContent({ size: Number(event.target.value) })}
-            style={inputStyle}
+            className="font-mono tabular-nums"
           />
-        </Field>
-        <Field label="Weight">
-          <select
+        </Labelled>
+        <Labelled label="Weight">
+          <NativeSelect
             aria-label="Weight"
+            className="w-full"
             value={text.content.weight}
             onChange={(event) => setContent({ weight: Number(event.target.value) })}
-            style={inputStyle}
           >
             {[400, 500, 600, 700, 800].map((weight) => (
-              <option key={weight} value={weight}>
+              <NativeSelectOption key={weight} value={weight}>
                 {weight}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </Field>
-        <Field label="Align">
-          <select
+          </NativeSelect>
+        </Labelled>
+        <Labelled label="Align">
+          <NativeSelect
             aria-label="Align"
+            className="w-full"
             value={text.content.align}
             onChange={(event) => setContent({ align: event.target.value as TextContent['align'] })}
-            style={inputStyle}
           >
             {['left', 'center', 'right'].map((align) => (
-              <option key={align} value={align}>
+              <NativeSelectOption key={align} value={align}>
                 {align}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </Field>
-        <Field label="Colour">
-          <input
+          </NativeSelect>
+        </Labelled>
+        <Labelled label="Colour">
+          <Input
             type="color"
             aria-label="Colour"
             value={toHex(text.content.color)}
             onChange={(event) => setContent({ color: fromHex(event.target.value) })}
-            style={{ ...inputStyle, padding: 2 }}
+            className="p-0.5"
           />
-        </Field>
+        </Labelled>
       </div>
 
       <AnimationRow
@@ -176,9 +173,9 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
         onChange={(animation) => write('set text animation', applyPreset(text, 'out', animation))}
       />
 
-      <Mono tone={token.textGhost}>
+      <p className="font-mono text-xs text-muted-foreground">
         a preset writes keyframes — they appear in the lane below and can be edited like any others
-      </Mono>
+      </p>
     </div>
   );
 }
@@ -200,27 +197,28 @@ function AnimationRow({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <SectionCaption>{caption}</SectionCaption>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <select
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{caption}</span>
+      <div className="flex gap-2">
+        <NativeSelect
           aria-label={caption}
+          className="flex-1"
           value={current.preset}
           onChange={(event) =>
             onChange({ ...current, preset: event.target.value as TextAnimation['preset'] })
           }
-          style={{ ...inputStyle, flex: 1 }}
         >
           {TEXT_PRESETS.map((preset) => (
-            <option key={preset} value={preset}>
+            <NativeSelectOption key={preset} value={preset}>
               {preset}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
 
         {current.preset === 'slide' && (
-          <select
+          <NativeSelect
             aria-label={`${caption} direction`}
+            className="w-21"
             value={current.direction ?? 'up'}
             onChange={(event) =>
               onChange({
@@ -228,24 +226,23 @@ function AnimationRow({
                 direction: event.target.value as NonNullable<TextAnimation['direction']>,
               })
             }
-            style={{ ...inputStyle, width: 84 }}
           >
             {SLIDE_DIRECTIONS.map((direction) => (
-              <option key={direction} value={direction}>
+              <NativeSelectOption key={direction} value={direction}>
                 {direction}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         )}
 
-        <input
+        <Input
           type="number"
           aria-label={`${caption} frames`}
           min={0}
           max={240}
           value={current.durationFrames}
           onChange={(event) => onChange({ ...current, durationFrames: Number(event.target.value) })}
-          style={{ ...inputStyle, width: 64 }}
+          className="w-16 font-mono tabular-nums"
         />
       </div>
     </div>
@@ -294,25 +291,22 @@ function applyPreset(clip: TextClip, phase: 'in' | 'out', animation: TextAnimati
   };
 }
 
-function Field({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
+/**
+ * A caption above a control that already carries its own `aria-label`.
+ *
+ * Plumbing: the registry's `Field` with a label that is deliberately *not* associated, because every
+ * control in this panel names itself and a second association would give each one two accessible names.
+ */
+function Labelled({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ font: token.textLabel, color: token.textSoft }}>{label}</span>
+    <Field className="gap-1">
+      <FieldLabel render={<span />} className="text-xs">
+        {label}
+      </FieldLabel>
       {children}
-    </label>
+    </Field>
   );
 }
-
-const inputStyle = {
-  height: token.controlHeight,
-  background: token.surface1,
-  border: `1px solid ${token.borderControl}`,
-  borderRadius: token.radiusControl,
-  color: token.textBright,
-  font: `400 11.5px ${token.fontUi}`,
-  padding: `0 ${token.space2}`,
-  minWidth: 0,
-} as const;
 
 /** `#rrggbb` from the normalized channels a shader uniform wants. Alpha is not editable here. */
 function toHex(color: TextContent['color']): string {
