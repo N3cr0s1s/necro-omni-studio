@@ -72,6 +72,18 @@ export interface RuntimeOptions {
    * queue — and therefore losing its in-flight jobs — every time the library reloads.
    */
   readonly graphs?: { readonly current: ReadonlyMap<string, unknown> | undefined };
+  /**
+   * The open project's folder.
+   *
+   * The queue is emptied when this changes. A take is a file in *that* project's `generated/` folder
+   * and an accepted variant carries a project-relative path, so groups left over from the previous
+   * project offered variants whose files are not where the new clip would look for them — and the
+   * picker looked entirely normal while doing it.
+   *
+   * Not a dependency of the queue itself: rebuilding it would drop in-flight runs on the floor without
+   * cancelling them, where `clear` cancels first and then forgets.
+   */
+  readonly projectRoot?: string | undefined;
 }
 
 export const DEFAULT_COMFYUI_ENDPOINT = 'http://127.0.0.1:8188';
@@ -127,6 +139,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const [configured, setConfigured] = useState<string | undefined>(undefined);
   const endpoint = options.endpoint ?? configured ?? DEFAULT_COMFYUI_ENDPOINT;
   const graphs = options.graphs;
+  const projectRoot = options.projectRoot;
 
   // The endpoint is a main-process setting, so it is asked for rather than assumed.
   useEffect(() => {
@@ -269,6 +282,18 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   );
 
   useEffect(() => queue.subscribe(setSnapshot), [queue]);
+
+  /*
+   * A change of project empties the queue.
+   *
+   * Skipped on the first root, which is the project opening rather than changing — clearing an empty
+   * queue is harmless, but the effect reads as "on every project" if the guard is not spelt out.
+   */
+  const lastRoot = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (lastRoot.current !== undefined && lastRoot.current !== projectRoot) queue.clear();
+    lastRoot.current = projectRoot;
+  }, [projectRoot, queue]);
 
   const run = useCallback<GeneratorRuntime['run']>(
     (request) => {

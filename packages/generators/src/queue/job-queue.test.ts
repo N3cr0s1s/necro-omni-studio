@@ -412,3 +412,63 @@ describe('subscriptions', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe('changing project', () => {
+  it('forgets every group, so the picker cannot offer another project´s takes', async () => {
+    // A take is a file in *that* project's `generated/` folder and an accepted variant carries a
+    // project-relative path. A group surviving a project change offers variants whose files are not
+    // where the new clip would look for them — and the picker looks entirely normal doing it.
+    const { queue } = setup();
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    await queue.drain();
+    expect(queue.getSnapshot().groups.length).toBe(2);
+
+    queue.clear();
+
+    expect(queue.getSnapshot().groups).toEqual([]);
+    expect(queue.getSnapshot().runs).toEqual([]);
+  });
+
+  it('tells the backend to cancel rather than only forgetting the group', async () => {
+    // The distinction that matters, and the one an assertion on the *snapshot* cannot make: forgetting
+    // empties the snapshot either way, while the work carries on burning the GPU for a result nobody
+    // can reach. Only the backend can say which of the two happened.
+    const { queue, backend } = setup({ stepDelayMs: 20 });
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    // Let the first run reach the backend; a run still queued has no job to cancel.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    queue.clear();
+    await queue.drain();
+
+    expect(backend.cancelled.length).toBeGreaterThan(0);
+  });
+
+  it('leaves the GPU free afterwards', async () => {
+    // The consequence: the next project's first generation must not queue behind runs belonging to a
+    // project that is no longer open.
+    const { queue, gpu } = setup({ stepDelayMs: 20 });
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    queue.clear();
+    await queue.drain();
+
+    expect(gpu.getStatus().holder).toBeUndefined();
+    expect(gpu.getStatus().waiting).toEqual([]);
+  });
+
+  it('tells its subscribers, so the picker actually empties on screen', async () => {
+    const { queue } = setup();
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    await queue.drain();
+
+    let latest = queue.getSnapshot();
+    const stop = queue.subscribe((snapshot) => (latest = snapshot));
+    queue.clear();
+    stop();
+
+    expect(latest.groups).toEqual([]);
+  });
+});

@@ -130,6 +130,18 @@ export interface JobQueue {
    * deliberately left on disk — the spec's rule that nothing is destroyed.
    */
   dismissGroup(group: JobGroupId): void;
+  /**
+   * Forgets every group, cancelling anything still running.
+   *
+   * For a change of project. A take is a file in *that* project's `generated/` folder and an outcome
+   * carries a project-relative path, so a group left over from the previous project offers variants
+   * whose files are not where the accepted clip would look for them — a broken clip, produced by a
+   * picker that looked entirely normal.
+   *
+   * The files themselves are left on disk, as `dismissGroup` leaves them: they belong to the project
+   * that made them and reopening it should still find them.
+   */
+  clear(): void;
   getSnapshot(): QueueSnapshot;
   subscribe(listener: (snapshot: QueueSnapshot) => void): () => void;
   /** Resolves when every enqueued run has settled. For tests and for a clean shutdown. */
@@ -392,6 +404,15 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       // it and "Discard" appears to do nothing — which is exactly what it did.
       for (const id of record.runs) runs.delete(id);
       groups.delete(group);
+      publish();
+    },
+
+    clear(): void {
+      // Through `dismissGroup` rather than by emptying the maps, so "cancel what is running, then
+      // forget it" has one definition. A copy of the keys, because dismissing mutates the map.
+      for (const group of [...groups.keys()]) this.dismissGroup(jobGroupId(group));
+      // Belt and braces: a run whose group was already gone would otherwise outlive every group.
+      runs.clear();
       publish();
     },
 

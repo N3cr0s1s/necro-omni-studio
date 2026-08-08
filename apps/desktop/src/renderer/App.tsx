@@ -251,7 +251,7 @@ export function App(): ReactNode {
   // validates `requires` against the node classes that probe returned, so an unavailable generator is
   // greyed for the real reason rather than because the backend was still starting.
   const graphsRef = useRef<ReadonlyMap<string, unknown> | undefined>(undefined);
-  const runtime = useGeneratorRuntime({ graphs: graphsRef });
+  const runtime = useGeneratorRuntime({ graphs: graphsRef, projectRoot: project?.root });
   const library = useGeneratorLibrary(project?.root, {
     ...(runtime.capabilities !== undefined ? { installedNodeClasses: runtime.capabilities.nodeClasses } : {}),
   });
