@@ -591,6 +591,7 @@ function TrackHeader({
   readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
 }): ReactNode {
   const stacked = track.height >= STACKED_HEADER_MIN_HEIGHT;
+  const TrackKindIcon = TRACK_KIND_ICON[track.kind];
 
   return (
     <div
@@ -605,14 +606,26 @@ function TrackHeader({
       style={{ height: track.height }}
     >
       {onResize !== undefined && <ResizeHandle track={track} onResize={onResize} />}
-      <EditableName
-        autoEdit={renaming}
-        value={track.name}
-        tone={trackLabelColor(track)}
-        title={`${track.name} — double-click to rename`}
-        className={stacked ? 'flex-none' : 'flex-1'}
-        {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
-      />
+      <div className={cn('flex min-w-0 items-center gap-1.5', stacked ? 'flex-none' : 'flex-1')}>
+        {/*
+          The kind is the icon, not the name's colour. It was the colour, in the same categorical roles
+          the clips use — which is unreadable as *text*: those roles are chosen to be legible as a fill
+          behind something, and `chart-1` on a light background is barely there. The icon keeps the
+          colour where it works and the name stays at full contrast in both modes.
+        */}
+        <TrackKindIcon
+          className={cn('size-3 flex-none', trackLabelColor(track))}
+          role="img"
+          aria-label={track.kind}
+        />
+        <EditableName
+          autoEdit={renaming}
+          value={track.name}
+          title={`${track.name} — double-click to rename`}
+          className="min-w-0 flex-1"
+          {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
+        />
+      </div>
       <div className="flex flex-none gap-0.5">
         <TrackToggle
           icon={VolumeXIcon}
@@ -886,15 +899,12 @@ function ResizeHandle({
  */
 function EditableName({
   value,
-  tone,
   title,
   className,
   autoEdit = false,
   onCommit,
 }: {
   readonly value: string;
-  /** A theme role as a Tailwind class, so a track kind is recognisable without being recoloured. */
-  readonly tone: string;
   readonly title: string;
   readonly className?: string | undefined;
   /** Opens the field without a double-click, for a rename asked for somewhere else — a menu. */
@@ -921,7 +931,7 @@ function EditableName({
           setDraft(value);
           setEditing(true);
         }}
-        className={cn('min-w-0 truncate text-[11px] font-semibold', tone, className)}
+        className={cn('min-w-0 truncate text-[11px] font-semibold', className)}
       >
         {value}
       </span>
@@ -967,7 +977,7 @@ const TRACK_KIND_ICON: Readonly<Record<TrackKind, typeof FilmIcon>> = {
 };
 
 /**
- * The role a track's name is written in — the same one its clips are drawn in.
+ * The role a track's glyph is drawn in — the same one its clips are drawn in.
  *
  * A class rather than a colour, so the header follows the theme; and the same `chart` roles
  * `ClipBody` uses, so a row and the material on it are recognisably the same kind of thing.
