@@ -783,6 +783,18 @@ so it can gate a release:
 
 ### UI rules (keep these)
 
+- Filtering the project folder **opens every folder**, and restores the user's own
+  expansion state when the box empties. A match behind a collapsed folder reads as a
+  search that does not work.
+- A filter matches the **path**, not the name. A folder name is how a user says "in
+  here", and matching names alone answered "audio in `generated/`" with nothing,
+  because no file there is called `generated`.
+- A filtered folder's size and count are **recomputed**. `generated/` reading 47.9 MB
+  above the one file that matched contradicts the screen.
+- Offer only filters that can match something. A `text` or `mask` kind would always
+  return nothing in a project folder, and a control that never works teaches the user
+  that none of them do.
+
 - A shortcut is declared **once**, in `apps/desktop/src/renderer/shortcuts.ts`, and every
   surface that shows one reads it from there. Menus used to repeat the chords, so a
   rebinding had two places to change and the menu was the one that kept printing the
