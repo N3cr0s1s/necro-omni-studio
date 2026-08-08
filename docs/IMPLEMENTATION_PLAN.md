@@ -753,6 +753,12 @@ so it can gate a release:
 - Faders **clamp**, they do not refuse. The useful behaviour at the end of the travel is
   to stop, and a rejection there is a dialog in the middle of a drag. A non-finite value
   floors: `Number('')` is 0, and a cleared field must not quietly become silence.
+- A **scrub restarts the meter's tail**, and the tail's silence check is held off for
+  the length of a grain. The tail is 1500 ms against an 80 ms grain so length was never
+  the problem — but a grain starts a millisecond after `scrub` returns and ramps up over
+  five more, so the first read is legitimately silent and ending on it stops the loop
+  before the sound arrives. This is also the only way to observe that scrub audio works
+  at all: there is no output device in a harness, and the meter is the seam.
 - Scrub audio plays **only when the transport is parked**. The engine stops playback to
   make room for a grain, which is right at rest and wrong mid-playback: a click on the
   ruler should move the play position, not replace the sound with a blip.
