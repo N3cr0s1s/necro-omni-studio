@@ -32,6 +32,12 @@ export const IPC = {
   readTextFile: 'project:read-text',
   /** Records what generated an output, beside the output. */
   writeProvenance: 'project:write-provenance',
+  /** Creates a folder inside the project. */
+  createFolder: 'project:create-folder',
+  /** Renames or moves an entry inside the project. */
+  moveEntry: 'project:move',
+  /** Sends an entry to the operating system's trash. */
+  trashEntry: 'project:trash',
   /** Writes a project-relative text file. */
   writeTextFile: 'project:write-text',
   /** Lists a project subtree. */
@@ -108,6 +114,12 @@ export interface RecoverySnapshot {
   readonly projectModifiedAt?: number;
 }
 
+/** The result of a file operation: what happened, and in a sentence if it did not work. */
+export interface FileOperation {
+  readonly ok: boolean;
+  readonly detail?: string;
+}
+
 export interface SidecarInfo {
   readonly baseUrl: string;
   readonly token: string;
@@ -166,6 +178,26 @@ export interface DesktopBridge {
    * Named methods over a generic write is the rule the whole bridge follows.
    */
   writeProvenance(asset: string, contents: string): Promise<void>;
+
+  /**
+   * Organising the project folder from inside the application.
+   *
+   * A project *is* a folder, and until these existed that was true right up to the point where you
+   * wanted to tidy it — then you had to leave. All three resolve inside the project and refuse
+   * anything outside it, so the renderer cannot name a path on the rest of the disk.
+   *
+   * Each answers with a problem rather than throwing: a name already taken is an ordinary thing to
+   * do, and it deserves a sentence in the browser rather than an unhandled rejection.
+   */
+  createFolder(path: string): Promise<FileOperation>;
+  moveEntry(from: string, to: string): Promise<FileOperation>;
+  /**
+   * To the trash, never unlinked.
+   *
+   * A generated file can represent an afternoon of GPU time, and the operating system already
+   * provides the undo. An application that deletes outright is one you cannot use decisively.
+   */
+  trashEntry(path: string): Promise<FileOperation>;
   writeTextFile(path: string, contents: string): Promise<void>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
 

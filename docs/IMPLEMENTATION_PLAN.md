@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2048 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2106 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2219,3 +2219,43 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Harness note, since it cost three runs: `pkill -f electron` matches the shell
   command line issuing it whenever that line also mentions electron, so the kill and
   the launch must never share a command.
+
+- 2026-08-08: Issues #12, #13, #15, #16 and #17.
+
+  **#17** was the run path for the file input shipped an hour earlier, and had
+  three faults. The upload read the project file *through the backend
+  transport* — which in the desktop proxies to ComfyUI, so it asked the render
+  server for a file on the local disk; that is what `a backend path must start
+  with "/"` was refusing, correctly. The renderer→main proxy forwards only
+  string bodies, so the multipart form was dropped in silence. And the name the
+  backend stored the upload under was never patched into the graph: the patcher
+  left a note saying the backend would finish the job, and it never did, so the
+  node would have loaded whatever the graph's author last saved. A run that
+  looks like it used your image and did not is worse than one that fails.
+
+  **#16** and part of **#13** were the same shape as each other: capabilities
+  that existed with no way in. Tracks could be added from toolbar buttons nobody
+  looked at, so a right-click now offers them — along with renaming and deleting
+  the lane it was opened on, which needed the menu to know its target rather than
+  only a clip. The browser could show the project folder and do nothing to it, so
+  it now makes folders, renames, trashes and moves by drag. The reserved folders
+  are refused rather than confirmed: a dialog is a question with a wrong answer
+  available, and renaming `media/` leaves every clip pointing into nothing.
+
+  **#15** arrived with no description, so it was measured. The preview canvas
+  overflowed its box by up to 149 px and painted over the status line — the
+  `aspect-ratio` sizing fell back to the intrinsic ratio because a percentage
+  height inside an auto-sized grid row is cyclic. Pinned and `object-fit`
+  now, which cannot overflow at all.
+
+  **#12** closed the gap that made generated output anonymous. Each file gets a
+  provenance record beside it — generator, prompt, seed, every parameter — and
+  the browser's detail pane reads it. A sidecar rather than an index because a
+  project *is* a folder: move the file and its history moves; an index would be a
+  second source of truth about files the user can move, and would be wrong within
+  a day. Written for discarded variants too, since those stay on disk and would
+  otherwise be exactly the anonymous files this exists to prevent.
+
+  The browser rows also grew — 13 px type, roomier rows — on the report that it
+  was too small to read. It is the panel scanned most often and it was the
+  densest thing in the window.

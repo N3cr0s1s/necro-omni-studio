@@ -64,6 +64,8 @@ import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
 import { useProvenanceWriter } from './use-provenance-writer.js';
+import { useProjectFiles } from './use-project-files.js';
+import { type BrowserMenuAction, browserMenuItems } from './browser-menu.js';
 import { useCacheStats } from './use-cache-stats.js';
 import { BrowserDetail } from './BrowserDetail.js';
 import { useClipDrag } from './use-clip-drag.js';
@@ -100,6 +102,12 @@ function emptyProject(name: string): TimelineDocument {
     resolution: { width: 1920, height: 1080 },
     trackIds: TRACKS,
   });
+}
+
+/** The folder an entry sits in, or the project root. */
+function parentFolder(path: string): string {
+  const index = path.lastIndexOf('/');
+  return index === -1 ? '' : path.slice(0, index);
 }
 
 /** The bridge, or `undefined` when the UI runs in a plain browser (the visual harness). */
@@ -480,6 +488,48 @@ export function App(): ReactNode {
   // exactly the anonymous files this exists to prevent.
   useProvenanceWriter(runtime.snapshot, library.registry, bridge);
 
+  const files = useProjectFiles(bridge);
+  const [browserMenu, setBrowserMenu] = useState<
+    { path: string; isDirectory: boolean; x: number; y: number } | undefined
+  >(undefined);
+  // Which browser row has its name field open, and which folder is waiting for a name. Two states
+  // rather than one: a new folder has no row to edit until it exists on disk.
+  const [renamingPath, setRenamingPath] = useState<string | undefined>(undefined);
+  const [newFolderIn, setNewFolderIn] = useState<string | undefined>(undefined);
+
+  const runBrowserMenuAction = useCallback(
+    (action: BrowserMenuAction) => {
+      const target = browserMenu;
+      if (target === undefined) return;
+
+      switch (action) {
+        case 'new-folder':
+          // Into the clicked folder, or beside a clicked file — which is where a user pointing at
+          // something means, rather than always at the root.
+          setNewFolderIn(target.isDirectory ? target.path : parentFolder(target.path));
+          break;
+        case 'rename':
+          setRenamingPath(target.path);
+          break;
+        case 'reveal':
+          void bridge()?.revealInFolder(target.path);
+          break;
+        case 'delete':
+          void files.trash(target.path).then((done) => {
+            // The watcher reports the removal, but a rescan makes the row go at once rather than at
+            // the next debounce — a file that lingers after "Move to trash" reads as a failure.
+            if (done) tree.refresh();
+          });
+          break;
+        default: {
+          const unreachable: never = action;
+          throw new Error(`Unhandled browser action ${String(unreachable)}`);
+        }
+      }
+    },
+    [browserMenu, files, tree],
+  );
+
   /**
    * The non-error status line.
    *
@@ -687,6 +737,32 @@ export function App(): ReactNode {
         />
       )}
 
+      {browserMenu !== undefined && (
+        <ContextMenu
+          x={browserMenu.x}
+          y={browserMenu.y}
+          items={browserMenuItems({
+            path: browserMenu.path === '' ? undefined : browserMenu.path,
+            isDirectory: browserMenu.isDirectory,
+          })}
+          onChoose={(action) => runBrowserMenuAction(action as BrowserMenuAction)}
+          onClose={() => setBrowserMenu(undefined)}
+        />
+      )}
+
+      {newFolderIn !== undefined && (
+        <NewFolderPrompt
+          parent={newFolderIn}
+          onCancel={() => setNewFolderIn(undefined)}
+          onConfirm={(name) => {
+            setNewFolderIn(undefined);
+            void files.createFolder(newFolderIn, name).then((done) => {
+              if (done) tree.refresh();
+            });
+          }}
+        />
+      )}
+
       {authoring && (
         <ManifestAuthoring
           graphs={library.graphs}
@@ -756,6 +832,19 @@ export function App(): ReactNode {
           {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
           onSelect={setBrowserSelection}
           detail={<BrowserDetail asset={assetDetail} cache={cache} />}
+          onContextMenu={(path, isDirectory, x, y) => setBrowserMenu({ path, isDirectory, x, y })}
+          {...(renamingPath !== undefined ? { renamingPath } : {})}
+          onRename={(path, name) => {
+            setRenamingPath(undefined);
+            void files.rename(path, name).then((done) => {
+              if (done) tree.refresh();
+            });
+          }}
+          onMove={(source, destination) => {
+            void files.move(source, destination).then((done) => {
+              if (done) tree.refresh();
+            });
+          }}
           onActivate={(asset) => {
             void mediaImport.run(asset, playhead).then((id) => {
               // Selected on arrival, because the next thing a user does with a clip they just added is
@@ -916,6 +1005,99 @@ export function App(): ReactNode {
           onReject={setError}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Asking for a folder's name before making it.
+ *
+ * A prompt rather than creating `New folder` and opening its name field: the empty-name case is not
+ * reachable this way, and a cancelled prompt leaves nothing behind — whereas a cancelled inline
+ * rename would leave a folder called `New folder` in a project the user was tidying.
+ */
+function NewFolderPrompt({
+  parent,
+  onCancel,
+  onConfirm,
+}: {
+  readonly parent: string;
+  readonly onCancel: () => void;
+  readonly onConfirm: (name: string) => void;
+}): ReactNode {
+  const [name, setName] = useState('');
+
+  return (
+    <div
+      role="dialog"
+      aria-label="New folder"
+      aria-modal="true"
+      onClick={onCancel}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(0, 0, 0, 0.45)',
+        zIndex: 60,
+      }}
+    >
+      <form
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim() !== '') onConfirm(name);
+        }}
+        // Submitting on Enter is what a one-field prompt should do, and the form gives it for free.
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--nos-space-4)',
+          padding: 'var(--nos-space-6)',
+          minWidth: 320,
+          borderRadius: 'var(--nos-radius-card)',
+          background: 'var(--nos-bg-panel)',
+          border: '1px solid var(--nos-border)',
+          boxShadow: '0 18px 48px rgba(0, 0, 0, 0.6)',
+        }}
+      >
+        <label
+          htmlFor="new-folder-name"
+          style={{ font: 'var(--nos-text-label)', color: 'var(--nos-text-soft)' }}
+        >
+          {parent === '' ? 'New folder in the project root' : `New folder in ${parent}`}
+        </label>
+        <input
+          id="new-folder-name"
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') onCancel();
+          }}
+          style={{
+            height: 'var(--nos-control-height)',
+            background: 'var(--nos-surface-1)',
+            border: '1px solid var(--nos-border-control)',
+            borderRadius: 'var(--nos-radius-control)',
+            color: 'var(--nos-text-bright)',
+            font: '400 12.5px system-ui, sans-serif',
+            padding: '0 var(--nos-space-3)',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 'var(--nos-space-2)', justifyContent: 'flex-end' }}>
+          <Button onClick={onCancel}>Cancel</Button>
+          <Button
+            tone="primary"
+            disabled={name.trim() === ''}
+            onClick={() => {
+              if (name.trim() !== '') onConfirm(name);
+            }}
+          >
+            Create
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

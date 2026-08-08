@@ -47,6 +47,20 @@ export interface MediaBrowserProps {
   /** Detail pane content for the selected asset. Injected so this component stays presentational. */
   readonly detail?: ReactNode;
   readonly onRescan?: () => void;
+
+  /**
+   * Organising the project from inside the browser.
+   *
+   * A project *is* a folder, and the browser could show one and do nothing to it: no way to make a
+   * folder, rename a file, delete one or move anything. What each action *means* is the caller's —
+   * this reports the gesture and renders the result.
+   */
+  readonly onContextMenu?: (path: string, isDirectory: boolean, x: number, y: number) => void;
+  /** Path whose inline name field should be open, for a rename asked for from the menu. */
+  readonly renamingPath?: string;
+  readonly onRename?: (path: string, name: string) => void;
+  /** A row dropped onto a folder. Refusing the meaningless moves is the caller's job, not the DOM's. */
+  readonly onMove?: (source: string, destinationFolder: string) => void;
 }
 
 /**
@@ -56,6 +70,20 @@ export interface MediaBrowserProps {
  * fragment of text dragged in from another application, and refuse the second.
  */
 export const ASSET_DRAG_TYPE = 'application/x-nos-asset';
+
+/**
+ * A drag that means "move this inside the project", distinct from the one a timeline accepts.
+ *
+ * Two types rather than one flag on a shared payload: the timeline must never accept a folder, and a
+ * folder row must never accept a drag from outside the browser. Keeping them apart makes both
+ * refusals structural instead of a condition somebody has to remember to write.
+ */
+export const MOVE_DRAG_TYPE = 'application/x-nos-move';
+
+/** Paths the application depends on, which must not be dragged out of place. */
+function isReservedPath(path: string): boolean {
+  return path === 'project.json' || !path.includes('/');
+}
 
 /** Folders open by default: the ones a user works in, not the derived ones. */
 const DEFAULT_EXPANDED: readonly string[] = ['media', 'generated', 'notes'];
@@ -69,6 +97,10 @@ export function MediaBrowser({
   onDragStart,
   detail,
   onRescan,
+  onContextMenu,
+  renamingPath,
+  onRename,
+  onMove,
 }: MediaBrowserProps): ReactNode {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(DEFAULT_EXPANDED));
 
@@ -106,6 +138,14 @@ export function MediaBrowser({
       <div
         role="tree"
         aria-label="Project folder"
+        onContextMenu={(event) => {
+          if (onContextMenu === undefined) return;
+          // The empty area below the rows only; a row reports itself. This is what makes "New folder"
+          // reachable in a project that has none — which is exactly when it is wanted.
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          onContextMenu('', false, event.clientX, event.clientY);
+        }}
         style={{
           flex: 1,
           minHeight: 0,
@@ -131,6 +171,10 @@ export function MediaBrowser({
               {...(onSelect !== undefined ? { onSelect } : {})}
               {...(onActivate !== undefined ? { onActivate } : {})}
               {...(onDragStart !== undefined ? { onDragStart } : {})}
+              {...(onContextMenu !== undefined ? { onContextMenu } : {})}
+              {...(onRename !== undefined ? { onRename } : {})}
+              {...(onMove !== undefined ? { onMove } : {})}
+              renaming={renamingPath === row.node.path}
             />
           ))
         )}
@@ -219,7 +263,7 @@ function flattenVisible(root: DirectoryNode, expanded: ReadonlySet<string>): rea
   return rows;
 }
 
-const INDENT_PX = 13;
+const INDENT_PX = 15;
 
 function TreeRow({
   row,
@@ -229,6 +273,10 @@ function TreeRow({
   onSelect,
   onActivate,
   onDragStart,
+  onContextMenu,
+  renaming = false,
+  onRename,
+  onMove,
 }: {
   readonly row: Row;
   readonly expanded: boolean;
@@ -237,10 +285,20 @@ function TreeRow({
   readonly onSelect?: (path: AssetPath) => void;
   readonly onActivate?: (path: AssetPath) => void;
   readonly onDragStart?: (path: AssetPath) => void;
+  readonly onContextMenu?: (path: string, isDirectory: boolean, x: number, y: number) => void;
+  /** Open the inline name field for this row, for a rename asked for from the menu. */
+  readonly renaming?: boolean;
+  readonly onRename?: (path: string, name: string) => void;
+  /** Reports a drop of `source` onto this folder. Folders only; files are not containers. */
+  readonly onMove?: (source: string, destinationFolder: string) => void;
 }): ReactNode {
   const { node, depth } = row;
+  const [dropping, setDropping] = useState(false);
   const isDirectory = node.kind === 'directory';
+  // Files that a timeline accepts drag as assets; everything else drags only to be moved, which is
+  // why the browser's own drag type exists separately from the timeline's.
   const draggable = !isDirectory && isTimelineAsset(node.path);
+  const movable = onMove !== undefined && !isReservedPath(node.path);
 
   const activate = (): void => {
     if (isDirectory) {
@@ -269,14 +327,19 @@ function TreeRow({
     display: 'flex',
     alignItems: 'center',
     gap: token.space3,
-    padding: `5px ${token.space5}`,
+    // Roomier than it was, on a direct report that the browser was hard to read — "everything is
+    // tiny, I have to squint". This is the panel a user scans hundreds of times an hour, and it was
+    // the densest thing in the window; a row that takes three more pixels costs one row of scroll
+    // and buys legibility on every one of them.
+    padding: `7px ${token.space5}`,
     paddingLeft: `calc(${token.space5} + ${depth * INDENT_PX}px)`,
-    font: selected || isDirectory ? `500 12px ${token.fontUi}` : `400 12px ${token.fontUi}`,
+    font: selected || isDirectory ? `600 13px ${token.fontUi}` : `400 13px ${token.fontUi}`,
     color: selected ? token.textBright : isDirectory ? token.textBright : token.textMuted,
     // A left border rather than a full outline for selection: it does not shift the row's contents,
     // so the list does not jitter as selection moves.
     borderLeft: selected ? `2px solid ${token.accent}` : '2px solid transparent',
-    background: selected ? token.surfaceSelected : 'transparent',
+    background: dropping ? 'rgba(76, 154, 255, 0.16)' : selected ? token.surfaceSelected : 'transparent',
+    outline: dropping ? `1px solid ${token.accent}` : 'none',
     cursor: 'default',
     userSelect: 'none',
   };
@@ -288,7 +351,15 @@ function TreeRow({
       aria-selected={selected}
       aria-expanded={isDirectory ? expanded : undefined}
       tabIndex={0}
-      draggable={draggable}
+      draggable={draggable || movable}
+      onContextMenu={(event) => {
+        if (onContextMenu === undefined) return;
+        event.preventDefault();
+        // Selecting first, like the timeline's menu: acting on something other than what was clicked
+        // is the one behaviour a context menu must never have.
+        if (!isDirectory) onSelect?.(node.path as AssetPath);
+        onContextMenu(node.path, isDirectory, event.clientX, event.clientY);
+      }}
       onClick={() => {
         if (isDirectory) onToggle(node.path);
         else onSelect?.(node.path as AssetPath);
@@ -299,9 +370,32 @@ function TreeRow({
         // The asset travels on the drag itself rather than in application state, so a drop knows what
         // it received without the two sides having to agree on a shared variable that a cancelled
         // drag would leave stale.
-        event.dataTransfer.setData(ASSET_DRAG_TYPE, node.path);
-        event.dataTransfer.effectAllowed = 'copy';
+        // The path travels on the drag itself rather than in application state, so a drop knows what
+        // it received without the two sides having to agree on a variable a cancelled drag would
+        // leave stale. Both types are set: the timeline reads one, a folder row the other, and which
+        // one a drop honours is the drop target's business rather than the source's.
+        if (draggable) event.dataTransfer.setData(ASSET_DRAG_TYPE, node.path);
+        if (movable) event.dataTransfer.setData(MOVE_DRAG_TYPE, node.path);
+        event.dataTransfer.effectAllowed = draggable ? 'copyMove' : 'move';
         onDragStart?.(node.path as AssetPath);
+      }}
+      onDragOver={(event) => {
+        // Folders only. A file is not a container, and an inviting highlight on one would promise
+        // something that cannot happen.
+        if (!isDirectory || onMove === undefined) return;
+        if (!event.dataTransfer.types.includes(MOVE_DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(event) => {
+        setDropping(false);
+        if (!isDirectory || onMove === undefined) return;
+        const source = event.dataTransfer.getData(MOVE_DRAG_TYPE);
+        if (source === '') return;
+        event.preventDefault();
+        onMove(source, node.path);
       }}
       style={rowStyle}
     >
@@ -312,7 +406,7 @@ function TreeRow({
           flex: 'none',
           textAlign: 'center',
           color: isDirectory ? token.textSoft : token.textFaint,
-          font: `400 10px ${token.fontUi}`,
+          font: `400 11px ${token.fontUi}`,
         }}
       >
         {isDirectory ? (expanded ? '▾' : '▸') : '·'}
@@ -321,26 +415,80 @@ function TreeRow({
       {/* A glyph as well as the colour: a coloured square said there were four kinds of thing
           without saying which was which, and nothing in the window taught the palette. */}
       <AssetIcon
+        sizePx={15}
         isDirectory={isDirectory}
         name={node.name}
         open={expanded}
         {...(isDirectory ? {} : { assetType: (node as FileNode).assetType })}
       />
 
-      <span
-        style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {node.name}
-      </span>
+      {renaming && onRename !== undefined ? (
+        <RowNameField name={node.name} onCommit={(name) => onRename(node.path, name)} />
+      ) : (
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {node.name}
+        </span>
+      )}
 
       <div style={{ flex: 1 }} />
 
       <RowMeta node={node} />
     </div>
+  );
+}
+
+/**
+ * The inline name field, for a rename asked for from the context menu.
+ *
+ * Enter commits and Escape abandons, which is what an inline rename does everywhere; a field that
+ * could only be left by clicking elsewhere would leave the user unsure whether their change took.
+ * The extension is left selected out of the initial selection, because renaming `take.mp4` almost
+ * never means renaming it to something without `.mp4`.
+ */
+function RowNameField({
+  name,
+  onCommit,
+}: {
+  readonly name: string;
+  readonly onCommit: (name: string) => void;
+}): ReactNode {
+  const [draft, setDraft] = useState(name);
+
+  return (
+    <input
+      autoFocus
+      aria-label={`Rename ${name}`}
+      value={draft}
+      onFocus={(event) => {
+        const dot = name.lastIndexOf('.');
+        event.target.setSelectionRange(0, dot > 0 ? dot : name.length);
+      }}
+      onChange={(event) => setDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onBlur={() => onCommit(draft)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onCommit(draft);
+        else if (event.key === 'Escape') onCommit(name);
+        else return;
+        event.preventDefault();
+      }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: token.surface1,
+        border: `1px solid ${token.accent}`,
+        borderRadius: token.radiusInset,
+        color: token.textBright,
+        font: `400 13px ${token.fontUi}`,
+        padding: '1px 4px',
+      }}
+    />
   );
 }
 

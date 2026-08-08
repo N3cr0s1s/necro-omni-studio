@@ -9,6 +9,7 @@ import {
   PROVENANCE_SUFFIX,
   type BackendConfig,
   type BackendResponse,
+  type FileOperation,
   type FolderEntry,
   type ProjectInfo,
   type RecoverySnapshot,
@@ -372,6 +373,54 @@ function registerHandlers(): void {
     await rename(temporary, target);
   });
 
+  ipcMain.handle(IPC.createFolder, async (_event, path: unknown): Promise<FileOperation> => {
+    const target = resolveInProject(requireProject(), requireString(path));
+    const { mkdir } = await import('node:fs/promises');
+    try {
+      // Non-recursive on purpose: `recursive` succeeds silently on a folder that already exists, and
+      // "New folder" landing on an existing one would look like it worked and change nothing.
+      await mkdir(target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, detail: describeFileError(error, requireString(path)) };
+    }
+  });
+
+  ipcMain.handle(IPC.moveEntry, async (_event, from: unknown, to: unknown): Promise<FileOperation> => {
+    const root = requireProject();
+    const source = resolveInProject(root, requireString(from));
+    const target = resolveInProject(root, requireString(to));
+    const { rename, access } = await import('node:fs/promises');
+
+    try {
+      // Checked rather than left to `rename`, which overwrites a file at the destination without a
+      // word. Losing a take to a name collision is not a risk worth taking for one `access` call.
+      await access(target);
+      return { ok: false, detail: `${requireString(to)} already exists` };
+    } catch {
+      // Absent, which is what we want.
+    }
+
+    try {
+      await rename(source, target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, detail: describeFileError(error, requireString(from)) };
+    }
+  });
+
+  ipcMain.handle(IPC.trashEntry, async (_event, path: unknown): Promise<FileOperation> => {
+    const target = resolveInProject(requireProject(), requireString(path));
+    try {
+      // The OS trash rather than `unlink`: a generated file can be an afternoon of GPU time, and the
+      // operating system already provides the undo we would otherwise have to invent.
+      await shell.trashItem(target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, detail: describeFileError(error, requireString(path)) };
+    }
+  });
+
   ipcMain.handle(IPC.revealInFolder, async (_event, path: unknown): Promise<void> => {
     shell.showItemInFolder(resolveInProject(requireProject(), requireString(path)));
   });
@@ -384,6 +433,33 @@ function registerHandlers(): void {
  * 8188, an instance behind a reverse proxy with basic auth, a machine on the LAN. The credentials are
  * read here and never handed to the renderer.
  */
+/**
+ * A filesystem failure as a sentence.
+ *
+ * The `errno` codes are the ones a user can actually cause from a file browser, and each has a
+ * different answer: a name already taken means pick another, a permission problem means the folder
+ * is not yours, and a non-empty directory means look inside first.
+ */
+function describeFileError(error: unknown, path: string): string {
+  const code = (error as { code?: string } | null)?.code;
+  switch (code) {
+    case 'EEXIST':
+      return `${path} already exists`;
+    case 'ENOENT':
+      return `${path} is no longer there`;
+    case 'EACCES':
+    case 'EPERM':
+      return `no permission to change ${path}`;
+    case 'ENOTEMPTY':
+      return `${path} is not empty`;
+    case 'EXDEV':
+      // Only reachable when a project folder spans mount points, which is legal and surprising.
+      return `${path} cannot be moved across devices`;
+    default:
+      return error instanceof Error ? error.message : String(error);
+  }
+}
+
 function backendConfig(): BackendConfig {
   const baseUrl = (process.env['NOS_COMFYUI_URL'] ?? 'http://127.0.0.1:8188').replace(/\/+$/, '');
   return { baseUrl, authenticated: process.env['NOS_COMFYUI_USER'] !== undefined };
