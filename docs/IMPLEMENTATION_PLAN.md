@@ -418,6 +418,11 @@ only by end-to-end probes.
   frames while `sourceIn` is in source frames. Any caller editing `sourceIn` directly
   has to convert; at matching rates that is the identity, which is exactly why getting
   it wrong survives until someone tries 24-into-30.
+- There is **one** shell describer, in `renderer/edit-errors.ts`. There were four copies
+  of this function; two were the same fallback written twice, and the one the keyboard
+  path used was not the one improved first — so the message on screen did not change
+  until the fourth was found. Every kind gets a sentence, lower case, carrying the
+  numbers that make it actionable.
 - The shell's `describeEditError` is deliberately not the domain's. The domain's is
   exhaustive over `EditError` and **throws** on an unknown kind — right for a package
   that wants a compile error when a case is added, and wrong for a UI that is handed
