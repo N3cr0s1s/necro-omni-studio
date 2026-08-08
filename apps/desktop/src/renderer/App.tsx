@@ -68,8 +68,8 @@ import {
   DialogTitle,
 } from '@nos/ui/components/ui/dialog';
 import { Input } from '@nos/ui/components/ui/input';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@nos/ui/components/ui/resizable';
 import { Separator } from '@nos/ui/components/ui/separator';
-import { Spinner } from '@nos/ui/components/ui/spinner';
 import { cn } from '@nos/ui/lib/utils';
 import {
   type BrowserMenuTarget,
@@ -893,7 +893,6 @@ export function App(): ReactNode {
         project={project}
         sidecar={sidecar}
         dirty={store.getSnapshot().dirty}
-        jobs={runtime.snapshot.activeCount}
         onOpen={() => void openProject()}
         onSave={() => void save()}
         onExport={openExport}
@@ -933,210 +932,254 @@ export function App(): ReactNode {
         />
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <MediaBrowser
-          tree={tree.tree ?? buildTree([])}
-          watcher={tree.watcher}
-          onRescan={tree.refresh}
-          {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
-          onSelect={setBrowserSelection}
-          detail={
-            <BrowserDetail
-              asset={assetDetail}
-              cache={cache}
-              // Through the shell, so a link in a note opens in the system browser rather than
-              // navigating this window away from the editor.
-              onOpenLink={(href) => void bridge()?.openExternal(href)}
-            />
-          }
-          menu={browserMenu}
-          {...(renamingPath !== undefined ? { renamingPath } : {})}
-          onRename={(path, name) => {
-            setRenamingPath(undefined);
-            void files.rename(path, name).then((done) => {
-              if (done) tree.refresh();
-            });
-          }}
-          onMove={(source, destination) => {
-            void files.move(source, destination).then((done) => {
-              if (done) tree.refresh();
-            });
-          }}
-          onActivate={(asset) => {
-            void mediaImport.run(asset, playhead).then((id) => {
-              // Selected on arrival, because the next thing a user does with a clip they just added is
-              // almost always to it.
-              if (id !== undefined) setSelected(new Set([id]));
-            });
-          }}
-        />
+      {/*
+        Three columns and, inside the middle one, two rows — every boundary draggable, and the two side
+        panels collapsible to nothing. They were fixed at 280, 340 and 392 pixels, which is a reasonable
+        default and a poor rule: a timeline is what you want tall while cutting and short while framing,
+        and a browser is what you want gone entirely on a laptop.
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <Preview
-            document={drag.document}
-            frame={playhead}
-            sidecar={sidecar}
-            resolveAsset={proxies.resolve}
-            masks={maskSource}
-            {...(segmenting && masks.session !== undefined
-              ? {
-                  overlay: (picture: { readonly width: number; readonly height: number }) => (
-                    <MaskPointOverlay
-                      session={masks.session!}
-                      width={picture.width}
-                      height={picture.height}
-                      onAddPrompt={masks.addPrompt}
-                      onRemovePrompt={masks.removePrompt}
-                    />
-                  ),
-                }
-              : {})}
+        The handles carry a grip, because a boundary that only reveals itself on hover is one nobody
+        finds.
+      */}
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel
+          id="browser"
+          defaultSize="18%"
+          minSize="12%"
+          collapsible
+          collapsedSize={0}
+          className="min-w-0 border-r"
+        >
+          <MediaBrowser
+            tree={tree.tree ?? buildTree([])}
+            watcher={tree.watcher}
+            onRescan={tree.refresh}
+            {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
+            onSelect={setBrowserSelection}
+            detail={
+              <BrowserDetail
+                asset={assetDetail}
+                cache={cache}
+                // Through the shell, so a link in a note opens in the system browser rather than
+                // navigating this window away from the editor.
+                onOpenLink={(href) => void bridge()?.openExternal(href)}
+              />
+            }
+            menu={browserMenu}
+            {...(renamingPath !== undefined ? { renamingPath } : {})}
+            onRename={(path, name) => {
+              setRenamingPath(undefined);
+              void files.rename(path, name).then((done) => {
+                if (done) tree.refresh();
+              });
+            }}
+            onMove={(source, destination) => {
+              void files.move(source, destination).then((done) => {
+                if (done) tree.refresh();
+              });
+            }}
+            onActivate={(asset) => {
+              void mediaImport.run(asset, playhead).then((id) => {
+                // Selected on arrival, because the next thing a user does with a clip they just added is
+                // almost always to it.
+                if (id !== undefined) setSelected(new Set([id]));
+              });
+            }}
           />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
 
-          {/* Under the picture it controls. In the title bar it sat among file and project actions,
+        <ResizablePanel id="stage" minSize="30%" className="min-w-0">
+          <ResizablePanelGroup orientation="vertical" className="min-h-0">
+            <ResizablePanel id="viewer" defaultSize="62%" minSize="20%" className="min-h-0">
+              <main className="flex h-full min-w-0 flex-col">
+                <Preview
+                  document={drag.document}
+                  frame={playhead}
+                  sidecar={sidecar}
+                  resolveAsset={proxies.resolve}
+                  masks={maskSource}
+                  {...(segmenting && masks.session !== undefined
+                    ? {
+                        overlay: (picture: { readonly width: number; readonly height: number }) => (
+                          <MaskPointOverlay
+                            session={masks.session!}
+                            width={picture.width}
+                            height={picture.height}
+                            onAddPrompt={masks.addPrompt}
+                            onRemovePrompt={masks.removePrompt}
+                          />
+                        ),
+                      }
+                    : {})}
+                />
+
+                {/* Under the picture it controls. In the title bar it sat among file and project actions,
               a hand's width from the frame a user is scrubbing and beside buttons that have nothing
               to do with playback. */}
-          <Transport
-            transport={transport}
-            frameRate={document.frameRate}
-            duration={documentDuration(document)}
-            meters={audio.meters}
-            onClearClip={audio.clearClip}
-          />
+                <Transport
+                  transport={transport}
+                  frameRate={document.frameRate}
+                  duration={documentDuration(document)}
+                  meters={audio.meters}
+                  onClearClip={audio.clearClip}
+                />
+              </main>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
 
-          <div ref={laneRef} className="flex-none">
-            <Timeline
-              document={drag.document}
-              strips={strips.strips}
-              onAddTrack={addTrackOfKind}
-              onTrackRemove={removeTrackById}
-              onTrackRename={(id, name) => {
-                setRenamingTrack(undefined);
-                store.commit('rename track', (current) => {
-                  const result = renameTrack(current, id, name);
-                  if (!result.ok) {
-                    setError(describeEdit(result.error));
-                    return current;
+            <ResizablePanel id="timeline" defaultSize="38%" minSize="12%" className="min-h-0">
+              <div ref={laneRef} className="h-full">
+                <Timeline
+                  document={drag.document}
+                  strips={strips.strips}
+                  onAddTrack={addTrackOfKind}
+                  onTrackRemove={removeTrackById}
+                  onTrackRename={(id, name) => {
+                    setRenamingTrack(undefined);
+                    store.commit('rename track', (current) => {
+                      const result = renameTrack(current, id, name);
+                      if (!result.ok) {
+                        setError(describeEdit(result.error));
+                        return current;
+                      }
+                      return result.value;
+                    });
+                  }}
+                  onTrackResize={(id, height, phase) => {
+                    // One undo step for the whole drag, the rule every gesture here follows: the store's
+                    // gesture is opened on the first move and closed when the pointer comes up.
+                    if (!resizing.current) {
+                      store.beginGesture('resize track');
+                      resizing.current = true;
+                    }
+                    store.commit('resize track', (current) => {
+                      const result = setTrackHeight(current, id, height);
+                      return result.ok ? result.value : current;
+                    });
+                    if (phase === 'end') {
+                      store.endGesture();
+                      resizing.current = false;
+                    }
+                  }}
+                  onTrackMute={(id) => toggleTrack(id, 'muted')}
+                  onTrackSolo={(id) => toggleTrack(id, 'solo')}
+                  onTrackLock={(id) => toggleTrack(id, 'locked')}
+                  onMarkIn={range.markIn}
+                  onMarkOut={range.markOut}
+                  onClearRange={range.clear}
+                  {...(clipEdits.hasRange ? { onRemoveRange: clipEdits.removeRange } : {})}
+                  viewport={viewport}
+                  playhead={playhead}
+                  selectedClips={selected}
+                  snapEnabled={snap}
+                  rippleEnabled={ripple}
+                  onScrub={transport.seek}
+                  onSelectClip={(clip, additive) =>
+                    setSelected((current) =>
+                      additive ? new Set([...current, clip]) : new Set([clip as string]),
+                    )
                   }
-                  return result.value;
-                });
-              }}
-              onTrackResize={(id, height, phase) => {
-                // One undo step for the whole drag, the rule every gesture here follows: the store's
-                // gesture is opened on the first move and closed when the pointer comes up.
-                if (!resizing.current) {
-                  store.beginGesture('resize track');
-                  resizing.current = true;
-                }
-                store.commit('resize track', (current) => {
-                  const result = setTrackHeight(current, id, height);
-                  return result.ok ? result.value : current;
-                });
-                if (phase === 'end') {
-                  store.endGesture();
-                  resizing.current = false;
-                }
-              }}
-              onTrackMute={(id) => toggleTrack(id, 'muted')}
-              onTrackSolo={(id) => toggleTrack(id, 'solo')}
-              onTrackLock={(id) => toggleTrack(id, 'locked')}
-              onMarkIn={range.markIn}
-              onMarkOut={range.markOut}
-              onClearRange={range.clear}
-              {...(clipEdits.hasRange ? { onRemoveRange: clipEdits.removeRange } : {})}
-              viewport={viewport}
-              playhead={playhead}
-              selectedClips={selected}
-              snapEnabled={snap}
-              rippleEnabled={ripple}
-              onScrub={transport.seek}
-              onSelectClip={(clip, additive) =>
-                setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
-              }
-              // A marquee reports frames and tracks; which clips that touches is the document's
-              // question, answered in the editing layer rather than in the component.
-              // Dropped material lands where it was dropped — which is the only reason to drag
-              // rather than double-click, and what the browser's draggable rows had been promising.
-              {...(renamingTrack !== undefined ? { renamingTrack } : {})}
-              onDropAsset={(asset, track, frame) => {
-                void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
-                  if (id !== undefined) setSelected(new Set([id]));
-                });
-              }}
-              menu={timelineMenu}
-              onSelectRegion={(region, additive) =>
-                setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))
-              }
-              // Alt turns a move into a slip. The clip stays put and its content slides inside it —
-              // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
-              onClipPointerDown={(clip, event) => drag.begin(event.altKey ? 'slip' : 'move', clip, event)}
-              // Shift rolls the cut instead of trimming one side of it: the outgoing clip gains
-              // exactly what the incoming one gives up, so nothing downstream moves. It is the edit
-              // an editor reaches for constantly — the cut is a frame late, so you move the cut.
-              onTrimStart={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)}
-              onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
-              {...(expandedClip !== undefined ? { expandedClip } : {})}
-              onToggleExpandClip={(clip) =>
-                setExpandedClip((current) => (current === clip ? undefined : clip))
-              }
-              lanes={
-                expandedClip === undefined ? undefined : (
-                  <KeyframeLanes
-                    document={drag.document}
-                    clip={expandedClip}
-                    effects={effectRegistry}
-                    viewport={viewport}
-                    playhead={playhead}
-                    onChange={commitDocument}
-                  />
-                )
-              }
-              {...(drag.snappedTo !== undefined
-                ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
-                : {})}
-              onToggleSnap={() => setSnap((value) => !value)}
-              onToggleRipple={() => setRipple((value) => !value)}
-              onZoom={view.zoomAt}
-              onScrollBy={view.scrollBy}
-              onFit={view.fit}
-            />
-          </div>
-        </main>
+                  // A marquee reports frames and tracks; which clips that touches is the document's
+                  // question, answered in the editing layer rather than in the component.
+                  // Dropped material lands where it was dropped — which is the only reason to drag
+                  // rather than double-click, and what the browser's draggable rows had been promising.
+                  {...(renamingTrack !== undefined ? { renamingTrack } : {})}
+                  onDropAsset={(asset, track, frame) => {
+                    void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
+                      if (id !== undefined) setSelected(new Set([id]));
+                    });
+                  }}
+                  menu={timelineMenu}
+                  onSelectRegion={(region, additive) =>
+                    setSelected((current) =>
+                      combineSelection(current, clipsInRegion(document, region), additive),
+                    )
+                  }
+                  // Alt turns a move into a slip. The clip stays put and its content slides inside it —
+                  // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
+                  onClipPointerDown={(clip, event) => drag.begin(event.altKey ? 'slip' : 'move', clip, event)}
+                  // Shift rolls the cut instead of trimming one side of it: the outgoing clip gains
+                  // exactly what the incoming one gives up, so nothing downstream moves. It is the edit
+                  // an editor reaches for constantly — the cut is a frame late, so you move the cut.
+                  onTrimStart={(clip, event) =>
+                    drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)
+                  }
+                  onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
+                  {...(expandedClip !== undefined ? { expandedClip } : {})}
+                  onToggleExpandClip={(clip) =>
+                    setExpandedClip((current) => (current === clip ? undefined : clip))
+                  }
+                  lanes={
+                    expandedClip === undefined ? undefined : (
+                      <KeyframeLanes
+                        document={drag.document}
+                        clip={expandedClip}
+                        effects={effectRegistry}
+                        viewport={viewport}
+                        playhead={playhead}
+                        onChange={commitDocument}
+                      />
+                    )
+                  }
+                  {...(drag.snappedTo !== undefined
+                    ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
+                    : {})}
+                  onToggleSnap={() => setSnap((value) => !value)}
+                  onToggleRipple={() => setRipple((value) => !value)}
+                  onZoom={view.zoomAt}
+                  onScrollBy={view.scrollBy}
+                  onFit={view.fit}
+                />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
 
-        <RightPanel
-          projectTree={tree.tree}
-          masks={masks}
-          maskChoices={maskChoices}
-          onTabChange={setRightTab}
-          document={document}
-          effects={effectRegistry}
-          onChangeDocument={commitDocument}
-          registry={library.registry}
-          libraryProblems={library.problems}
-          runtime={runtime}
-          playhead={playhead}
-          sidecar={sidecar}
-          selectedClip={[...selected][0]}
-          canUndo={store.getSnapshot().canUndo}
-          canRedo={store.getSnapshot().canRedo}
-          onSplit={clipEdits.split}
-          onSplitAllTracks={clipEdits.splitAllTracks}
-          onRemoveClip={clipEdits.remove}
-          onToggleClipEnabled={clipEdits.toggleEnabled}
-          onCopyAttributes={clipEdits.copyAttributes}
-          onPasteAttributes={clipEdits.pasteAttributes}
-          attributeSummary={clipEdits.attributeSummary}
-          removeLabel={ripple ? 'Ripple delete' : 'Delete'}
-          removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
-          onNudge={nudge}
-          onAuthorManifest={() => setAuthoring(true)}
-          onAcceptVariant={acceptVariant}
-          onUndo={() => store.undo()}
-          onRedo={() => store.redo()}
-          onAddText={addText}
-          onReject={setError}
-        />
-      </div>
+        <ResizablePanel
+          id="inspector"
+          defaultSize="22%"
+          minSize="14%"
+          collapsible
+          collapsedSize={0}
+          className="min-w-0 border-l"
+        >
+          <RightPanel
+            projectTree={tree.tree}
+            masks={masks}
+            maskChoices={maskChoices}
+            onTabChange={setRightTab}
+            document={document}
+            effects={effectRegistry}
+            onChangeDocument={commitDocument}
+            registry={library.registry}
+            libraryProblems={library.problems}
+            runtime={runtime}
+            playhead={playhead}
+            sidecar={sidecar}
+            selectedClip={[...selected][0]}
+            canUndo={store.getSnapshot().canUndo}
+            canRedo={store.getSnapshot().canRedo}
+            onSplit={clipEdits.split}
+            onSplitAllTracks={clipEdits.splitAllTracks}
+            onRemoveClip={clipEdits.remove}
+            onToggleClipEnabled={clipEdits.toggleEnabled}
+            onCopyAttributes={clipEdits.copyAttributes}
+            onPasteAttributes={clipEdits.pasteAttributes}
+            attributeSummary={clipEdits.attributeSummary}
+            removeLabel={ripple ? 'Ripple delete' : 'Delete'}
+            removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
+            onNudge={nudge}
+            onAuthorManifest={() => setAuthoring(true)}
+            onAcceptVariant={acceptVariant}
+            onUndo={() => store.undo()}
+            onRedo={() => store.redo()}
+            onAddText={addText}
+            onReject={setError}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       <StatusBar activities={activities} notices={notices}>
         {exportRun.timing !== undefined && (
@@ -1208,7 +1251,6 @@ function TitleBar({
   project,
   sidecar,
   dirty,
-  jobs,
   onOpen,
   onSave,
   onExport,
@@ -1217,7 +1259,6 @@ function TitleBar({
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
   readonly dirty: boolean;
-  readonly jobs: number;
   readonly onOpen: () => void;
   readonly onSave: () => void;
   readonly onExport: () => void;
@@ -1234,19 +1275,15 @@ function TitleBar({
         {dirty ? ' •' : ''}
       </span>
 
-      {/* The spec's job chip: generation runs for minutes, and a user who cannot see that something is
-          running assumes nothing happened and starts again. */}
-      {jobs > 0 && (
-        <Badge variant="secondary" className="ml-auto gap-1.5 font-mono text-chart-4">
-          <Spinner className="size-3" />
-          {`${jobs} job${jobs === 1 ? '' : 's'}`}
-        </Badge>
-      )}
       {/* The sidecar's state is shown rather than hidden: without it there are no proxies, no
-          waveforms and no export, and a user who cannot see that will blame the application. */}
+          waveforms and no export, and a user who cannot see that will blame the application.
+
+          The job count that used to sit beside it has moved to the status bar, where it opens into
+          the list of what is actually running — a bare `3 jobs` was the whole of what the application
+          said about generation, and there was no way to learn which three. */}
       <Badge
         variant={sidecar?.available === true ? 'secondary' : 'outline'}
-        className={cn('font-mono', jobs === 0 && 'ml-auto', sidecar?.available === true && 'text-chart-2')}
+        className={cn('ml-auto font-mono', sidecar?.available === true && 'text-chart-2')}
         title={sidecar?.detail ?? ''}
       >
         <ServerIcon />

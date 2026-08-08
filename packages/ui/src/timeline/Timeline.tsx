@@ -240,7 +240,7 @@ export function Timeline(props: TimelineProps): ReactNode {
   });
 
   return (
-    <section aria-label="Timeline" className="flex h-98 min-h-0 flex-none flex-col border-t">
+    <section aria-label="Timeline" className="flex h-full min-h-0 flex-col">
       <TimelineToolbar {...props} totalFrames={totalFrames} clipCount={clipCount(document)} />
 
       {/*

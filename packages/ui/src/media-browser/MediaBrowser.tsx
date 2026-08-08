@@ -137,7 +137,7 @@ export function MediaBrowser({
   const background: BrowserMenuTarget = { path: '', isDirectory: false };
 
   return (
-    <div className="flex w-70 min-h-0 flex-none flex-col border-r">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="flex h-9 flex-none items-center gap-3 px-4">
         <FolderTreeIcon className="size-3.5 text-muted-foreground" />
         <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
