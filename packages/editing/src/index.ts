@@ -11,3 +11,4 @@ export * from './clip-ops.js';
 export * from './insert-generated.js';
 export * from './transition-ops.js';
 export * from './import-media.js';
+export * from './range-ops.js';

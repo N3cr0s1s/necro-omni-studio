@@ -89,6 +89,23 @@ describe('the default range', () => {
   it('starts at zero, because an export is of the sequence and not of a selection', () => {
     expect(defaultRange(documentWith([videoClip('a', 90, 120)])).start).toBe(0);
   });
+
+  it('honours an in/out range, so the file matches what was previewed', () => {
+    // The range bounds looped playback too. Two definitions would agree until someone marked an in
+    // point, and then the preview and the file would quietly disagree about what is being rendered.
+    const base = documentWith([videoClip('a', 0, 300)]);
+    const marked = {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        workRange: spanFromBounds(frameIndex(60), frameIndex(180)),
+      },
+    };
+
+    const range = defaultRange(marked);
+    expect(range.start).toBe(60);
+    expect(endExclusive(range)).toBe(180);
+  });
 });
 
 describe('the frame batch size', () => {

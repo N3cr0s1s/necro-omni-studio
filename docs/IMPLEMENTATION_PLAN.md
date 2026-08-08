@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1546 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1595 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1432,3 +1432,36 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   the **whole file** (capped at 12×), because material mastered at −20 dBFS drew a
   two-pixel line that read as silence, while normalising per visible range would
   make the same clip change loudness as it was trimmed.
+
+- 2026-08-08: In/out marks and markers. The same shape of gap as the strips, one
+  layer deeper: `workRange` was load-bearing everywhere — it bounds playback, it
+  is the default export range, `snap.ts` offers both its edges as candidates, the
+  serializer round-trips it — and **nothing could set it**. Spec 6.1 asks for in/out
+  markers; the model had been ready for them since Phase 1.
+
+  The design question was not how to store a range but what a mark means when it
+  contradicts the other one. The rule: **a mark is never refused**. Pressing in past
+  the out point is how an editor moves a range forward, not a mistake, so the far
+  mark yields and the action reports that it did. Refusing would make the user clear
+  the range before re-marking it, every time — technically correct and unusable.
+  Marking in with no range yet runs to the end of the sequence rather than one frame,
+  because "render from here on" is nearly always what it means. The out point
+  includes its own frame: half-open spans are an internal convention, and the
+  conversion belongs at this boundary rather than in every caller.
+
+  The keys are the feature, not a convenience — `I`, `O`, `M`, `Alt+X`, `Alt+←/→` —
+  and the toolbar buttons stay because a shortcut nobody knows about does not exist.
+  Every handler reads the document through a ref: they are attached once to the
+  window, and a closure over the mounting document would silently discard every edit
+  made since. That is what one of the tests is for.
+
+  Wiring it found a real inconsistency. `defaultRange` in the export hook re-derived
+  "the whole sequence" by hand and ignored `workRange`, while the export *planner*
+  honoured it — so marking an in point would have made the dialog and the encoder
+  disagree about what was being rendered. It now delegates to `renderRange`, which
+  exists precisely so playback and export share one definition.
+
+  Verified in the running app through the keyboard alone: `I` at 21 and `O` at 51
+  produced a 21–51 readout and a bar 21 px in and 31 px wide at 1 f/px, `M` left a
+  flag at 51, playback stopped at the out point, plain `X` did nothing and `Alt+X`
+  cleared the range. No page errors.

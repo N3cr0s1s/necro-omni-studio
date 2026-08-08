@@ -3,6 +3,8 @@ import {
   type Clip,
   type ClipId,
   type FrameIndex,
+  type FrameSpan,
+  type Marker,
   type TimelineDocument,
   type Track,
   type TrackId,
@@ -63,6 +65,11 @@ export interface TimelineProps {
   readonly onTrackMute?: (track: TrackId) => void;
   readonly onTrackSolo?: (track: TrackId) => void;
   readonly onTrackLock?: (track: TrackId) => void;
+
+  /** In/out marks. Absent handlers hide the controls rather than showing dead ones. */
+  readonly onMarkIn?: () => void;
+  readonly onMarkOut?: () => void;
+  readonly onClearRange?: () => void;
 }
 
 export function Timeline(props: TimelineProps): ReactNode {
@@ -143,7 +150,14 @@ export function Timeline(props: TimelineProps): ReactNode {
             background: token.bgCanvas,
           }}
         >
-          <TimelineRuler ticks={ticks} onPointerDown={handleRulerPointerDown} />
+          <TimelineRuler
+            ticks={ticks}
+            viewport={viewport}
+            markers={document.sequence.markers}
+            {...(document.sequence.workRange !== undefined ? { workRange: document.sequence.workRange } : {})}
+            onPointerDown={handleRulerPointerDown}
+            {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
+          />
 
           <div style={{ position: 'relative' }}>
             {document.sequence.tracks.map((track) => (
@@ -180,7 +194,12 @@ function TimelineToolbar({
   onToggleSnap,
   onToggleRipple,
   onAddTrack,
+  onMarkIn,
+  onMarkOut,
+  onClearRange,
 }: TimelineProps & { readonly totalFrames: number; readonly clipCount: number }): ReactNode {
+  const range = document.sequence.workRange;
+
   return (
     <div
       style={{
@@ -208,6 +227,37 @@ function TimelineToolbar({
       >
         Ripple
       </Button>
+
+      {(onMarkIn ?? onMarkOut) !== undefined && (
+        <>
+          <Divider />
+          {/* Named for what they mark, not for the keys that trigger them: the shortcut is on the
+              title, where it teaches without taking width from a toolbar the mockups keep dense. */}
+          <Button onClick={onMarkIn} title="Mark in (I)" style={{ height: token.controlHeightSm }}>
+            Mark in
+          </Button>
+          <Button onClick={onMarkOut} title="Mark out (O)" style={{ height: token.controlHeightSm }}>
+            Mark out
+          </Button>
+          {range !== undefined && (
+            <>
+              {/* The range is stated, not just drawn. A four-pixel bar on the ruler is easy to miss,
+                  and an export that silently covers part of the sequence is the failure that costs
+                  the most to discover afterwards. */}
+              <Mono tone={token.accent}>
+                {range.start}–{endExclusive(range) - 1}
+              </Mono>
+              <Button
+                onClick={onClearRange}
+                title="Clear the in/out range (Alt+X)"
+                style={{ height: token.controlHeightSm }}
+              >
+                Clear
+              </Button>
+            </>
+          )}
+        </>
+      )}
 
       <Divider />
 
@@ -401,11 +451,21 @@ function TrackToggle({
 
 function TimelineRuler({
   ticks,
+  viewport,
+  markers,
+  workRange,
   onPointerDown,
+  onSeek,
 }: {
   readonly ticks: readonly RulerTick[];
+  readonly viewport: TimelineViewport;
+  readonly markers: readonly Marker[];
+  readonly workRange?: FrameSpan;
   readonly onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  readonly onSeek?: (frame: FrameIndex) => void;
 }): ReactNode {
+  const range = workRange === undefined ? undefined : spanGeometry(viewport, workRange);
+
   return (
     <div
       role="slider"
@@ -422,6 +482,22 @@ function TimelineRuler({
         overflow: 'hidden',
       }}
     >
+      {range !== undefined && (
+        <div
+          data-work-range="true"
+          aria-hidden="true"
+          title="In/out range"
+          style={{
+            position: 'absolute',
+            left: range.leftPx,
+            width: range.widthPx,
+            top: 0,
+            height: 4,
+            background: token.accent,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {ticks.map((tick) => (
         <div
           key={tick.frame}
@@ -454,6 +530,33 @@ function TimelineRuler({
             {tick.label}
           </div>
         ))}
+
+      {/* Markers last, so a flag is never hidden behind a tick label it happens to share a pixel
+          with. They seek rather than select: a marker is a place, and the only thing to do with a
+          place is go to it. */}
+      {markers.map((marker) => (
+        <button
+          key={marker.frame}
+          type="button"
+          data-marker-frame={marker.frame}
+          title={marker.label}
+          aria-label={`Marker ${marker.label} at frame ${marker.frame}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onSeek?.(marker.frame)}
+          style={{
+            position: 'absolute',
+            left: frameToPx(viewport, marker.frame) - 3,
+            bottom: 0,
+            width: 7,
+            height: 9,
+            padding: 0,
+            border: 'none',
+            borderRadius: '1px 1px 0 0',
+            background: marker.color ?? token.warn,
+            cursor: 'pointer',
+          }}
+        />
+      ))}
     </div>
   );
 }

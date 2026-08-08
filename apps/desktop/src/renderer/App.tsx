@@ -34,6 +34,7 @@ import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
+import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
@@ -94,7 +95,10 @@ export function App(): ReactNode {
   const audio = usePlaybackAudio({ document, sidecar });
   const transport = useTransport({
     frameRate: document.frameRate,
-    endFrame: documentEnd(document),
+    // Playback stops at the out point when one is marked. The range is the spec's bound on looped
+    // playback as well as the export default, and honouring it in only one of the two would make the
+    // preview disagree with the file it is supposed to be previewing.
+    endFrame: playbackEnd(document, documentEnd(document)),
     audio,
   });
   useTransportKeys(transport);
@@ -137,6 +141,13 @@ export function App(): ReactNode {
     },
     [store],
   );
+
+  const range = useWorkRange({
+    document,
+    playhead,
+    commit: commitDocument,
+    seek: transport.seek,
+  });
 
   const viewport = useMemo(
     () => createViewport({ framesPerPixel, scrollFrame, widthPx, frameRate: document.frameRate }),
@@ -365,6 +376,21 @@ export function App(): ReactNode {
   );
   const strips = useClipStrips({ document, sidecar, framesPerPixel, widthForClip });
 
+  /**
+   * The non-error status line.
+   *
+   * Two sources, one line: a mark that moved something the user did not touch, and a strip that could
+   * not be derived. Neither is an error — the timeline still edits — but a silent one is found later,
+   * as an export of the wrong length or a clip that stayed blank and read as a bug.
+   */
+  const notice =
+    range.notice ??
+    (strips.failures.length === 0
+      ? undefined
+      : strips.failures.length === 1
+        ? `no strip for ${strips.failures[0]}`
+        : `no strip for ${strips.failures.length} clips — ${strips.failures[0]}`);
+
   const mediaImport = useMediaImport({
     document,
     sidecar,
@@ -451,9 +477,7 @@ export function App(): ReactNode {
         </div>
       )}
 
-      {/* A missing filmstrip is not an error — the clip still edits — but it is not nothing either:
-          without a line saying so, a permanently blank strip reads as a bug in the timeline. */}
-      {strips.failures.length > 0 && (
+      {notice !== undefined && (
         <div
           role="status"
           style={{
@@ -463,9 +487,7 @@ export function App(): ReactNode {
             font: '500 11px ui-monospace, monospace',
           }}
         >
-          {strips.failures.length === 1
-            ? `no strip for ${strips.failures[0]}`
-            : `no strip for ${strips.failures.length} clips — ${strips.failures[0]}`}
+          {notice}
         </div>
       )}
 
@@ -490,6 +512,9 @@ export function App(): ReactNode {
             <Timeline
               document={drag.document}
               strips={strips.strips}
+              onMarkIn={range.markIn}
+              onMarkOut={range.markOut}
+              onClearRange={range.clear}
               viewport={viewport}
               playhead={playhead}
               selectedClips={selected}

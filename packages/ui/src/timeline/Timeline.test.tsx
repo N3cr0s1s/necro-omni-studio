@@ -361,6 +361,101 @@ describe('strips', () => {
   });
 });
 
+describe('in/out range', () => {
+  function ranged(from: number, to: number) {
+    const base = makeDocument([video('a', 0, 300)]);
+    return {
+      ...base,
+      sequence: { ...base.sequence, workRange: spanFromBounds(frameIndex(from), frameIndex(to)) },
+    };
+  }
+
+  it('draws nothing on the ruler when no range is marked', () => {
+    renderTimeline();
+    expect(document.querySelector('[data-work-range]')).toBeNull();
+  });
+
+  it('draws the range where it sits', () => {
+    // At 4 f/px, frames 100..200 start at 25 px and run 25 px wide.
+    renderTimeline({ document: ranged(100, 200) });
+    const bar = document.querySelector('[data-work-range]') as HTMLElement;
+    expect(bar.style.left).toBe('25px');
+    expect(bar.style.width).toBe('25px');
+  });
+
+  it('states the range in numbers as well as drawing it', () => {
+    // A four-pixel bar is easy to miss, and an export that silently covers part of the sequence is
+    // the failure that costs the most to discover afterwards.
+    renderTimeline({ document: ranged(100, 200), onMarkIn: vi.fn() });
+    expect(screen.getByText('100–199')).toBeDefined();
+  });
+
+  it('offers the marks only when something can handle them', () => {
+    renderTimeline();
+    expect(screen.queryByText('Mark in')).toBeNull();
+  });
+
+  it('reports a mark rather than performing one', () => {
+    // The timeline never mutates: every edit goes through the editing layer and the store, which is
+    // what keeps undo and autosave uniform.
+    const onMarkIn = vi.fn();
+    const onMarkOut = vi.fn();
+    renderTimeline({ onMarkIn, onMarkOut });
+
+    screen.getByText('Mark in').click();
+    screen.getByText('Mark out').click();
+    expect(onMarkIn).toHaveBeenCalledTimes(1);
+    expect(onMarkOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Clear only when there is a range to clear', () => {
+    renderTimeline({ onMarkIn: vi.fn() });
+    expect(screen.queryByText('Clear')).toBeNull();
+
+    cleanup();
+    renderTimeline({ document: ranged(10, 20), onMarkIn: vi.fn() });
+    expect(screen.getByText('Clear')).toBeDefined();
+  });
+});
+
+describe('markers', () => {
+  function withMarkers(frames: readonly number[]) {
+    const base = makeDocument([video('a', 0, 300)]);
+    return {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        markers: frames.map((frame) => ({ frame: frameIndex(frame), label: `m${frame}` })),
+      },
+    };
+  }
+
+  it('draws one flag per marker', () => {
+    renderTimeline({ document: withMarkers([40, 120]) });
+    expect(document.querySelectorAll('[data-marker-frame]')).toHaveLength(2);
+  });
+
+  it('places a flag at its frame', () => {
+    renderTimeline({ document: withMarkers([120]) });
+    const flag = document.querySelector('[data-marker-frame="120"]') as HTMLElement;
+    // 120 frames at 4 f/px is 30 px, less half the flag's width so it points at the frame.
+    expect(flag.style.left).toBe('27px');
+  });
+
+  it('seeks when clicked, because the only thing to do with a place is go to it', () => {
+    const onScrub = vi.fn();
+    renderTimeline({ document: withMarkers([120]), onScrub });
+
+    (document.querySelector('[data-marker-frame="120"]') as HTMLElement).click();
+    expect(onScrub).toHaveBeenCalledWith(120);
+  });
+
+  it('names the frame it marks, for anyone not looking at the ruler', () => {
+    renderTimeline({ document: withMarkers([120]) });
+    expect(screen.getByLabelText('Marker m120 at frame 120')).toBeDefined();
+  });
+});
+
 describe('trim handles', () => {
   it('renders grab areas at both edges of a wide clip', () => {
     renderTimeline();

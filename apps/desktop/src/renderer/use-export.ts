@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { type TimelineDocument, formatFrameRate, frameIndex, spanFromBounds } from '@nos/core';
+import { type TimelineDocument, formatFrameRate, renderRange } from '@nos/core';
 import {
   type ExportProgress,
   type ExportSettings,
@@ -385,11 +385,15 @@ function createReadbackTarget(
   };
 }
 
-/** The range an export defaults to: the whole sequence. */
+/**
+ * The range an export defaults to: the in/out range when one is marked, the whole sequence
+ * otherwise.
+ *
+ * Delegated to `renderRange` rather than derived again here. The core function exists exactly so
+ * that export and looped playback share one definition — two of them would agree until someone
+ * marked an in point, and then the preview and the file would quietly disagree about what was being
+ * rendered.
+ */
 export function defaultRange(document: TimelineDocument): ExportSettings['range'] {
-  let end = 0;
-  for (const track of document.sequence.tracks) {
-    for (const clip of track.clips) end = Math.max(end, clip.span.start + clip.span.duration);
-  }
-  return spanFromBounds(frameIndex(0), frameIndex(end));
+  return renderRange(document);
 }
