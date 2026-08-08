@@ -222,12 +222,16 @@ export interface GeneratorEntry {
 }
 
 export function entriesFor(manifest: GeneratorManifest): readonly GeneratorEntry[] {
-  if (manifest.presets.length === 0) {
+  // Defensive against a manifest that arrived from JSON without the field. The schema supplies a default,
+  // but the registry must survive a malformed file rather than let one bad manifest break the menu for
+  // every other generator.
+  const presets = manifest.presets ?? [];
+  if (presets.length === 0) {
     return [
-      { generator: manifest.id, label: manifestLabel(manifest), surfaces: manifest.surfaces },
+      { generator: manifest.id, label: manifestLabel(manifest), surfaces: manifest.surfaces ?? [] },
     ];
   }
-  return manifest.presets.map((preset) => ({
+  return presets.map((preset) => ({
     generator: manifest.id,
     preset: preset.id,
     label: preset.name,

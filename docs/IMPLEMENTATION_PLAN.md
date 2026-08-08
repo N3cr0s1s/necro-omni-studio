@@ -126,8 +126,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 ### Phase 7 — M9: Generator framework
 - [x] Manifest contracts: consumes/produces descriptors, presets as separate UI
       entries, `also` bindings, batch descriptor, duration mode, unbound detection
-- [ ] Manifest validator (pointer resolution, requires, outputs) + registry with
-      `available`/`unavailable`/`unbound` statuses and reasons
+- [x] Manifest validator + registry with `available`/`unavailable`/`unbound`
+      statuses and concrete reasons. Graph pointer resolution, `also` targets,
+      output nodes, required node classes. **Validated against the real ComfyUI
+      graphs in `docs/comfy/`.** 25 tests.
 - [x] Variant planning: seed constraints, sequential default, batch splitting.
       19 tests.
 - [ ] Job queue: groups + runs, progress, cancellation
@@ -156,10 +158,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–6 complete (M1–M8). Phase 7 in progress — manifest contracts, variant
-planning and the GPU semaphore are done; the validator, registry and job queue
-remain.**
-**895 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–6 complete (M1–M8). Phase 7 in progress — manifest contracts, validator,
+registry, variant planning and the GPU semaphore are done; the job queue and the
+generator panel UI remain.**
+**920 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -168,7 +170,8 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the generator manifest validator and registry, then the job queue. The Electron shell
+Next: the job queue (groups + runs, progress, cancellation), then the
+registry-driven parameter panel. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -279,6 +282,25 @@ the media browser plus a full timeline from mockup 1a.
   everything behind it for the duration of a run that will never happen.
 - The semaphore holder is **exposed**, because the mockups show jobs waiting on
   segmentation. A progress bar that stops with no explanation reads as a hang.
+- A generator that cannot run is **kept with a reason**, never dropped — including
+  from `entriesForSurface`, since filtering there *is* the disappearing-tool
+  behaviour the spec forbids. Every problem is reported, not just the first.
+- `unbound` is distinct from `unavailable`. Nothing is broken; the graph simply has
+  not been connected. Different user response — a to-do, not a bug — so an unbound
+  manifest is not pointer-checked at all, or the one fact that matters would be
+  buried under a list of null binds.
+- A pointer failure names **how far it got** (`/52:3/inputs has no "x"`), which is
+  the difference between a two-second fix and a hunt through the graph.
+- `requires` is **not checked** until the backend has reported its node classes.
+  Greying out every generator while the backend starts is worse than briefly
+  optimistic.
+- `patchPointer` is **immutable**. The same parsed graph is reused for every run, so
+  a mutating patch would make the second run inherit the first run's parameters — a
+  bug that only appears once someone renders twice.
+- An unknown `{placeholder}` in an `also` template is left **verbatim**, so the
+  backend fails loudly, rather than emptied into a subtly wrong expression.
+- Manifests are untrusted JSON, so the registry tolerates missing arrays: one
+  malformed file must not break the menu for every other generator.
 
 ### Export rules (keep these)
 
@@ -783,6 +805,19 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   tracks bytes. And `ruff` caught RUF006 on my own defensive code: the stderr drain
   task was created without a reference, so it could be garbage collected mid-await
   and cause exactly the pipe-full encoder deadlock it was written to prevent.
+
+- 2026-08-08: Generator manifest validator and registry. 25 tests, the most valuable
+  of which validate **the spec's own example manifests against the real ComfyUI
+  graphs** in `docs/comfy/` — every pointer in `interfaces.md` §2.1 and §2.2
+  resolves, including the `also` template target that a single-pointer check would
+  miss. That is a much stronger statement than any hand-written fixture: it proves
+  the pointer format and node-id conventions against files written for the project,
+  not for the test.
+
+  A test fixture missing `presets` surfaced a robustness gap rather than just a typo:
+  manifests arrive as untrusted JSON, so the registry now tolerates missing arrays.
+  One malformed file must not break the menu for every other generator — the same
+  rule the effect registry already follows.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

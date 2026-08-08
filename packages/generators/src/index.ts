@@ -5,5 +5,7 @@
  * generator. Every generative capability attaches through a manifest, and adding one is a JSON file.
  */
 export * from './contracts/index.js';
+export * from './manifest/graph-pointer.js';
+export * from './registry/generator-registry.js';
 export * from './queue/variant-plan.js';
 export * from './queue/gpu-semaphore.js';
