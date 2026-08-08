@@ -521,6 +521,20 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- A text parameter's **sources** are honoured, per §10: typed, a `notes/` file, or a text clip. The
+  field was declared, parsed and carried through the manifest layer while nothing read it, so a script
+  already written could only be voiced by typing it again.
+- A manifest that declares no sources gets `inline` **alone**, never all of them. It is asking for a
+  value; offering to bind it to a timeline clip invents an intention its author never expressed.
+- An unrecognized source is **dropped, not rejected** — the same forward-compatibility rule the
+  registry applies to unknown node classes — and the list never comes back empty, because typing works
+  for every text parameter by definition.
+- A binding is kept and **re-read at submit**, not copied once. Reading at binding time is how a tool
+  ends up confidently generating from yesterday's draft; a source that has since gone refuses the run
+  with a reason rather than running with the stale value.
+- Resolution lives in the shell, never in `@nos/generators`: that package has no filesystem and no
+  document, and it is what keeps a fourth source from reaching into it.
+
 - The job queue belongs to the **project**. A take is a file in that project's `generated/` folder and
   an accepted variant carries a project-relative path, so a group surviving a project change offers
   variants whose files are not where the new clip would look — with a picker that looks normal.
