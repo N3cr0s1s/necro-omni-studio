@@ -2,10 +2,10 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { generatorId, presetId } from '@nos/core';
-import type { GeneratorManifest, RegistryRecord } from '@nos/generators';
+import { assetPath, generatorId, presetId } from '@nos/core';
+import type { AssetChoice, GeneratorManifest, RegistryRecord } from '@nos/generators';
 import { entriesFor } from '@nos/generators';
-import { GeneratorPanel } from './GeneratorPanel.js';
+import { type GeneratorPanelProps, GeneratorPanel } from './GeneratorPanel.js';
 
 afterEach(cleanup);
 
@@ -100,7 +100,88 @@ describe('manifest-driven rendering', () => {
       params: [{ key: 'first_frame', label: 'First frame', type: 'image', required: true, bind: '/x' }],
     });
     renderPanel({ record: record({ manifest: withRequired, entries: entriesFor(withRequired) }) });
-    expect(screen.getByText(/First frame/).textContent).toContain('*');
+    // The `<label>` rather than any text node: the required marker is its own span, so matching on
+    // text now also matches the run blocker that names the same parameter.
+    expect(document.querySelector('label[for="param-first_frame"]')?.textContent).toContain('*');
+  });
+});
+
+describe('a parameter that names a file', () => {
+  const withImage = manifest({
+    params: [{ key: 'first_frame', label: 'First frame', type: 'image', required: true, bind: '/x' }],
+  });
+
+  function renderWithImage(overrides: Partial<GeneratorPanelProps> = {}) {
+    return renderPanel({
+      record: record({ manifest: withImage, entries: entriesFor(withImage) }),
+      ...overrides,
+    });
+  }
+
+  const choices: readonly AssetChoice[] = [
+    { path: assetPath('media/frame.png'), label: 'frame.png', type: 'image' },
+    { path: assetPath('media/take.mp4'), label: 'take.mp4', type: 'video' },
+  ];
+
+  it('can be set, which is the whole reason an image-to-video generator is usable', async () => {
+    // It rendered as a read-only field reading `not set`: the panel named the input it needed and
+    // offered no way at all to supply it, so every image-to-anything generator was a dead end.
+    const user = userEvent.setup();
+    const onChangeParam = vi.fn();
+    renderWithImage({ assetChoices: choices, onChangeParam });
+
+    await user.selectOptions(screen.getByLabelText('First frame'), 'media/frame.png');
+
+    expect(onChangeParam).toHaveBeenCalledWith('first_frame', 'media/frame.png');
+  });
+
+  it('offers only files of its declared type', () => {
+    renderWithImage({ assetChoices: choices });
+    const options = [...(screen.getByLabelText('First frame') as HTMLSelectElement).options].map(
+      (option) => option.value,
+    );
+    expect(options).toEqual(['', 'media/frame.png']);
+  });
+
+  it('says the project has none rather than offering an empty list', () => {
+    renderWithImage({ assetChoices: [] });
+    expect(screen.queryByLabelText('First frame')).toBeNull();
+    expect(screen.getByText(/no first frame available in this project/)).toBeDefined();
+  });
+
+  it('keeps a value the project no longer holds, marked as missing', () => {
+    // A select whose value is absent from its options silently resets to the first one, which would
+    // change what the run does without saying so.
+    renderWithImage({ assetChoices: choices, params: { first_frame: 'media/deleted.png' } });
+    const select = screen.getByLabelText('First frame') as HTMLSelectElement;
+    expect(select.value).toBe('media/deleted.png');
+    expect(screen.getByText('media/deleted.png — missing')).toBeDefined();
+  });
+});
+
+describe('whether a run can start', () => {
+  const withImage = manifest({
+    params: [{ key: 'first_frame', label: 'First frame', type: 'image', required: true, bind: '/x' }],
+  });
+
+  function generateButton(): HTMLButtonElement {
+    return screen.getByRole('button', { name: /Generate/ }) as HTMLButtonElement;
+  }
+
+  it('does not, while a required input is unset', () => {
+    // It used to: the button stayed lit and submitted a graph with an empty image slot, and the run
+    // failed in the backend where the reason was much harder to find.
+    renderPanel({ record: record({ manifest: withImage, entries: entriesFor(withImage) }) });
+    expect(generateButton().disabled).toBe(true);
+    expect(screen.getByText('First frame is required')).toBeDefined();
+  });
+
+  it('does, once it is set', () => {
+    renderPanel({
+      record: record({ manifest: withImage, entries: entriesFor(withImage) }),
+      params: { first_frame: 'media/frame.png' },
+    });
+    expect(generateButton().disabled).toBe(false);
   });
 });
 

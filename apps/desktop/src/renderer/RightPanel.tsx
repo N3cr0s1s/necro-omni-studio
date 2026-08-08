@@ -11,7 +11,9 @@ import type {
 } from '@nos/generators';
 import { acceptSelection, buildSelection } from '@nos/generators';
 import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/masks';
+import type { DirectoryNode } from '@nos/media';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
+import { assetChoicesFrom } from './generator-assets.js';
 import { ClipInspector } from './ClipInspector.js';
 import { TextInspector } from './TextInspector.js';
 import { ProjectSettings } from './ProjectSettings.js';
@@ -39,6 +41,8 @@ export interface RightPanelProps {
   readonly effects: EffectRegistry;
   readonly onChangeDocument: (label: string, next: TimelineDocument) => void;
   readonly registry: GeneratorRegistry | undefined;
+  /** The project folder, so a generator's asset inputs can be chosen from the files that exist. */
+  readonly projectTree: DirectoryNode | undefined;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
   readonly onAuthorManifest: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
@@ -266,9 +270,11 @@ function GenerateTab({
   libraryProblems,
   runtime,
   playhead,
+  projectTree,
   onAuthorManifest,
 }: RightPanelProps): ReactNode {
   const records = registry?.all() ?? [];
+  const assetChoices = useMemo(() => assetChoicesFrom(projectTree), [projectTree]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [preset, setPreset] = useState<PresetId | undefined>(undefined);
   const [params, setParams] = useState<Readonly<Record<string, string | number | boolean>>>({});
@@ -371,6 +377,7 @@ function GenerateTab({
           {...(runtime.capabilities !== undefined
             ? { capabilityOptions: runtime.capabilities.enumOptions }
             : {})}
+          assetChoices={assetChoices}
           onChangeParam={(key, value) => setParams((current) => ({ ...current, [key]: value }))}
           onChangePreset={setPreset}
           onChangeVariantCount={setVariantCount}

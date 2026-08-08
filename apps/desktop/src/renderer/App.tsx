@@ -842,6 +842,7 @@ export function App(): ReactNode {
         </main>
 
         <RightPanel
+          projectTree={tree.tree}
           document={document}
           effects={effectRegistry}
           onChangeDocument={commitDocument}

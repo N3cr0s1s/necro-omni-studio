@@ -1,13 +1,18 @@
 import { type ReactNode, useMemo } from 'react';
 import type { PresetId } from '@nos/core';
 import {
+  type AssetChoice,
   type GeneratorManifest,
   type GeneratorParam,
   type RegistryRecord,
+  choicesFor,
+  describeBlockers,
   describeConstraint,
   describeRecord,
   effectiveDefaults,
+  isAssetParam,
   planVariants,
+  runBlockers,
   supportsVariants,
   visibleParams,
 } from '@nos/generators';
@@ -34,6 +39,13 @@ export interface GeneratorPanelProps {
   readonly lockedSeed?: number;
   /** Live enum options from the backend, keyed `nodeClass/input`. */
   readonly capabilityOptions?: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Files offerable for asset-valued parameters — a first frame, a voice reference, a mask.
+   *
+   * The panel filters this by each parameter's declared type; the caller supplies the whole set and
+   * decides what a project's files are called, because reading a folder is not this component's job.
+   */
+  readonly assetChoices?: readonly AssetChoice[];
 
   readonly onChangeParam?: (key: string, value: string | number | boolean) => void;
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
@@ -49,6 +61,7 @@ export function GeneratorPanel({
   variantCount,
   lockedSeed,
   capabilityOptions,
+  assetChoices,
   onChangeParam,
   onChangePreset,
   onChangeVariantCount,
@@ -62,6 +75,19 @@ export function GeneratorPanel({
 
   // The plan drives the variant control, so the panel and the queue cannot disagree about how many runs a
   // click will produce.
+  const values = useMemo(() => ({ ...defaults, ...params }), [defaults, params]);
+
+  // What is standing between the user and a run, as a value the button and the fields both read, so a
+  // greyed button and an unmarked field cannot disagree about which input is missing.
+  const blockers = useMemo(
+    () => runBlockers({ manifest, status: record.status, values }),
+    [manifest, record.status, values],
+  );
+  const blocked = new Set(
+    blockers.filter((blocker) => blocker.param !== undefined).map((blocker) => blocker.param as string),
+  );
+  const reason = describeBlockers(blockers);
+
   const plan = useMemo(
     () =>
       planVariants({
@@ -123,9 +149,11 @@ export function GeneratorPanel({
           <ParamControl
             key={param.key}
             param={param}
-            value={params[param.key] ?? defaults[param.key]}
+            value={values[param.key]}
             disabled={!runnable}
+            missing={blocked.has(param.key)}
             {...(capabilityOptions !== undefined ? { capabilityOptions } : {})}
+            {...(isAssetParam(param) ? { choices: choicesFor(param, assetChoices ?? []) } : {})}
             {...(param.type === 'seed' ? { seedLocked: lockedSeed !== undefined } : {})}
             {...(onChangeParam !== undefined ? { onChange: onChangeParam } : {})}
             {...(onToggleSeedLock !== undefined ? { onToggleSeedLock } : {})}
@@ -141,9 +169,19 @@ export function GeneratorPanel({
         {...(onChangeVariantCount !== undefined ? { onChange: onChangeVariantCount } : {})}
       />
 
-      <Button tone="primary" onClick={onRun} disabled={!runnable}>
+      {/* Disabled *with its reason*, which is the standing rule for every disabled control here: a
+          button that is merely grey teaches nothing, and this one used to be lit while the graph it
+          would submit had an empty image slot. */}
+      <Button
+        tone="primary"
+        onClick={onRun}
+        disabled={reason !== undefined}
+        {...(reason !== undefined ? { title: `Cannot run: ${reason}` } : {})}
+      >
         Generate {plan.totalVariants > 1 ? `${plan.totalVariants} variants` : ''}
       </Button>
+
+      {reason !== undefined && runnable && <Mono tone={token.warn}>{reason}</Mono>}
     </section>
   );
 }
@@ -239,7 +277,9 @@ function ParamControl({
   param,
   value,
   disabled,
+  missing = false,
   capabilityOptions,
+  choices,
   seedLocked,
   onChange,
   onToggleSeedLock,
@@ -247,7 +287,10 @@ function ParamControl({
   readonly param: GeneratorParam;
   readonly value: string | number | boolean | undefined;
   readonly disabled: boolean;
+  /** True when this required parameter is what is holding the run back. */
+  readonly missing?: boolean;
   readonly capabilityOptions?: ReadonlyMap<string, readonly string[]>;
+  readonly choices?: readonly AssetChoice[];
   readonly seedLocked?: boolean;
   readonly onChange?: (key: string, value: string | number | boolean) => void;
   readonly onToggleSeedLock?: () => void;
@@ -387,13 +430,85 @@ function ParamControl({
         </div>
       )}
 
-      {isAssetType(param.type) && <ValueField>{value === undefined ? 'not set' : String(value)}</ValueField>}
+      {isAssetParam(param) && (
+        <AssetField
+          id={id}
+          label={label}
+          value={value === undefined ? '' : String(value)}
+          disabled={disabled}
+          missing={missing}
+          choices={choices ?? []}
+          {...(onChange !== undefined ? { onChange: (next) => onChange(param.key, next) } : {})}
+        />
+      )}
     </div>
   );
 }
 
-function isAssetType(type: GeneratorParam['type']): boolean {
-  return type === 'image' || type === 'video' || type === 'audio' || type === 'mask';
+/**
+ * The control for a parameter that names a file.
+ *
+ * A select over the project's own files rather than a system file dialog. Two reasons, and both are
+ * the spec's: a project *is* a folder, so the files that belong to it are exactly the ones already in
+ * it; and a graph is submitted with a project-relative path, so a file chosen from somewhere else on
+ * the disk would produce a run nobody could reproduce later.
+ *
+ * When the project holds nothing of the required type the control says so rather than presenting an
+ * empty list — "no images in this project yet" is actionable, an empty dropdown is a dead end.
+ */
+function AssetField({
+  id,
+  label,
+  value,
+  disabled,
+  missing,
+  choices,
+  onChange,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly missing: boolean;
+  readonly choices: readonly AssetChoice[];
+  readonly onChange?: (value: string) => void;
+}): ReactNode {
+  if (choices.length === 0) {
+    return <ValueField>{`no ${label.toLowerCase()} available in this project`}</ValueField>;
+  }
+
+  // A value the project no longer contains is kept as its own option rather than silently snapping to
+  // the first file: a deleted or renamed asset must show as the thing that is wrong, and a select
+  // whose value is absent from its options resets itself, which would change the run without saying so.
+  const known = choices.some((choice) => choice.path === value);
+
+  return (
+    <select
+      id={id}
+      aria-label={label}
+      disabled={disabled}
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+      style={{
+        height: token.controlHeight,
+        background: token.surface1,
+        border: `1px solid ${missing ? token.danger : token.borderControl}`,
+        borderRadius: token.radiusControl,
+        color: value === '' ? token.textGhost : token.textBright,
+        font: `400 11.5px ${token.fontUi}`,
+        padding: `0 ${token.space2}`,
+        maxWidth: '100%',
+      }}
+    >
+      <option value="">not set</option>
+      {!known && value !== '' && <option value={value}>{`${value} — missing`}</option>}
+      {choices.map((choice) => (
+        <option key={choice.path} value={choice.path}>
+          {choice.label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 /**
