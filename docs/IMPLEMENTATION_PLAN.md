@@ -521,6 +521,18 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- A round trip through the inspector must **lose nothing**. `fromManifest` dropped `also`,
+  `defaultFrom` and `durationFrom`, so opening one of the project's own MiniMax manifests and saving it
+  deleted the `fps` length expression — silent corruption of a file the user already relies on.
+- A round-trip test is only as good as its **fixture**. The existing one asserted equality and passed
+  for months because it omitted exactly the fields being dropped. A fixture for a preservation test
+  has to carry every optional field, especially the rare ones.
+- Preserve first, then author. Carrying a field through the draft is what stops it being destroyed;
+  a control is what makes it reachable. The two are separate problems and the first is the urgent one.
+- Clearing an optional field **removes the key** rather than setting it to `undefined`, and an empty
+  list is removed rather than written — the manifest writer distinguishes absent from empty, and a
+  reader should not have to skip fields that mean nothing.
+
 - The inspector must be able to author **every** field the framework reads. `consumes` was written
   verbatim from a draft value with no control, so everything authored there declared it consumed
   nothing — and §5.2 derives the surfaces from exactly that field. "Kódírás nincs" fails wherever a
