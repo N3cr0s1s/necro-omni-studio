@@ -636,6 +636,7 @@ export function App(): ReactNode {
               onMarkIn={range.markIn}
               onMarkOut={range.markOut}
               onClearRange={range.clear}
+              {...(clipEdits.hasRange ? { onRemoveRange: clipEdits.removeRange } : {})}
               viewport={viewport}
               playhead={playhead}
               selectedClips={selected}
@@ -645,7 +646,9 @@ export function App(): ReactNode {
               onSelectClip={(clip, additive) =>
                 setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
               }
-              onClipPointerDown={(clip, event) => drag.begin('move', clip, event)}
+              // Alt turns a move into a slip. The clip stays put and its content slides inside it —
+              // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
+              onClipPointerDown={(clip, event) => drag.begin(event.altKey ? 'slip' : 'move', clip, event)}
               onTrimStart={(clip, event) => drag.begin('trim-start', clip, event)}
               onTrimEnd={(clip, event) => drag.begin('trim-end', clip, event)}
               {...(expandedClip !== undefined ? { expandedClip } : {})}

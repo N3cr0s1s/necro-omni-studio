@@ -281,6 +281,81 @@ describe('cutting', () => {
   });
 });
 
+describe('the marked range', () => {
+  function ranged(from: number, to: number) {
+    const store = createDocumentStore(documentWith([clip('a', 0, 100), clip('b', 200, 300)]));
+    store.commit('mark', (current) => ({
+      ...current,
+      sequence: {
+        ...current.sequence,
+        workRange: spanFromBounds(frameIndex(from), frameIndex(to)),
+      },
+    }));
+
+    let latest: ClipEdits | undefined;
+    function Host(): null {
+      latest = useClipEdits({
+        store,
+        selected: new Set(),
+        playhead: frameIndex(0),
+        ripple: false,
+        onReject: () => undefined,
+        onRemoved: () => undefined,
+      });
+      return null;
+    }
+    render(<Host />);
+    return { store, edits: () => latest! };
+  }
+
+  it('is offered only when a range is marked', () => {
+    const harness = mount({});
+    expect(harness.edits().hasRange).toBe(false);
+    cleanup();
+    expect(ranged(0, 50).edits().hasRange).toBe(true);
+  });
+
+  it('takes the section out and closes the gap', () => {
+    const harness = ranged(50, 100);
+    act(() => harness.edits().removeRange());
+
+    // The first clip loses its tail; the second moves back by the range's length.
+    expect(spans(harness.store)).toEqual([
+      ['a', 0, 50],
+      ['b', 150, 250],
+    ]);
+  });
+
+  it('applies to every track, because a range is a span of the programme', () => {
+    // Taking a section out of the picture while leaving it in the sound is not something anyone
+    // marks a range to do.
+    const harness = ranged(0, 50);
+    act(() => harness.edits().removeRange());
+
+    const tracks = harness.store.getDocument().sequence.tracks;
+    expect(tracks.every((track) => track.clips.every((entry) => entry.span.start < 200))).toBe(true);
+  });
+
+  it('clears the marks afterwards, since the section they described is gone', () => {
+    // Leaving them would invite the user to remove the material that has just moved into their place.
+    const harness = ranged(50, 100);
+    act(() => harness.edits().removeRange());
+
+    expect(harness.store.getDocument().sequence.workRange).toBeUndefined();
+  });
+
+  it('is one history entry for the whole range', () => {
+    const harness = ranged(50, 100);
+    act(() => harness.edits().removeRange());
+    act(() => harness.store.undo());
+
+    expect(spans(harness.store)).toEqual([
+      ['a', 0, 100],
+      ['b', 200, 300],
+    ]);
+  });
+});
+
 describe('the keys', () => {
   it('removes on delete and on backspace', () => {
     for (const key of ['Delete', 'Backspace']) {

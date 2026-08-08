@@ -12,6 +12,7 @@ import {
   DEFAULT_SNAP_PIXELS,
   collectSnapCandidates,
   moveClip,
+  slipClip,
   snapSpanTranslation,
   snapThresholdFrames,
   trimClipEnd,
@@ -34,7 +35,15 @@ import { type TimelineViewport, pxToFrames } from '@nos/ui';
  *   frames at the current zoom, so it feels the same distance at every zoom level.
  */
 
-export type DragKind = 'move' | 'trim-start' | 'trim-end';
+/**
+ * What a drag on a clip does.
+ *
+ * `slip` is the spec's *csúsztatás*: the clip stays exactly where it is on the timeline and its
+ * *content* slides inside that window. It is a separate gesture rather than a mode because it is the
+ * one edit whose result is invisible in the clip's outline — nothing moves — so a user who triggered
+ * it by accident would see no reason for the picture changing.
+ */
+export type DragKind = 'move' | 'trim-start' | 'trim-end' | 'slip';
 
 export interface DragState {
   readonly clip: ClipId;
@@ -135,7 +144,9 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 }
 
 function labelFor(kind: DragKind): string {
-  return kind === 'move' ? 'move clip' : 'trim clip';
+  if (kind === 'move') return 'move clip';
+  if (kind === 'slip') return 'slip clip';
+  return 'trim clip';
 }
 
 /**
@@ -160,6 +171,11 @@ function applyDrag(
   }
   if (state.kind === 'trim-end') {
     return trimClipEnd(state.document, state.clip, deltaFrames);
+  }
+  if (state.kind === 'slip') {
+    // Dragging left pulls later material into the window, which is what the hand expects: the content
+    // follows the pointer, not the source read position.
+    return slipClip(state.document, state.clip, -deltaFrames);
   }
 
   const target = frameIndex(Math.max(0, clip.span.start + deltaFrames));
@@ -187,6 +203,8 @@ export function describeEditError(error: EditError): string {
       return 'the clip is gone';
     case 'empty-result':
       return 'that would leave nothing of the clip';
+    case 'source-exhausted':
+      return `the source has ${error.available} frames left, ${error.requested} were asked for`;
     default:
       return `the edit was rejected: ${String(error.kind).replace(/-/g, ' ')}`;
   }

@@ -86,6 +86,8 @@ export interface TimelineProps {
   readonly onMarkIn?: () => void;
   readonly onMarkOut?: () => void;
   readonly onClearRange?: () => void;
+  /** Removes the marked range from every unlocked track. Offered only while a range exists. */
+  readonly onRemoveRange?: () => void;
 }
 
 export function Timeline(props: TimelineProps): ReactNode {
@@ -224,6 +226,7 @@ function TimelineToolbar({
   onMarkIn,
   onMarkOut,
   onClearRange,
+  onRemoveRange,
 }: TimelineProps & { readonly totalFrames: number; readonly clipCount: number }): ReactNode {
   const range = document.sequence.workRange;
 
@@ -283,6 +286,15 @@ function TimelineToolbar({
               <Mono tone={token.accent}>
                 {range.start}–{endExclusive(range) - 1}
               </Mono>
+              {onRemoveRange !== undefined && (
+                <Button
+                  onClick={onRemoveRange}
+                  title="Remove the marked range from every unlocked track and close the gaps"
+                  style={{ height: token.controlHeightSm }}
+                >
+                  Cut range
+                </Button>
+              )}
               <Button
                 onClick={onClearRange}
                 title="Clear the in/out range (Alt+X)"

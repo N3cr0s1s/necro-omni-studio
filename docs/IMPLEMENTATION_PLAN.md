@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1779 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1784 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1785,3 +1785,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   and x=478; `E` took the first to 0.4 opacity; `Delete` with ripple **off** left
   the second half at 478; with ripple **on** it moved back to 448. The gap closing
   is the whole difference, and it is now visible in the pixels.
+
+- 2026-08-08: Slip, and cutting the marked range. The last two editing operations
+  the spec names that had no way to be invoked. §6.1 lists *csúsztatás* among the
+  timeline's verbs, and `slipClip` had been sitting in `@nos/editing` since M3;
+  `rippleDeleteRange` had been waiting for in/out marks, which arrived earlier
+  today and then went unused by it.
+
+  Slip is **alt-drag on the clip body**, not a mode. It is the one edit whose result
+  the clip's outline cannot show — nothing moves — so a user who triggered it by
+  accident would see the picture change with no visible reason. Dragging left pulls
+  later material into the window, because the content should follow the pointer
+  rather than the source read position.
+
+  The range cut applies to **every unlocked track**, not the selected one: a range
+  is a span of the *programme*, and taking a section out of the picture while
+  leaving it in the sound is not something anyone marks a range to do. It clears
+  the marks afterwards — the section they described no longer exists, and leaving
+  them would invite the user to remove the material that has just moved into its
+  place.
+
+  Verified in the running app by geometry, which is the only way slip *can* be
+  verified: after alt-dragging, the clip stayed at x=468 with its width unchanged
+  at 70 px while its filmstrip offset moved from −28.6% to −45.7% — the content
+  sliding inside a window that did not move. The filmstrip placement work from this
+  morning is what makes that visible at all. The range cut then left the surviving
+  tails of both the video and its audio at x=488 with the range bar cleared.

@@ -9,7 +9,9 @@ import {
 } from '@nos/core';
 import {
   type EditError,
+  clearWorkRange,
   liftClip,
+  rippleDeleteRange,
   rippleDeleteClip,
   setClipEnabled,
   splitAllTracksAt,
@@ -41,9 +43,21 @@ export interface ClipEdits {
   split(): void;
   /** Splits every unlocked track at the playhead, keeping layers aligned. */
   splitAllTracks(): void;
+  /**
+   * Removes the marked in/out range from every unlocked track and closes the gaps.
+   *
+   * Every track, not the selected one: a range is a span of the *programme*, and taking it out of
+   * the picture while leaving it in the sound is not something anyone marks a range to do.
+   */
+  removeRange(): void;
+  /** True when a range is marked, so the control can be offered only when it means something. */
+  readonly hasRange: boolean;
   /** True when something is selected, so the shell can disable its buttons honestly. */
   readonly hasSelection: boolean;
 }
+
+/** The verbs, without the state the shell reads off the document. */
+type EditActions = Omit<ClipEdits, 'hasSelection' | 'hasRange'>;
 
 export interface ClipEditOptions {
   readonly store: DocumentStore;
@@ -63,7 +77,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
   const latest = useRef(options);
   latest.current = options;
 
-  const actions = useMemo<Omit<ClipEdits, 'hasSelection'>>(
+  const actions = useMemo<EditActions>(
     () => ({
       remove: () => removeSelection(latest.current, latest.current.ripple),
       removeOtherWay: () => removeSelection(latest.current, !latest.current.ripple),
@@ -104,6 +118,32 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
         });
       },
 
+      removeRange() {
+        const { store, onReject } = latest.current;
+        const range = latest.current.store.getDocument().sequence.workRange;
+        if (range === undefined) return;
+
+        store.commit('ripple delete range', (current) => {
+          let next = current;
+          let counter = 0;
+          for (const track of current.sequence.tracks) {
+            if (track.locked) continue;
+            const result = rippleDeleteRange(next, track.id, range, () => {
+              counter += 1;
+              return clipId(`range_${range.start}_${counter}`);
+            });
+            if (!result.ok) {
+              onReject(describe(result.error));
+              continue;
+            }
+            next = result.value;
+          }
+          // The range described a section that no longer exists; leaving the marks would invite the
+          // user to remove the material that has just moved into their place.
+          return clearWorkRange(next);
+        });
+      },
+
       splitAllTracks() {
         const { store, playhead, onReject } = latest.current;
         store.commit('split all tracks', (current) => {
@@ -127,7 +167,11 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
 
   useEditKeys(actions);
 
-  return { ...actions, hasSelection: options.selected.size > 0 };
+  return {
+    ...actions,
+    hasSelection: options.selected.size > 0,
+    hasRange: options.store.getDocument().sequence.workRange !== undefined,
+  };
 }
 
 /**
@@ -167,7 +211,7 @@ function removeSelection(options: ClipEditOptions, ripple: boolean): void {
  * Window-level and suppressed in text fields, like the transport and range keys — an editor's Delete
  * has to work wherever the pointer is, and must never eat a character from a prompt.
  */
-function useEditKeys(actions: Omit<ClipEdits, 'hasSelection'>): void {
+function useEditKeys(actions: EditActions): void {
   const latest = useRef(actions);
   latest.current = actions;
 
