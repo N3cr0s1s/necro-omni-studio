@@ -406,6 +406,20 @@ only by end-to-end probes.
 
 ### Editing rules (keep these)
 
+- A value that can be dragged must also be **typeable**. §6.1 asks for frame accuracy,
+  and a drag cannot land on frame 120 — nor say which frame it did land on. The typed
+  path goes through the same operation as the drag, so both are one edit with one set
+  of refusals.
+- `slipClip` **adds** its delta to the source position, and takes it in **project**
+  frames while `sourceIn` is in source frames. Any caller editing `sourceIn` directly
+  has to convert; at matching rates that is the identity, which is exactly why getting
+  it wrong survives until someone tries 24-into-30.
+- The shell's `describeEditError` is deliberately not the domain's. The domain's is
+  exhaustive over `EditError` and **throws** on an unknown kind — right for a package
+  that wants a compile error when a case is added, and wrong for a UI that is handed
+  transition and segmentation errors too, where it turns a refused edit into a blank
+  window.
+
 - Every operation is a pure `TimelineDocument -> Result<TimelineDocument,
 EditError>`. No mutation, no I/O, no UI knowledge, so a whole gesture composes
   inside one `store.transaction()` and collapses to one undo step.
