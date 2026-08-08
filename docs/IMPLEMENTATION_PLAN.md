@@ -287,6 +287,15 @@ ComfyUI graph.
 rasterized into the compositor, and animated by presets that write ordinary
 keyframes into lanes the user can edit. Verified in the running application.
 
+**Transitions are in** — the last spec feature that had an engine but no way in.
+Created across a cut from the clip inspector, consuming handles so the sequence
+never changes length, removed with an exact round trip. Verified in the running
+application: a crossfade overlaps the clips by exactly its duration and the plan
+builds a transition item.
+
+Every feature in the spec is now built, reachable from the shell, and verified in
+the running application.
+
 ### Editing rules (keep these)
 
 - Every operation is a pure `TimelineDocument -> Result<TimelineDocument,
@@ -1315,3 +1324,28 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   wrong for a title, whose `size` control consequently meant nothing. The raster is
   now composed onto a frame-sized surface at its natural pixel size, which keeps
   the compositor's model intact and makes the size a real pixel size.
+
+- 2026-08-08: Transitions, and unit tests for the shell.
+
+  A transition is its own entity rather than an effect on either clip because it
+  **samples both**, and its `progress` is computed by the engine from the overlap —
+  the spec forbids exposing that as a keyframable parameter, since the engine would
+  overwrite whatever was authored. Which means it needs a *real* overlap, and two
+  clips butted at a cut have none. Creating one therefore consumes handles: the
+  outgoing clip extends past the cut and the incoming one starts before it, half
+  the duration each. That is why `SourceBounds` matters here — a clip with no
+  material beyond its out-point cannot be extended, and the honest answer is a
+  rejection naming how many frames are missing rather than a dissolve that holds a
+  frozen frame. The sequence length never changes.
+
+  One design decision worth recording: adding a transition where one already exists
+  **replaces** it. Without that the clips are already overlapping on the second
+  call, the adjacency check rejects it, and a user who wanted a different dissolve
+  has no way to ask for one. A test asserts the add/remove round trip returns the
+  original document exactly.
+
+  Also closed the gap this ledger flagged last time: the shell's pure logic had no
+  unit tests, only end-to-end probes. The library loader is the most valuable of
+  them, because its stated property — one malformed manifest must not stop the
+  others — is the kind that fails silently and looks like a generator was never
+  installed.
