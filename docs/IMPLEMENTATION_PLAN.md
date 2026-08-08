@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2200 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2212 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2364,3 +2364,21 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   there, so a synthetic `dragover` carries no `dataTransfer` and a test would pass
   for the wrong reason. `assetDropTarget` is tested directly; the rest was checked
   in the running app with a real `DataTransfer`.
+
+- 2026-08-08: Issue #20 — a preset that sets rather than locks.
+
+  Stable Audio's length could not be set, and the cause was a missing
+  distinction. A preset carried one kind of value: `pin`, which is applied *and
+  hidden*, so the panel reads as its own tool rather than the same form with
+  different numbers. That is right for the category that makes SFX be SFX. It is
+  wrong for a length: SFX and One-shot both pinned `duration_s`, so choosing
+  either removed the only control for the thing the user most wanted to change.
+
+  A preset now has `set` as well as `pin` — pre-filled and still editable, versus
+  fixed and hidden. Layered defaults → set → pin, with the pin last because it is
+  the value that cannot be argued with; otherwise a preset that did both would
+  depend on which was written first. `visibleParams` had no test at all before
+  this, which is how a rule this load-bearing went unexamined.
+
+  Verified live: the length shows under every preset, pre-filled at 2 for
+  One-shot and 50 for Music, and an edit to 12 under SFX holds.

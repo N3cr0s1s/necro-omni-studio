@@ -187,26 +187,51 @@ function parseOutput(value: unknown, path: string): Validated<OutputDescriptor> 
 }
 
 function parsePreset(value: unknown, path: string): Validated<GeneratorPreset> {
-  const shape = vObject<{ id: string; name: string; pin: Readonly<Record<string, unknown>> }>({
-    id: vString,
-    name: vString,
-    pin: (raw, at) =>
+  const vValueMap =
+    (what: string) =>
+    (raw: unknown, at: string): Validated<Readonly<Record<string, unknown>>> =>
       raw !== null && typeof raw === 'object' && !Array.isArray(raw)
         ? ok(raw as Readonly<Record<string, unknown>>)
-        : err([issue(at, 'expected an object of pinned values')]),
+        : err([issue(at, `expected an object of ${what}`)]);
+
+  const shape = vObject<{
+    id: string;
+    name: string;
+    pin: Readonly<Record<string, unknown>>;
+    set?: Readonly<Record<string, unknown>>;
+  }>({
+    id: vString,
+    name: vString,
+    pin: vValueMap('pinned values'),
+    set: vOptional(vValueMap('starting values')),
   })(value, path);
   if (!shape.ok) return shape;
 
-  const pin: Record<string, string | number | boolean> = {};
   const issues: ValidationIssue[] = [];
-  for (const [key, pinned] of Object.entries(shape.value.pin)) {
-    const scalar = vScalar(pinned, childPath(childPath(path, 'pin'), key));
-    if (scalar.ok) pin[key] = scalar.value;
-    else issues.push(...scalar.error);
-  }
+
+  const scalars = (
+    source: Readonly<Record<string, unknown>>,
+    field: string,
+  ): Record<string, string | number | boolean> => {
+    const out: Record<string, string | number | boolean> = {};
+    for (const [key, raw] of Object.entries(source)) {
+      const scalar = vScalar(raw, childPath(childPath(path, field), key));
+      if (scalar.ok) out[key] = scalar.value;
+      else issues.push(...scalar.error);
+    }
+    return out;
+  };
+
+  const pin = scalars(shape.value.pin, 'pin');
+  const set = shape.value.set === undefined ? undefined : scalars(shape.value.set, 'set');
   if (issues.length > 0) return err(issues);
 
-  return ok({ id: presetId(shape.value.id), name: shape.value.name, pin });
+  return ok({
+    id: presetId(shape.value.id),
+    name: shape.value.name,
+    pin,
+    ...(set !== undefined ? { set } : {}),
+  });
 }
 
 const vBatch: Validator<BatchDescriptor> = vObject<BatchDescriptor>({

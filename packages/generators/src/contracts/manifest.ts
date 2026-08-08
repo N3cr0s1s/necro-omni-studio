@@ -129,11 +129,25 @@ export interface BatchDescriptor {
   readonly max: number;
 }
 
-/** A preset pins parameters and appears as its own entry in the UI. */
+/**
+ * A preset appears as its own entry in the UI and brings values with it.
+ *
+ * Two kinds, and the distinction is the whole point. **Pinned** values are what make the preset *be*
+ * that preset — the category that makes SFX SFX — so they are fixed and hidden, and the preset reads
+ * as its own tool rather than the same form with different numbers. **Set** values are a starting
+ * point the user is expected to change.
+ *
+ * The distinction was missing, so every preset value was a lock. A one-shot preset that pinned its
+ * length left no way to ask for a slightly longer one: the control was gone, not merely pre-filled.
+ * A preset should say "start here", and only say "always this" about the thing that defines it.
+ */
 export interface GeneratorPreset {
   readonly id: PresetId;
   readonly name: string;
+  /** Fixed and hidden: the values that constitute the preset. */
   readonly pin: Readonly<Record<string, string | number | boolean>>;
+  /** Pre-filled and editable: a starting point, still shown as a control. */
+  readonly set?: Readonly<Record<string, string | number | boolean>>;
 }
 
 /**
@@ -256,8 +270,9 @@ export function entriesFor(manifest: GeneratorManifest): readonly GeneratorEntry
 /**
  * Parameters visible in the panel for a preset.
  *
- * A pinned parameter is hidden, which is what makes a preset feel like its own tool rather than the same
- * form with different defaults.
+ * A *pinned* parameter is hidden, which is what makes a preset feel like its own tool rather than the
+ * same form with different defaults. A parameter the preset merely *sets* stays visible: it is a
+ * starting value, not a decision taken away from the user.
  */
 export function visibleParams(manifest: GeneratorManifest, presetId?: PresetId): readonly GeneratorParam[] {
   if (presetId === undefined) return manifest.params;
@@ -266,7 +281,14 @@ export function visibleParams(manifest: GeneratorManifest, presetId?: PresetId):
   return manifest.params.filter((param) => !(param.key in preset.pin));
 }
 
-/** Effective parameter values for a preset, with its pins applied over the defaults. */
+/**
+ * Effective parameter values for a preset.
+ *
+ * Three layers, in the only order that makes sense: the manifest's own defaults, then what the preset
+ * *sets* as a starting point, then what it *pins*. A pin last, because it is the one value that
+ * cannot be argued with — and a preset that both set and pinned the same key would otherwise depend
+ * on which was written first.
+ */
 export function effectiveDefaults(
   manifest: GeneratorManifest,
   presetId?: PresetId,
@@ -277,6 +299,9 @@ export function effectiveDefaults(
   }
   const preset =
     presetId === undefined ? undefined : manifest.presets.find((candidate) => candidate.id === presetId);
-  if (preset !== undefined) Object.assign(values, preset.pin);
+  if (preset !== undefined) {
+    if (preset.set !== undefined) Object.assign(values, preset.set);
+    Object.assign(values, preset.pin);
+  }
   return values;
 }
