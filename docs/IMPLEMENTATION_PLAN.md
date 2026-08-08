@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2001 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2005 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2139,3 +2139,34 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   #2 moved the transport under the preview. In the title bar it sat among file and
   project actions, a hand's width from the frame being scrubbed and beside buttons
   with nothing to do with playback.
+
+- 2026-08-08: **Issues #8 and #9** — the variant picker, and a length control that
+  did nothing. Both had the same shape: the *batched* run, which is how the spec's
+  own audio manifest generates, and which nothing downstream distinguished from a
+  set of separate runs.
+
+  A batched run is **one submit carrying several seeds**, so three variants share a
+  single run id. Everything keyed on that id therefore collapsed: `buildSelection`
+  resolved a selection by run, so picking the second variant always returned the
+  first; the picker keyed its chips by run, so three chips shared one React key and
+  **all highlighted together**; and accepting derived the clip id from the run, so
+  the second variant collided with the first and was refused. Every symptom in the
+  report — selection invisible, no way to tell which is playing, Keep doing nothing
+  — is that one missing distinction.
+
+  Candidates now carry their own `key`, derived from the run and the output index so
+  it survives the rebuild every progress tick causes. The outcome carries it too,
+  because a caller deriving an id from the run alone would reproduce the collision.
+
+  **Discard** was a second, unrelated fault: it called `cancelGroup`, and a group
+  that has *finished* has nothing to cancel — so the group stayed in the snapshot,
+  the picker kept showing it, and the button appeared dead. Dismissing is now its
+  own operation: cancel whatever is still running, then forget the group. The files
+  stay on disk, which is the spec's rule that nothing is destroyed.
+
+  #9 was the same class of silence. The accepted clip's length came from
+  `placeholderLength({ params: {} })` — an empty parameter set, which falls back to
+  the manifest's default. A user who asked for ten seconds got fifty and nothing on
+  screen explained it. The group's parameters now travel with the outcome. The
+  number fields showed `0` for an untouched parameter for the same reason, telling
+  the user a generator would run with zero when it would in fact run with fifty.

@@ -20,6 +20,16 @@ import type { JobGroup, JobRun, JobTarget, RunStatus } from '../queue/job-queue.
  */
 
 export interface VariantCandidate {
+  /**
+   * This candidate's own identity.
+   *
+   * Not the run's, and that distinction is the whole reason it exists: a **batched** run is one
+   * submit carrying several seeds, so three variants can share a single `run`. Selecting by run then
+   * always resolves to the first of them — every chip highlights at once, stepping appears to do
+   * nothing, and accepting takes the wrong file. The spec's own audio manifest is batched by default,
+   * so this is the ordinary case rather than a corner.
+   */
+  readonly key: string;
   readonly run: JobRunId;
   /** 1-based, for the `2 / 3` readout. Stable across a group's lifetime. */
   readonly ordinal: number;
@@ -37,6 +47,14 @@ export interface VariantSelection {
   readonly group: JobGroupId;
   readonly label: string;
   readonly target: JobTarget;
+  /**
+   * The parameters the group was submitted with.
+   *
+   * Carried because the *declared* length of a generated clip is one of them: computing it from an
+   * empty parameter set falls back to the manifest's default, so a user who asked for ten seconds
+   * received fifty and nothing on screen explained why.
+   */
+  readonly params: Readonly<Record<string, string | number | boolean>>;
   readonly candidates: readonly VariantCandidate[];
   /** The candidate being auditioned, if any is ready yet. */
   readonly current?: VariantCandidate;
@@ -61,8 +79,13 @@ export interface SelectionRequest {
   /** The group's runs, in any order — ordinals come from the group's own run list. */
   readonly runs: readonly JobRun[];
   readonly manifest: GeneratorManifest;
-  /** Kept selected if it is still ready; otherwise the first ready candidate is chosen. */
-  readonly current?: JobRunId;
+  /**
+   * Kept selected if it is still ready; otherwise the first ready candidate is chosen.
+   *
+   * A candidate **key**, not a run id: a batched run carries several variants, and naming the run
+   * would select all of them at once.
+   */
+  readonly current?: string;
 }
 
 /**
@@ -83,13 +106,14 @@ export function buildSelection(request: SelectionRequest): VariantSelection {
   }
 
   const ready = candidates.filter((candidate) => candidate.ready);
-  const kept = ready.find((candidate) => candidate.run === request.current);
+  const kept = ready.find((candidate) => candidate.key === request.current);
   const current = kept ?? ready[0];
 
   return {
     group: group.id,
     label: group.label,
     target: group.target,
+    params: group.params,
     candidates,
     ...(current !== undefined ? { current } : {}),
     readyCount: ready.length,
@@ -118,6 +142,17 @@ function isPending(status: RunStatus): boolean {
  * A run that has not completed contributes a single pending candidate: there is nothing to expand yet, and
  * showing three identical "generating" chips for one submit would misreport what is happening.
  */
+/**
+ * A candidate's identity within its group.
+ *
+ * The run plus its index in that run's outputs. Derived rather than generated, so the same group
+ * rebuilt from the same runs produces the same keys — a selection has to survive the rebuild that
+ * every progress tick causes.
+ */
+export function candidateKey(run: JobRunId, index: number): string {
+  return `${run}#${index}`;
+}
+
 function candidatesOf(run: JobRun, offset: number, manifest: GeneratorManifest): readonly VariantCandidate[] {
   const shared = {
     run: run.id,
@@ -129,11 +164,12 @@ function candidatesOf(run: JobRun, offset: number, manifest: GeneratorManifest):
 
   const outputs = variantOutputs(run.outputs, manifest);
   if (run.status !== 'complete' || outputs.length === 0) {
-    return [{ ...shared, ordinal: offset + 1, seed: run.seed, ready: false }];
+    return [{ ...shared, key: candidateKey(run.id, 0), ordinal: offset + 1, seed: run.seed, ready: false }];
   }
 
   return outputs.map((output, index) => ({
     ...shared,
+    key: candidateKey(run.id, index),
     ordinal: offset + index + 1,
     // A sequential run reports its own seed; only a batched one indexes into the submit's seed list.
     // Indexing unconditionally would report a batch's first seed for every ordinary run whose `seeds`
@@ -225,9 +261,19 @@ export type SelectionOutcome =
       readonly kind: 'accept';
       readonly group: JobGroupId;
       readonly run: JobRunId;
+      /**
+       * The candidate accepted, distinct from its run.
+       *
+       * Carried because a batched run's variants share a run id, and a caller deriving a clip id from
+       * the run alone would produce the same id for all three — a collision the editing layer refuses,
+       * which reads as "Keep does nothing" for every variant after the first.
+       */
+      readonly candidate: string;
       readonly output: BackendOutput;
       readonly seed: number;
       readonly target: JobTarget;
+      /** What the group was submitted with, so the accepted clip is as long as the user asked. */
+      readonly params: Readonly<Record<string, string | number | boolean>>;
     }
   | { readonly kind: 'discard'; readonly group: JobGroupId };
 
@@ -239,9 +285,11 @@ export function acceptSelection(selection: VariantSelection): SelectionOutcome |
     kind: 'accept',
     group: selection.group,
     run: current.run,
+    candidate: current.key,
     output: current.output,
     seed: current.seed,
     target: selection.target,
+    params: selection.params,
   };
 }
 

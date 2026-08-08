@@ -295,7 +295,7 @@ function ParamControl({
               min={param.min}
               max={param.max}
               step={param.step ?? (param.type === 'int' ? 1 : 0.01)}
-              value={Number(value ?? param.min)}
+              value={Number(value ?? param.default ?? param.min)}
               onChange={(event) => onChange?.(param.key, Number(event.target.value))}
               style={{ flex: 1 }}
             />
@@ -307,7 +307,9 @@ function ParamControl({
             min={param.min}
             max={param.max}
             step={param.step ?? (param.type === 'int' ? 1 : 0.01)}
-            value={Number(value ?? 0)}
+            // The manifest's default, not zero: an untouched field showing 0 tells the user the
+            // generator will run with 0 when it will in fact run with 50.
+            value={Number(value ?? param.default ?? 0)}
             onChange={(event) => onChange?.(param.key, Number(event.target.value))}
             style={{
               width: 76,

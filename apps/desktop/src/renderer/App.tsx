@@ -322,15 +322,20 @@ export function App(): ReactNode {
       // it is already written to `generated/`, and the browser shows it. Inserting anyway would drop a
       // clip the user never asked to place, at whatever position happened to be under the playhead.
       if (outcome.target.kind !== 'timeline') {
-        setError(undefined);
+        // Said out loud. The file is already in `generated/` and the browser shows it, but a Keep that
+        // produced no visible change is indistinguishable from a Keep that failed.
+        setError(`kept — ${outcome.output.path} is in the project folder`);
         tree.refresh();
         return;
       }
 
       const kind = manifest.produces === 'audio' ? 'audio' : 'video';
+      // The group's own parameters, not an empty set. A declared-length manifest reads its length from
+      // one of them, so `{}` fell back to the manifest default — a user who asked for ten seconds got
+      // fifty, with nothing on screen to explain it.
       const length = placeholderLength({
         manifest,
-        params: {},
+        params: outcome.params,
         frameRate: document.frameRate,
       });
       const target = outcome.target;
@@ -344,7 +349,10 @@ export function App(): ReactNode {
           at: target.at,
           track: target.track,
           duration: manifest.duration,
-          id: clipId(`gen_${outcome.run}`),
+          // Keyed by the *candidate*, not the run: a batched run's variants share a run id, so
+          // accepting the second would collide with the first and be refused — which is what "Keep
+          // does nothing" looked like from the outside.
+          id: clipId(`gen_${outcome.candidate.replace('#', '_')}`),
           label: manifest.name,
           provenance: {
             generator: manifest.id,

@@ -15,6 +15,7 @@ import { placeholderLength } from './placeholder.js';
 import {
   acceptSelection,
   buildSelection,
+  candidateKey,
   describeSelection,
   discardSelection,
   primaryOutput,
@@ -91,7 +92,7 @@ const selectionOf = (runs: readonly JobRun[], current?: string) =>
     group,
     runs,
     manifest,
-    ...(current !== undefined ? { current: jobRunId(current) } : {}),
+    ...(current !== undefined ? { current } : {}),
   });
 
 describe('building a selection', () => {
@@ -113,8 +114,10 @@ describe('building a selection', () => {
   });
 
   it('keeps the caller´s candidate when it is still ready', () => {
+    // By candidate key, not run id: a batched run's variants share a run, so naming the run would
+    // select all of them at once.
     const runs = [done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac'), run('r3')];
-    expect(selectionOf(runs, 'r2').current?.run).toBe('r2');
+    expect(selectionOf(runs, candidateKey(jobRunId('r2'), 0)).current?.run).toBe('r2');
   });
 
   it('moves off a candidate that stopped being ready', () => {
@@ -154,6 +157,50 @@ describe('building a selection', () => {
 });
 
 describe('batched runs', () => {
+  it('gives each variant of one submit its own identity', () => {
+    // The bug this exists to prevent: three candidates sharing a run id meant selecting the second
+    // resolved to the first, every chip highlighted at once, and accepting took the wrong file.
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])],
+      manifest,
+    });
+
+    const keys = selection.candidates.map((candidate) => candidate.key);
+    expect(new Set(keys).size).toBe(3);
+    expect(selection.candidates.every((candidate) => candidate.run === 'r1')).toBe(true);
+  });
+
+  it('selects the variant that was asked for, not the first of its run', () => {
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])],
+      manifest,
+      current: candidateKey(jobRunId('r1'), 2),
+    });
+
+    expect(selection.current?.seed).toBe(33);
+    expect(selection.current?.output?.path).toBe('generated/c.flac');
+  });
+
+  it('accepts the variant that is selected', () => {
+    // Accepting the wrong file is the quiet half of the same bug: the picker showed one thing and the
+    // timeline received another.
+    const oneSubmit: JobGroup = { ...group, runs: [jobRunId('r1')] };
+    const selection = buildSelection({
+      group: oneSubmit,
+      runs: [batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])],
+      manifest,
+      current: candidateKey(jobRunId('r1'), 1),
+    });
+
+    const outcome = acceptSelection(selection);
+    expect(outcome?.kind === 'accept' && outcome.output.path).toBe('generated/b.flac');
+    expect(outcome?.kind === 'accept' && outcome.candidate).toBe(candidateKey(jobRunId('r1'), 1));
+  });
+
   it('expands one submit into a candidate per variant', () => {
     // The spec's own audio manifest declares `batch`, so three variants arrive as **one** run with three
     // outputs. Treating that as one candidate would show one variant where three were generated, and the
@@ -317,6 +364,20 @@ describe('selecting directly', () => {
 });
 
 describe('outcomes', () => {
+  it('carries the parameters the group was submitted with', () => {
+    // Without them the accepted clip is as long as the manifest's default rather than as long as the
+    // user asked for, which is indistinguishable from the length control not working.
+    const withParams: JobGroup = { ...group, params: { duration_s: 10 } };
+    const selection = buildSelection({
+      group: withParams,
+      runs: [done('r1', 1, 'a.flac')],
+      manifest,
+    });
+
+    const outcome = acceptSelection(selection);
+    expect(outcome?.kind === 'accept' && outcome.params).toEqual({ duration_s: 10 });
+  });
+
   it('describes what to insert, rather than inserting it', () => {
     // Keeping this a value is what lets the whole interaction be undone as one patch, and tested with no
     // document at all.
@@ -325,9 +386,15 @@ describe('outcomes', () => {
       kind: 'accept',
       group: group.id,
       run: 'r1',
+      // The candidate, distinct from the run: a caller deriving a clip id from the run alone would
+      // produce the same id for all three variants of a batched submit.
+      candidate: candidateKey(jobRunId('r1'), 0),
       seed: 4471,
       output: { key: '57', type: 'audio', path: 'generated/a.flac' },
       target: group.target,
+      // The group's parameters travel with the outcome: a declared-length manifest reads its length
+      // from one of them, and an empty set would silently fall back to the manifest default.
+      params: group.params,
     });
   });
 
@@ -348,7 +415,7 @@ describe('outcomes', () => {
 describe('describeSelection', () => {
   it('reads as a position once everything has arrived', () => {
     const all = [done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')];
-    expect(describeSelection(selectionOf(all, 'r2'))).toBe('2 / 2');
+    expect(describeSelection(selectionOf(all, candidateKey(jobRunId('r2'), 0)))).toBe('2 / 2');
   });
 
   it('says how many are still coming', () => {

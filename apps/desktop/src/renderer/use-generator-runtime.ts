@@ -43,6 +43,8 @@ export interface GeneratorRuntime {
     readonly lockedSeed?: number;
   }): JobGroupId | undefined;
   cancelGroup(group: JobGroupId): void;
+  /** Forgets a group, so discarding a finished one actually removes it from the picker. */
+  dismissGroup(group: JobGroupId): void;
 }
 
 const EMPTY_SNAPSHOT: QueueSnapshot = { groups: [], runs: [], activeCount: 0 };
@@ -235,6 +237,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   );
 
   const cancelGroup = useCallback((group: JobGroupId) => queue.cancelGroup(group), [queue]);
+  const dismissGroup = useCallback((group: JobGroupId) => queue.dismissGroup(group), [queue]);
 
-  return { mode, detail, error, capabilities, snapshot, run, cancelGroup };
+  return { mode, detail, error, capabilities, snapshot, run, cancelGroup, dismissGroup };
 }

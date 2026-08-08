@@ -57,7 +57,7 @@ const done = (id: string, seed: number): JobRun =>
   });
 
 const selectionOf = (runs: readonly JobRun[], current?: string) =>
-  buildSelection({ group, runs, manifest, ...(current !== undefined ? { current: jobRunId(current) } : {}) });
+  buildSelection({ group, runs, manifest, ...(current !== undefined ? { current } : {}) });
 
 const allDone = [done('r1', 11), done('r2', 22), done('r3', 33)];
 const partial = [done('r1', 11), run('r2', { status: 'running', progress: 0.5 }), run('r3')];
@@ -99,7 +99,7 @@ describe('rendering', () => {
   });
 
   it('shows the seed, which is what makes a variant reproducible', () => {
-    renderPicker({ selection: selectionOf(allDone, 'r2') });
+    renderPicker({ selection: selectionOf(allDone, `${'r2'}#0`) });
     expect(screen.getByText('22')).toBeDefined();
   });
 
@@ -156,7 +156,8 @@ describe('interaction', () => {
     const onSelect = vi.fn();
     renderPicker({ onSelect });
     await user.click(screen.getByRole('radio', { name: 'Variant 3' }));
-    expect(onSelect).toHaveBeenCalledWith('r3');
+    // The candidate's key, not its run: three variants of a batched submit share a run id.
+    expect(onSelect).toHaveBeenCalledWith('r3#0');
   });
 
   it('reports stepping in both directions', async () => {

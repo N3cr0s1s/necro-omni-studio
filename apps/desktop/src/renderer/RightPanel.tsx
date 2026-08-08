@@ -452,7 +452,13 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
           // in that case, so this guard is for the keyboard path.
           if (outcome !== undefined && manifest !== undefined) onAcceptVariant(outcome, manifest);
         }}
-        onDiscard={() => runtime.cancelGroup(selection.group)}
+        // Dismissed, not cancelled: a finished group has nothing to cancel, so the old call left the
+        // group in the snapshot and the picker showing it — "Discard" did nothing at all.
+        onDiscard={() => {
+          audition.stop();
+          runtime.dismissGroup(selection.group);
+          setCurrent(undefined);
+        }}
       />
       {audition.error !== undefined && <Mono tone="var(--nos-danger)">{audition.error}</Mono>}
     </div>

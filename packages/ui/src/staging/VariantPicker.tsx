@@ -1,5 +1,4 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import type { JobRunId } from '@nos/core';
 import { type VariantCandidate, type VariantSelection, describeSelection } from '@nos/generators';
 import { Badge, Button, Mono, SectionCaption } from '../primitives/Primitives.js';
 import { token } from '../tokens/tokens.js';
@@ -29,7 +28,8 @@ export interface VariantPickerProps {
   readonly auditioning?: boolean;
   readonly style?: CSSProperties | undefined;
 
-  readonly onSelect?: ((run: JobRunId) => void) | undefined;
+  /** Reports the chosen candidate's key. */
+  readonly onSelect?: ((candidate: string) => void) | undefined;
   readonly onStep?: ((delta: number) => void) | undefined;
   readonly onAudition?: (() => void) | undefined;
   readonly onAccept?: (() => void) | undefined;
@@ -105,9 +105,11 @@ export function VariantPicker({
       >
         {selection.candidates.map((candidate) => (
           <CandidateChip
-            key={candidate.run}
+            // Keyed and compared by the candidate's own key, never by its run: a batched run carries
+            // several variants, so three chips would share one React key and all highlight together.
+            key={candidate.key}
             candidate={candidate}
-            selected={candidate.run === current?.run}
+            selected={candidate.key === current?.key}
             {...(onSelect !== undefined ? { onSelect } : {})}
           />
         ))}
@@ -174,7 +176,7 @@ function CandidateChip({
 }: {
   readonly candidate: VariantCandidate;
   readonly selected: boolean;
-  readonly onSelect?: (run: JobRunId) => void;
+  readonly onSelect?: (candidate: string) => void;
 }): ReactNode {
   const failed = candidate.status === 'failed' || candidate.status === 'cancelled';
   const palette = selected
@@ -192,7 +194,7 @@ function CandidateChip({
       aria-checked={selected}
       aria-label={chipLabel(candidate)}
       disabled={!candidate.ready}
-      onClick={() => onSelect?.(candidate.run)}
+      onClick={() => onSelect?.(candidate.key)}
       style={{
         position: 'relative',
         minWidth: 34,

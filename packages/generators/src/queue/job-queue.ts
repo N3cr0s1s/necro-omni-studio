@@ -122,6 +122,14 @@ export interface JobQueue {
   enqueue(request: EnqueueRequest): JobGroupId;
   cancelRun(run: JobRunId): void;
   cancelGroup(group: JobGroupId): void;
+  /**
+   * Forgets a group entirely, cancelling anything still running.
+   *
+   * Distinct from cancelling: a *finished* group has nothing to cancel, so a discard that only
+   * cancelled left the group in the snapshot and the picker showing it. The generated files are
+   * deliberately left on disk — the spec's rule that nothing is destroyed.
+   */
+  dismissGroup(group: JobGroupId): void;
   getSnapshot(): QueueSnapshot;
   subscribe(listener: (snapshot: QueueSnapshot) => void): () => void;
   /** Resolves when every enqueued run has settled. For tests and for a clean shutdown. */
@@ -369,6 +377,21 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       const record = groups.get(group);
       if (record === undefined) return;
       for (const id of record.runs) this.cancelRun(id);
+    },
+
+    dismissGroup(group: JobGroupId): void {
+      const record = groups.get(group);
+      if (record === undefined) return;
+
+      // Cancelled first: dismissing a group that is still working would leave its runs holding the GPU
+      // for a result nobody is going to look at.
+      for (const id of record.runs) this.cancelRun(id);
+
+      // Then forgotten. Cancelling alone leaves the group in the snapshot, so the picker keeps showing
+      // it and "Discard" appears to do nothing — which is exactly what it did.
+      for (const id of record.runs) runs.delete(id);
+      groups.delete(group);
+      publish();
     },
 
     getSnapshot: snapshot,
