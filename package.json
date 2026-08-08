@@ -23,6 +23,7 @@
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
@@ -39,6 +40,8 @@
     "prettier": "^3.4.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "shadcn": "^4.16.2",
+    "tailwindcss": "^4.2.0",
     "typescript": "^5.7.3",
     "vite": "^6.4.3",
     "vitest": "^2.1.8"

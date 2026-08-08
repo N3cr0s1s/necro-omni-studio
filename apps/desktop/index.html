@@ -1,38 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full">
   <head>
     <meta charset="utf-8" />
     <title>Necro Omni Studio</title>
     <!--
       A strict CSP in the renderer. It runs local UI code and must never be able to fetch or execute
       anything remote; the sidecar is reached over loopback, which `connect-src` allows explicitly.
+      `font-src` is here for the variable font shadcn's preset asks for, which Vite emits alongside
+      the bundle.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
     />
-    <style>
-      /*
-        Border-box everywhere. The panels size themselves to the inspector width from the mockups, and
-        under the default content-box that width excludes their padding — so every one of them overflowed
-        its column by exactly its padding, cutting off the controls on the right edge.
-      */
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-      }
-      html,
-      body,
-      #root {
-        height: 100%;
-        margin: 0;
-        background: #0d0e11;
-      }
-    </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <!--
+    No stylesheet of our own, not even a background colour: the palette is the shadcn preset's and
+    setting one here would be the first override. Full height is expressed as utilities so the
+    editor's panels have a viewport-sized box to divide up.
+  -->
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
     <script type="module" src="/src/renderer/main.tsx"></script>
   </body>
 </html>

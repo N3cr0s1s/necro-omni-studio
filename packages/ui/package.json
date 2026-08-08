@@ -3,17 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Design tokens and React component library, derived from the Claude Design mockups.",
+  "description": "The shadcn component library and the application's composed panels.",
   "exports": {
     ".": "./src/index.ts",
-    "./tokens.css": "./src/tokens/tokens.css"
+    "./globals.css": "./src/styles/globals.css",
+    "./components/*": "./src/components/*.tsx",
+    "./lib/*": "./src/lib/*.ts",
+    "./hooks/*": "./src/hooks/*.ts"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@fontsource-variable/inter": "^5.3.0",
     "@nos/core": "*",
-    "@nos/media": "*",
     "@nos/export": "*",
     "@nos/generators": "*",
-    "@nos/masks": "*"
+    "@nos/masks": "*",
+    "@nos/media": "*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.30.0",
+    "next-themes": "^0.4.6",
+    "react-resizable-panels": "^4.12.2",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
   },
   "peerDependencies": {
     "react": "^19",
