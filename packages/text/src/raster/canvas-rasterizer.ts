@@ -55,8 +55,7 @@ export function createCanvasRasterizer(options: CanvasRasterizerOptions): TextRa
 
       const measureLine = (text: string): number =>
         measureWithSpacing(scratchContext, text, content.letterSpacing * pixelRatio);
-      const measureCharacter = (character: string): number =>
-        scratchContext.measureText(character).width;
+      const measureCharacter = (character: string): number => scratchContext.measureText(character).width;
 
       const scaledMaxWidth = maxWidth * pixelRatio;
       const lines = wrapText(content.text, scaledMaxWidth, measureLine);

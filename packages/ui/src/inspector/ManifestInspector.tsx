@@ -243,7 +243,12 @@ function GraphColumn({
                   <div style={{ flex: 1 }} />
                   <Mono
                     tone={token.textFaint}
-                    style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    style={{
+                      maxWidth: 140,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
                   >
                     {String(literal.value)}
                   </Mono>
@@ -272,7 +277,16 @@ function DraftColumn({
 }): ReactNode {
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflow: 'auto', padding: token.space5, display: 'flex', flexDirection: 'column', gap: token.space5 }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: token.space5,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: token.space5,
+        }}
+      >
         <Identity draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
@@ -297,13 +311,7 @@ function DraftColumn({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  readonly label: string;
-  readonly children: ReactNode;
-}): ReactNode {
+function Field({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: token.space2, minWidth: 0 }}>
       <span style={{ font: token.textLabel, color: token.textSoft }}>{label}</span>
@@ -338,7 +346,11 @@ function Identity({
         <input style={inputStyle} value={draft.id} onChange={(event) => set({ id: event.target.value })} />
       </Field>
       <Field label="Name">
-        <input style={inputStyle} value={draft.name} onChange={(event) => set({ name: event.target.value })} />
+        <input
+          style={inputStyle}
+          value={draft.name}
+          onChange={(event) => set({ name: event.target.value })}
+        />
       </Field>
       <Field label="Backend">
         <input
@@ -470,7 +482,9 @@ function ParamRow({
               style={inputStyle}
               value={param.min ?? ''}
               onChange={(event) =>
-                onEdit?.(param.id, { min: event.target.value === '' ? undefined : Number(event.target.value) })
+                onEdit?.(param.id, {
+                  min: event.target.value === '' ? undefined : Number(event.target.value),
+                })
               }
             />
           </Field>
@@ -480,7 +494,9 @@ function ParamRow({
               style={inputStyle}
               value={param.max ?? ''}
               onChange={(event) =>
-                onEdit?.(param.id, { max: event.target.value === '' ? undefined : Number(event.target.value) })
+                onEdit?.(param.id, {
+                  max: event.target.value === '' ? undefined : Number(event.target.value),
+                })
               }
             />
           </Field>

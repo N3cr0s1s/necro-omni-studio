@@ -47,10 +47,25 @@ describe.skipIf(!runnable)('media client against the real sidecar', () => {
     // 29.97 with audio: the rate whose exact rational must survive the round trip, and the case
     // that produces both a video and an audio stream.
     execFileSync('ffmpeg', [
-      '-hide_banner', '-v', 'error', '-y',
-      '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=30000/1001:duration=2',
-      '-f', 'lavfi', '-i', "aevalsrc='0.7*sin(2*PI*330*t)':d=2",
-      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
+      '-hide_banner',
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=size=320x180:rate=30000/1001:duration=2',
+      '-f',
+      'lavfi',
+      '-i',
+      "aevalsrc='0.7*sin(2*PI*330*t)':d=2",
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-shortest',
       join(projectRoot, 'media/clip.mp4'),
     ]);
     writeFileSync(join(projectRoot, 'notes/treatment.md'), '# Treatment\n', 'utf8');
@@ -187,9 +202,18 @@ describe.skipIf(!runnable)('media client against the real sidecar', () => {
 
   it('rejects a waveform for a source with no audio', async () => {
     execFileSync('ffmpeg', [
-      '-hide_banner', '-v', 'error', '-y',
-      '-f', 'lavfi', '-i', 'testsrc=size=64x64:rate=30:duration=1',
-      '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-hide_banner',
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=size=64x64:rate=30:duration=1',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
       join(projectRoot, 'media/silent.mp4'),
     ]);
     const result = await client.readWaveform(assetPath('media/silent.mp4'), DEFAULT_WAVEFORM);

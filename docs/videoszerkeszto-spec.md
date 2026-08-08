@@ -91,19 +91,19 @@ Timeline válaszidő < 16 ms. Használható 200 klipig / 20 perc forrásanyagig.
 
 ## 9. Mérföldkövek
 
-| # | Tartalom |
-|---|---|
-| M1 | Dokumentummodell, időmatek, projekt mappa, unit tesztek |
-| M2 | Media browser, import, proxy, filmstrip, waveform, file watcher |
-| M3 | Timeline szerkesztés + egysávos preview |
-| M4 | Multi-track compositor, audio |
-| M5 | Effekt/átmenet engine, effekt-stack UI drag & droppal |
-| M6 | Keyframe rendszer: paraméter-sávok, interpoláció, patch coalescing |
-| M7 | Szövegréteg + animáció presetek |
-| M8 | ffmpeg export |
-| M9 | Generátor keretrendszer: manifest, registry, job queue, inspector |
-| M10 | ComfyUI backend + az első generátorok (videó t2v/i2v, audio, TTS) |
-| M11 | SAM 2 maszk pipeline |
+| #   | Tartalom                                                           |
+| --- | ------------------------------------------------------------------ |
+| M1  | Dokumentummodell, időmatek, projekt mappa, unit tesztek            |
+| M2  | Media browser, import, proxy, filmstrip, waveform, file watcher    |
+| M3  | Timeline szerkesztés + egysávos preview                            |
+| M4  | Multi-track compositor, audio                                      |
+| M5  | Effekt/átmenet engine, effekt-stack UI drag & droppal              |
+| M6  | Keyframe rendszer: paraméter-sávok, interpoláció, patch coalescing |
+| M7  | Szövegréteg + animáció presetek                                    |
+| M8  | ffmpeg export                                                      |
+| M9  | Generátor keretrendszer: manifest, registry, job queue, inspector  |
+| M10 | ComfyUI backend + az első generátorok (videó t2v/i2v, audio, TTS)  |
+| M11 | SAM 2 maszk pipeline                                               |
 
 Az M9 és M10 szándékosan külön van: a keretrendszer előbb készül el és tesztelhető mock backenddel, mint hogy bármelyik konkrét graph bekötésre kerül.
 

@@ -105,7 +105,9 @@ interface DocOptions {
   readonly text?: readonly Clip[];
   readonly audio?: readonly Clip[];
   readonly transitions?: VideoTrack['transitions'];
-  readonly mutateTracks?: (tracks: readonly TimelineDocument['sequence']['tracks'][number][]) => readonly TimelineDocument['sequence']['tracks'][number][];
+  readonly mutateTracks?: (
+    tracks: readonly TimelineDocument['sequence']['tracks'][number][],
+  ) => readonly TimelineDocument['sequence']['tracks'][number][];
 }
 
 /** Tracks in display order: V2 above V1, then audio, then text. */
@@ -187,8 +189,7 @@ describe('layer selection', () => {
     const document = makeDocument({
       v1: [video('a', 0, 100)],
       v2: [video('b', 0, 100)],
-      mutateTracks: (tracks) =>
-        tracks.map((track) => (track.id === 'v2' ? { ...track, solo: true } : track)),
+      mutateTracks: (tracks) => tracks.map((track) => (track.id === 'v2' ? { ...track, solo: true } : track)),
     });
     const items = plan(document, 50).items;
     expect(items).toHaveLength(1);
@@ -361,9 +362,7 @@ describe('effect passes', () => {
 
   it('drops disabled effects', () => {
     const clip = video('a', 0, 100, {
-      effects: [
-        { id: effectInstanceId('fx1'), effect: effectId('film_grain'), enabled: false, params: {} },
-      ],
+      effects: [{ id: effectInstanceId('fx1'), effect: effectId('film_grain'), enabled: false, params: {} }],
     });
     expect(planLayers(plan(makeDocument({ v1: [clip] }), 10))[0]!.passes).toHaveLength(0);
   });

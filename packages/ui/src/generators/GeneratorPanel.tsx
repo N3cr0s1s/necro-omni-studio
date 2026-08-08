@@ -97,17 +97,13 @@ export function GeneratorPanel({
           <StatusBadge record={record} />
         </div>
 
-        <span style={{ font: `600 13px ${token.fontUi}`, color: token.textPrimary }}>
-          {manifest.name}
-        </span>
+        <span style={{ font: `600 13px ${token.fontUi}`, color: token.textPrimary }}>{manifest.name}</span>
 
         <CapabilityBadges manifest={manifest} />
 
         {!runnable && (
           // The spec's rule: an unrunnable generator stays visible with a concrete reason.
-          <Mono tone={record.status === 'unbound' ? token.warn : token.danger}>
-            {describeRecord(record)}
-          </Mono>
+          <Mono tone={record.status === 'unbound' ? token.warn : token.danger}>{describeRecord(record)}</Mono>
         )}
       </header>
 
@@ -196,7 +192,11 @@ function PresetChooser({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
       <SectionCaption>Preset</SectionCaption>
-      <div role="radiogroup" aria-label="Preset" style={{ display: 'flex', gap: token.space1, flexWrap: 'wrap' }}>
+      <div
+        role="radiogroup"
+        aria-label="Preset"
+        style={{ display: 'flex', gap: token.space1, flexWrap: 'wrap' }}
+      >
         {manifest.presets.map((entry) => {
           const active = selected === entry.id;
           return (
@@ -382,9 +382,7 @@ function ParamControl({
         </div>
       )}
 
-      {isAssetType(param.type) && (
-        <ValueField>{value === undefined ? 'not set' : String(value)}</ValueField>
-      )}
+      {isAssetType(param.type) && <ValueField>{value === undefined ? 'not set' : String(value)}</ValueField>}
     </div>
   );
 }
@@ -462,9 +460,7 @@ function VariantControl({
         }}
       />
 
-      {plan.constraint !== undefined && (
-        <Mono tone={token.warn}>{describeConstraint(plan.constraint)}</Mono>
-      )}
+      {plan.constraint !== undefined && <Mono tone={token.warn}>{describeConstraint(plan.constraint)}</Mono>}
     </div>
   );
 }

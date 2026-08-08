@@ -33,7 +33,11 @@ function content(overrides: Partial<TextContent> = {}): TextContent {
 }
 
 /** Counts non-transparent pixels, to prove something was actually drawn. */
-function inkCoverage(raster: { image: HTMLCanvasElement | OffscreenCanvas; width: number; height: number }): number {
+function inkCoverage(raster: {
+  image: HTMLCanvasElement | OffscreenCanvas;
+  width: number;
+  height: number;
+}): number {
   const canvas = raster.image as HTMLCanvasElement;
   const context = canvas.getContext('2d')!;
   const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -68,8 +72,10 @@ const results: Record<string, unknown> = {};
     lines: raster.advances.lines.length,
     everyLineFits: raster.advances.lines.every((line) => line.width <= 400 * 2 + 1),
     charactersPreserved:
-      raster.advances.lines.map((line) => line.text).join(' ').replace(/\s+/g, ' ') ===
-      long.replace(/\s+/g, ' '),
+      raster.advances.lines
+        .map((line) => line.text)
+        .join(' ')
+        .replace(/\s+/g, ' ') === long.replace(/\s+/g, ' '),
   };
 }
 
@@ -80,8 +86,7 @@ const results: Record<string, unknown> = {};
   results.letterSpacing = {
     widerWithSpacing: spaced.advances.lines[0]!.width > plain.advances.lines[0]!.width,
     advancesGrew:
-      (spaced.advances.lines[0]!.advances.at(-1) ?? 0) >
-      (plain.advances.lines[0]!.advances.at(-1) ?? 0),
+      (spaced.advances.lines[0]!.advances.at(-1) ?? 0) > (plain.advances.lines[0]!.advances.at(-1) ?? 0),
   };
 }
 
@@ -98,7 +103,10 @@ const results: Record<string, unknown> = {};
 
 // 5. Multi-line layout puts baselines a line height apart.
 {
-  const raster = await rasterizer.rasterize(content({ text: 'one\ntwo\nthree', size: 40, lineHeight: 1.5 }), 1920);
+  const raster = await rasterizer.rasterize(
+    content({ text: 'one\ntwo\nthree', size: 40, lineHeight: 1.5 }),
+    1920,
+  );
   const baselines = raster.advances.lines.map((line) => line.baselineY);
   const gaps = baselines.slice(1).map((value, i) => value - baselines[i]!);
   results.multiline = {

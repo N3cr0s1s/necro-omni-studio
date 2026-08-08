@@ -48,12 +48,7 @@ let nextId = 0;
 const freshId = (): ClipId => clipId(`new_${(nextId += 1)}`);
 
 /** A video clip at the project rate, with a source in-point so trims can be observed. */
-function videoClip(
-  id: string,
-  start: number,
-  end: number,
-  overrides: Partial<VideoClip> = {},
-): VideoClip {
+function videoClip(id: string, start: number, end: number, overrides: Partial<VideoClip> = {}): VideoClip {
   return {
     kind: 'video',
     id: clipId(id),
@@ -295,9 +290,7 @@ describe('trimClipStart', () => {
         y: staticNumber(0),
         scale: staticNumber(1),
         rotation: staticNumber(0),
-        opacity: animatedNumber([
-          { id: keyframeId('k1'), frame: frameIndex(30), value: 1, ease: 'linear' },
-        ]),
+        opacity: animatedNumber([{ id: keyframeId('k1'), frame: frameIndex(30), value: 1, ease: 'linear' }]),
       },
     });
     const result = trimClipStart(makeDocument([clip]), clipId('a'), 10);
@@ -397,9 +390,7 @@ describe('slipClip', () => {
         y: staticNumber(0),
         scale: staticNumber(1),
         rotation: staticNumber(0),
-        opacity: animatedNumber([
-          { id: keyframeId('k1'), frame: frameIndex(10), value: 1, ease: 'linear' },
-        ]),
+        opacity: animatedNumber([{ id: keyframeId('k1'), frame: frameIndex(10), value: 1, ease: 'linear' }]),
       },
     });
     const result = slipClip(makeDocument([clip]), clipId('a'), 30);
@@ -514,11 +505,7 @@ describe('liftClip', () => {
 
 describe('rippleDeleteClip', () => {
   it('removes a clip and pulls later clips back by its duration', () => {
-    const document = makeDocument([
-      videoClip('a', 0, 50),
-      videoClip('b', 50, 100),
-      videoClip('c', 100, 150),
-    ]);
+    const document = makeDocument([videoClip('a', 0, 50), videoClip('b', 50, 100), videoClip('c', 100, 150)]);
     const result = rippleDeleteClip(document, clipId('b'));
     if (!result.ok) throw new Error('ripple failed');
     expect(spansOf(result.value)).toEqual([
@@ -555,17 +542,8 @@ describe('rippleDeleteClip', () => {
 
 describe('rippleDeleteRange', () => {
   it('removes clips fully inside the range and closes the gap', () => {
-    const document = makeDocument([
-      videoClip('a', 0, 50),
-      videoClip('b', 50, 100),
-      videoClip('c', 100, 150),
-    ]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(50), frameIndex(100)),
-      freshId,
-    );
+    const document = makeDocument([videoClip('a', 0, 50), videoClip('b', 50, 100), videoClip('c', 100, 150)]);
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(50), frameIndex(100)), freshId);
     if (!result.ok) throw new Error('ripple failed');
     expect(spansOf(result.value)).toEqual([
       [0, 50],
@@ -575,24 +553,14 @@ describe('rippleDeleteRange', () => {
 
   it('keeps the surviving head of a clip straddling the range start', () => {
     const document = makeDocument([videoClip('a', 0, 100)]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(60), frameIndex(100)),
-      freshId,
-    );
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(60), frameIndex(100)), freshId);
     if (!result.ok) throw new Error('ripple failed');
     expect(spansOf(result.value)).toEqual([[0, 60]]);
   });
 
   it('keeps the surviving tail of a clip straddling the range end, rebased', () => {
     const document = makeDocument([videoClip('a', 0, 100)]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(0), frameIndex(40)),
-      freshId,
-    );
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(0), frameIndex(40)), freshId);
     if (!result.ok) throw new Error('ripple failed');
     expect(spansOf(result.value)).toEqual([[0, 60]]);
 
@@ -603,12 +571,7 @@ describe('rippleDeleteRange', () => {
 
   it('punches a hole in a clip, producing two pieces', () => {
     const document = makeDocument([videoClip('a', 0, 100)]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(40), frameIndex(60)),
-      freshId,
-    );
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(40), frameIndex(60)), freshId);
     if (!result.ok) throw new Error('ripple failed');
     // 0..40 survives, 60..100 survives and slides back by 20 to become 40..80.
     expect(spansOf(result.value)).toEqual([
@@ -619,12 +582,7 @@ describe('rippleDeleteRange', () => {
 
   it('gives the first surviving piece the original id, so selection survives', () => {
     const document = makeDocument([videoClip('a', 0, 100)]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(40), frameIndex(60)),
-      freshId,
-    );
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(40), frameIndex(60)), freshId);
     if (!result.ok) throw new Error('ripple failed');
     expect(clipsOf(result.value)[0]!.id).toBe('a');
     expect(clipsOf(result.value)[1]!.id).not.toBe('a');
@@ -632,12 +590,7 @@ describe('rippleDeleteRange', () => {
 
   it('is a no-op for an empty range', () => {
     const document = makeDocument([videoClip('a', 0, 100)]);
-    const result = rippleDeleteRange(
-      document,
-      V1,
-      spanFromBounds(frameIndex(50), frameIndex(50)),
-      freshId,
-    );
+    const result = rippleDeleteRange(document, V1, spanFromBounds(frameIndex(50), frameIndex(50)), freshId);
     expect(result.ok && result.value).toBe(document);
   });
 
@@ -652,12 +605,7 @@ describe('rippleDeleteRange', () => {
         ),
       },
     };
-    const result = rippleDeleteRange(
-      locked,
-      V1,
-      spanFromBounds(frameIndex(0), frameIndex(50)),
-      freshId,
-    );
+    const result = rippleDeleteRange(locked, V1, spanFromBounds(frameIndex(0), frameIndex(50)), freshId);
     expect(result.ok).toBe(false);
   });
 });

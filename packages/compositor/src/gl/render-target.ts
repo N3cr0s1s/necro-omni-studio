@@ -43,11 +43,7 @@ export class RenderTargetError extends Error {
  * use for depth testing. Omitting them saves a meaningful amount of memory at 1080p across five or
  * more live targets.
  */
-export function createRenderTarget(
-  gl: WebGL2RenderingContext,
-  width: number,
-  height: number,
-): RenderTarget {
+export function createRenderTarget(gl: WebGL2RenderingContext, width: number, height: number): RenderTarget {
   const texture = gl.createTexture();
   if (texture === null) throw new RenderTargetError('could not create a texture');
 
@@ -101,8 +97,7 @@ export function createRenderTargetPool(gl: WebGL2RenderingContext): RenderTarget
       const bucket = available.get(bucketKey);
       const reused = bucket?.pop();
 
-      const target =
-        reused ?? createRenderTarget(gl, resolution.width, resolution.height);
+      const target = reused ?? createRenderTarget(gl, resolution.width, resolution.height);
       borrowed.add(target);
       return target;
     },

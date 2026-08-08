@@ -69,7 +69,13 @@ const minimaxI2v: GeneratorManifest = {
   requires: [],
   outputs: [{ key: 'video', type: 'video', node: '92' }],
   params: [
-    { key: 'first_frame', type: 'image', required: true, bind: '/114/inputs/image', transport: 'upload_image' },
+    {
+      key: 'first_frame',
+      type: 'image',
+      required: true,
+      bind: '/114/inputs/image',
+      transport: 'upload_image',
+    },
     { key: 'prompt', type: 'text', bind: '/105:104/inputs/prompt' },
     { key: 'duration_s', type: 'float', default: 15, bind: '/105:111/inputs/value' },
     { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
@@ -232,9 +238,9 @@ describe('asset parameters', () => {
 
   it('refuses to submit when a required parameter has no value', () => {
     // Submitting anyway would silently use whatever the graph author last saved.
-    expect(() =>
-      patchGraph({ manifest: minimaxI2v, graph: i2vGraph, params: {}, seeds: [1] }),
-    ).toThrow(PatchError);
+    expect(() => patchGraph({ manifest: minimaxI2v, graph: i2vGraph, params: {}, seeds: [1] })).toThrow(
+      PatchError,
+    );
   });
 
   it('names the offending parameter in the error', () => {

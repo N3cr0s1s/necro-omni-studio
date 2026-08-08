@@ -78,7 +78,9 @@ export function maskArea(counts: readonly number[]): number {
 /** Whether a run-length array covers exactly the frame it claims to. */
 export function isWellFormed(frame: MaskFrame): boolean {
   const total = frame.counts.reduce((sum, run) => sum + run, 0);
-  return total === frame.width * frame.height && frame.counts.every((run) => Number.isInteger(run) && run >= 0);
+  return (
+    total === frame.width * frame.height && frame.counts.every((run) => Number.isInteger(run) && run >= 0)
+  );
 }
 
 /**

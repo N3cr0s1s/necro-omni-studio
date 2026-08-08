@@ -33,11 +33,7 @@ describe('createDocumentStore', () => {
   it('creates a project with V1, A1 and T1 so there is somewhere to drop media', () => {
     const document = makeDocument();
     expect(document.sequence.tracks.map((track) => track.name)).toEqual(['V1', 'A1', 'T1']);
-    expect(document.sequence.tracks.map((track) => track.kind)).toEqual([
-      'video',
-      'audio',
-      'text',
-    ]);
+    expect(document.sequence.tracks.map((track) => track.kind)).toEqual(['video', 'audio', 'text']);
   });
 });
 

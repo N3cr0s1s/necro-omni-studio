@@ -17,13 +17,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import {
-  dbToGain,
-  formatDb,
-  gainToDb,
-  mixAssets,
-  panGains,
-} from '../contracts/mix-plan.js';
+import { dbToGain, formatDb, gainToDb, mixAssets, panGains } from '../contracts/mix-plan.js';
 import {
   buildMixPlan,
   hasAudibleContent,
@@ -36,12 +30,7 @@ import {
 const A1 = trackId('a1');
 const A2 = trackId('a2');
 
-function audioClip(
-  id: string,
-  start: number,
-  end: number,
-  overrides: Partial<AudioClip> = {},
-): AudioClip {
+function audioClip(id: string, start: number, end: number, overrides: Partial<AudioClip> = {}): AudioClip {
   return {
     kind: 'audio',
     id: clipId(id),
@@ -66,7 +55,9 @@ interface DocOptions {
   readonly a2?: readonly AudioClip[];
   readonly a1Gain?: number;
   readonly a1Pan?: number;
-  readonly mutate?: (tracks: TimelineDocument['sequence']['tracks']) => TimelineDocument['sequence']['tracks'];
+  readonly mutate?: (
+    tracks: TimelineDocument['sequence']['tracks'],
+  ) => TimelineDocument['sequence']['tracks'];
 }
 
 function makeDocument(options: DocOptions = {}): TimelineDocument {
@@ -93,7 +84,12 @@ function makeDocument(options: DocOptions = {}): TimelineDocument {
     clips: (options.a2 ?? []) as AudioTrack['clips'],
   };
 
-  const tracks = [base.sequence.tracks[0]!, a1, a2, base.sequence.tracks[2]!] as TimelineDocument['sequence']['tracks'];
+  const tracks = [
+    base.sequence.tracks[0]!,
+    a1,
+    a2,
+    base.sequence.tracks[2]!,
+  ] as TimelineDocument['sequence']['tracks'];
   return {
     ...base,
     sequence: { ...base.sequence, tracks: options.mutate === undefined ? tracks : options.mutate(tracks) },
@@ -216,9 +212,7 @@ describe('gain', () => {
       a1Gain: 0.5,
       a1: [
         audioClip('a', 0, 60, {
-          gain: animatedNumber([
-            { id: keyframeId('k1'), frame: frameIndex(0), value: 1, ease: 'linear' },
-          ]),
+          gain: animatedNumber([{ id: keyframeId('k1'), frame: frameIndex(0), value: 1, ease: 'linear' }]),
         }),
       ],
     });

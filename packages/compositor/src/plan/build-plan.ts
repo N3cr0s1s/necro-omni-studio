@@ -102,15 +102,11 @@ function itemsForTrack(
   // has to be evaluated against the whole track set rather than per track.
   if (!isTrackAudible(track, anySoloed)) return [];
 
-  const live = trackClips(track).filter(
-    (clip) => clip.enabled && containsFrame(clip.span, frame),
-  );
+  const live = trackClips(track).filter((clip) => clip.enabled && containsFrame(clip.span, frame));
   if (live.length === 0) return [];
 
   const transitions = track.kind === 'video' ? track.transitions : [];
-  const activeTransition = transitions.find((transition) =>
-    containsFrame(transition.span, frame),
-  );
+  const activeTransition = transitions.find((transition) => containsFrame(transition.span, frame));
 
   if (activeTransition !== undefined) {
     const group = buildTransitionGroup(activeTransition, live, frame, rate, effects, options);
@@ -132,9 +128,7 @@ function buildTransitionGroup(
   rate: FrameRate,
   effects: EffectSourceResolver,
   options: BuildPlanOptions,
-):
-  | { readonly from: RenderLayer; readonly to: RenderLayer; readonly transition: TransitionPass }
-  | undefined {
+): { readonly from: RenderLayer; readonly to: RenderLayer; readonly transition: TransitionPass } | undefined {
   const from = live.find((clip) => clip.id === transition.from);
   const to = live.find((clip) => clip.id === transition.to);
   if (from === undefined || to === undefined) return undefined;

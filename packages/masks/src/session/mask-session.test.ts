@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { type AssetPath, assetPath, clipId, err, frameIndex, ok, spanFromBounds } from '@nos/core';
 import type { MaskFrame, MaskPrompt, MaskTrack } from '../contracts/mask.js';
-import { describeTrack, emptyTrack, maskTrackId, promptsAt, withPrompt, withoutPrompt } from '../contracts/mask.js';
+import {
+  describeTrack,
+  emptyTrack,
+  maskTrackId,
+  promptsAt,
+  withPrompt,
+  withoutPrompt,
+} from '../contracts/mask.js';
 import type { SegmentationEvent } from '../contracts/segmenter.js';
 import {
   addPrompt,
@@ -98,7 +105,10 @@ describe('the propagation range', () => {
 
 describe('the engine request', () => {
   it('carries the prompts and the narrowed range', () => {
-    const ready = setPropagation(addPrompt(session(), point(120)), spanFromBounds(frameIndex(110), frameIndex(150)));
+    const ready = setPropagation(
+      addPrompt(session(), point(120)),
+      spanFromBounds(frameIndex(110), frameIndex(150)),
+    );
     expect(toRequest(ready, source)).toMatchObject({
       source,
       range: spanFromBounds(frameIndex(110), frameIndex(150)),
@@ -161,10 +171,10 @@ describe('folding engine events', () => {
   });
 
   it('clears the previous error on a re-run but keeps its frames', () => {
-    const failed = applyEvent(
-      applyEvent(running(), { kind: 'frame', mask: mask(120) }),
-      { kind: 'done', result: err({ kind: 'cancelled' }) },
-    );
+    const failed = applyEvent(applyEvent(running(), { kind: 'frame', mask: mask(120) }), {
+      kind: 'done',
+      result: err({ kind: 'cancelled' }),
+    });
     const again = beginRun(failed);
 
     expect(again.error).toBeUndefined();

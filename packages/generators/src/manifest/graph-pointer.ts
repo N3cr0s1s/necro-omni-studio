@@ -123,11 +123,7 @@ export function patchPointer(graph: unknown, pointer: GraphPointer, value: unkno
   return patchSegments(graph, segments, value);
 }
 
-function patchSegments(
-  target: unknown,
-  segments: readonly PointerSegment[],
-  value: unknown,
-): unknown {
+function patchSegments(target: unknown, segments: readonly PointerSegment[], value: unknown): unknown {
   const [head, ...rest] = segments;
   if (head === undefined) return value;
 

@@ -234,9 +234,7 @@ export function entriesFor(manifest: GeneratorManifest): readonly GeneratorEntry
   // every other generator.
   const presets = manifest.presets ?? [];
   if (presets.length === 0) {
-    return [
-      { generator: manifest.id, label: manifestLabel(manifest), surfaces: manifest.surfaces ?? [] },
-    ];
+    return [{ generator: manifest.id, label: manifestLabel(manifest), surfaces: manifest.surfaces ?? [] }];
   }
   return presets.map((preset) => ({
     generator: manifest.id,
@@ -252,10 +250,7 @@ export function entriesFor(manifest: GeneratorManifest): readonly GeneratorEntry
  * A pinned parameter is hidden, which is what makes a preset feel like its own tool rather than the same
  * form with different defaults.
  */
-export function visibleParams(
-  manifest: GeneratorManifest,
-  presetId?: PresetId,
-): readonly GeneratorParam[] {
+export function visibleParams(manifest: GeneratorManifest, presetId?: PresetId): readonly GeneratorParam[] {
   if (presetId === undefined) return manifest.params;
   const preset = manifest.presets.find((candidate) => candidate.id === presetId);
   if (preset === undefined) return manifest.params;
@@ -272,9 +267,7 @@ export function effectiveDefaults(
     if (param.default !== undefined) values[param.key] = param.default;
   }
   const preset =
-    presetId === undefined
-      ? undefined
-      : manifest.presets.find((candidate) => candidate.id === presetId);
+    presetId === undefined ? undefined : manifest.presets.find((candidate) => candidate.id === presetId);
   if (preset !== undefined) Object.assign(values, preset.pin);
   return values;
 }

@@ -52,10 +52,7 @@ export function framesToSeconds(position: FrameIndex | FrameCount, rate: FrameRa
   return divide(rational(position as number), rate.value);
 }
 
-export function framesToSecondsNumber(
-  position: FrameIndex | FrameCount,
-  rate: FrameRate,
-): number {
+export function framesToSecondsNumber(position: FrameIndex | FrameCount, rate: FrameRate): number {
   const seconds = framesToSeconds(position, rate);
   return seconds.numerator / seconds.denominator;
 }
@@ -81,21 +78,13 @@ export function secondsNumberToFrames(seconds: number, rate: FrameRate): FrameIn
  * keeps its source rate for sample-accurate reads, while the timeline works at the
  * project rate. Identical rates short-circuit so the common case stays exact and free.
  */
-export function convertFrames(
-  position: FrameIndex,
-  from: FrameRate,
-  to: FrameRate,
-): FrameIndex {
+export function convertFrames(position: FrameIndex, from: FrameRate, to: FrameRate): FrameIndex {
   if (frameRateEquals(from, to)) return position;
   return secondsToFrames(framesToSeconds(position, from), to);
 }
 
 /** Rounds a duration up when rebasing, so a converted clip never loses its tail. */
-export function convertDurationCeil(
-  count: FrameCount,
-  from: FrameRate,
-  to: FrameRate,
-): FrameCount {
+export function convertDurationCeil(count: FrameCount, from: FrameRate, to: FrameRate): FrameCount {
   if (frameRateEquals(from, to)) return count;
   const seconds = framesToSeconds(count, from);
   const target = multiply(seconds, to.value);

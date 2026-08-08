@@ -98,9 +98,7 @@ export function pxToFrames(viewport: TimelineViewport, px: number): number {
 
 /** Frames visible in the viewport. */
 export function visibleSpan(viewport: TimelineViewport): FrameSpan {
-  const end = frameIndex(
-    Math.ceil(viewport.scrollFrame + viewport.widthPx * viewport.framesPerPixel),
-  );
+  const end = frameIndex(Math.ceil(viewport.scrollFrame + viewport.widthPx * viewport.framesPerPixel));
   return spanFromBounds(viewport.scrollFrame, end);
 }
 
@@ -191,11 +189,7 @@ export function scrollToReveal(
 }
 
 /** Zoom that fits a span to the viewport width. */
-export function zoomToFit(
-  viewport: TimelineViewport,
-  span: FrameSpan,
-  paddingPx = 24,
-): TimelineViewport {
+export function zoomToFit(viewport: TimelineViewport, span: FrameSpan, paddingPx = 24): TimelineViewport {
   const usableWidth = Math.max(1, viewport.widthPx - paddingPx * 2);
   const framesPerPixel = clampZoom(Math.max(span.duration, 1) / usableWidth);
   const scroll = Math.max(0, Math.round(span.start - paddingPx * framesPerPixel));
@@ -219,7 +213,24 @@ export interface RulerTick {
  * the zoomed-in range where frame-level work happens.
  */
 const SECOND_INTERVALS: readonly number[] = [
-  1 / 30, 1 / 15, 1 / 10, 1 / 5, 1 / 2, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+  1 / 30,
+  1 / 15,
+  1 / 10,
+  1 / 5,
+  1 / 2,
+  1,
+  2,
+  5,
+  10,
+  15,
+  30,
+  60,
+  120,
+  300,
+  600,
+  900,
+  1800,
+  3600,
 ];
 
 /** Minimum pixels between labels, so text never collides. */
@@ -334,10 +345,6 @@ export function formatZoom(viewport: TimelineViewport): string {
 }
 
 /** `29.97 fps · 3241 f · 12 clips` style status line. */
-export function formatTimelineStatus(
-  rate: FrameRate,
-  totalFrames: number,
-  clipCount: number,
-): string {
+export function formatTimelineStatus(rate: FrameRate, totalFrames: number, clipCount: number): string {
   return `${displayFrameRate(rate)} fps · ${totalFrames} f · ${clipCount} clips`;
 }

@@ -96,14 +96,9 @@ export function createProgramCache(
 }
 
 type CompileResult =
-  | { readonly ok: true; readonly shader: WebGLShader }
-  | { readonly ok: false; readonly log: string };
+  { readonly ok: true; readonly shader: WebGLShader } | { readonly ok: false; readonly log: string };
 
-function compileShader(
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-): CompileResult {
+function compileShader(gl: WebGL2RenderingContext, type: number, source: string): CompileResult {
   const shader = gl.createShader(type);
   if (shader === null) return { ok: false, log: 'could not create a shader object' };
 

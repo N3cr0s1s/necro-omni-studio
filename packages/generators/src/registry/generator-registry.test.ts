@@ -58,7 +58,15 @@ const stableAudio: GeneratorManifest = {
       default: 'Music',
       bind: '/52:43/inputs/choice',
     },
-    { key: 'duration_s', label: 'Hossz (s)', type: 'float', min: 1, step: 1, default: 50, bind: '/52:36/inputs/value' },
+    {
+      key: 'duration_s',
+      label: 'Hossz (s)',
+      type: 'float',
+      min: 1,
+      step: 1,
+      default: 50,
+      bind: '/52:36/inputs/value',
+    },
     { key: 'enhance_prompt', type: 'bool', default: false, bind: '/52:35/inputs/value' },
     { key: 'negative', type: 'text', default: '', bind: '/52:7/inputs/text' },
     { key: 'seed', type: 'seed', bind: '/52:3/inputs/seed' },
@@ -87,7 +95,13 @@ const minimaxI2v: GeneratorManifest = {
   requires: [],
   outputs: [{ key: 'video', type: 'video', node: '92' }],
   params: [
-    { key: 'first_frame', type: 'image', required: true, bind: '/114/inputs/image', transport: 'upload_image' },
+    {
+      key: 'first_frame',
+      type: 'image',
+      required: true,
+      bind: '/114/inputs/image',
+      transport: 'upload_image',
+    },
     { key: 'prompt', type: 'text', multiline: true, bind: '/105:104/inputs/prompt' },
     { key: 'duration_s', type: 'float', min: 0.5, max: 30, default: 15, bind: '/105:111/inputs/value' },
     { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
@@ -271,7 +285,10 @@ describe('unbound manifests', () => {
 
 describe('registry', () => {
   const registry = () =>
-    createGeneratorRegistry([stableAudio, minimaxI2v], context({ installedNodeClasses: new Set(stableAudio.requires) }));
+    createGeneratorRegistry(
+      [stableAudio, minimaxI2v],
+      context({ installedNodeClasses: new Set(stableAudio.requires) }),
+    );
 
   it('lists available generators', () => {
     expect(registry().available()).toHaveLength(2);
@@ -284,12 +301,7 @@ describe('registry', () => {
   it('contributes one entry per preset, so one graph becomes several tools', () => {
     // The spec's audio example becomes music, instrumental, SFX and one-shot from one graph.
     const record = registry().find(generatorId('stable_audio_3'))!;
-    expect(record.entries.map((entry) => entry.label)).toEqual([
-      'Zene',
-      'Instrumentális',
-      'SFX',
-      'One-shot',
-    ]);
+    expect(record.entries.map((entry) => entry.label)).toEqual(['Zene', 'Instrumentális', 'SFX', 'One-shot']);
   });
 
   it('contributes a single entry when there are no presets', () => {
@@ -303,10 +315,7 @@ describe('registry', () => {
 
   it('keeps unavailable entries on their surface, greyed rather than hidden', () => {
     // Filtering them out is exactly the disappearing-tool behaviour the spec forbids.
-    const withBroken = createGeneratorRegistry(
-      [{ ...stableAudio, graph: 'missing.json' }],
-      context(),
-    );
+    const withBroken = createGeneratorRegistry([{ ...stableAudio, graph: 'missing.json' }], context());
     const entries = withBroken.entriesForSurface('media_browser');
     expect(entries.length).toBeGreaterThan(0);
     expect(isEntryRunnable(withBroken, entries[0]!)).toBe(false);

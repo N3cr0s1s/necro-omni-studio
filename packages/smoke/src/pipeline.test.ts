@@ -268,7 +268,11 @@ describe('a project passes through every subsystem', () => {
   it('rejects an edit that would collide, rather than displacing a neighbour', () => {
     // The rule the whole editing layer is built on, checked here because it is the one a user meets
     // first and the one whose violation is hardest to notice.
-    const document = place(place(newProject(), 'video', videoClip('a', 0, 100)), 'video', videoClip('b', 100, 200));
+    const document = place(
+      place(newProject(), 'video', videoClip('a', 0, 100)),
+      'video',
+      videoClip('b', 100, 200),
+    );
     const result = moveClip(document, clipId('b'), TRACKS.video, frameIndex(50));
 
     expect(result.ok).toBe(false);

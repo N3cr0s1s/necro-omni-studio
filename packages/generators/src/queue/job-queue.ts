@@ -101,7 +101,10 @@ export interface GraphPatcher {
     manifest: GeneratorManifest,
     params: Readonly<Record<string, string | number | boolean>>,
     seeds: readonly number[],
-  ): { readonly graph: unknown; readonly assets: readonly { key: string; path: string; transport: string }[] };
+  ): {
+    readonly graph: unknown;
+    readonly assets: readonly { key: string; path: string; transport: string }[];
+  };
 }
 
 export interface JobQueueOptions {
@@ -330,9 +333,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
         target: request.target,
         status: 'queued',
         runs: runIds,
-        ...(plan.constraint !== undefined
-          ? { constraintNote: describeConstraintNote(plan) }
-          : {}),
+        ...(plan.constraint !== undefined ? { constraintNote: describeConstraintNote(plan) } : {}),
         createdAt: now(),
       };
       groups.set(groupId, group);

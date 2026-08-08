@@ -75,12 +75,7 @@ export const WATCH_DEBOUNCE_MS = 120;
  * folder with its size so the user can judge whether to clear it — but the individual
  * derived files inside are noise. Editor and OS droppings are hidden outright.
  */
-const IGNORED_NAMES: readonly string[] = [
-  '.DS_Store',
-  'Thumbs.db',
-  'desktop.ini',
-  '.gitkeep',
-];
+const IGNORED_NAMES: readonly string[] = ['.DS_Store', 'Thumbs.db', 'desktop.ini', '.gitkeep'];
 
 const IGNORED_PREFIXES: readonly string[] = ['~$', '.#'];
 const IGNORED_SUFFIXES: readonly string[] = ['.tmp', '.part', '.crdownload', '.swp'];
@@ -144,8 +139,6 @@ export function coalesceChanges(changes: readonly FileChange[]): readonly FileCh
 
 /** Drops changes the browser must not show, then coalesces the rest. */
 export function normalizeChanges(changes: readonly FileChange[]): readonly FileChange[] {
-  const visible = changes.filter(
-    (change) => !isIgnoredPath(change.path) && !isCacheContent(change.path),
-  );
+  const visible = changes.filter((change) => !isIgnoredPath(change.path) && !isCacheContent(change.path));
   return coalesceChanges(visible);
 }

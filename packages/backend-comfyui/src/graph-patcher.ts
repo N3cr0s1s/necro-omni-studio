@@ -138,8 +138,7 @@ function patchParam(
   }
 
   for (const also of param.also ?? []) {
-    const written =
-      also.template === undefined ? value : applyTemplate(also.template, allValues);
+    const written = also.template === undefined ? value : applyTemplate(also.template, allValues);
     patched = patchPointer(patched, also.pointer, written);
   }
 
@@ -147,9 +146,7 @@ function patchParam(
 }
 
 function isAssetParam(param: GeneratorParam): boolean {
-  return (
-    param.type === 'image' || param.type === 'video' || param.type === 'audio' || param.type === 'mask'
-  );
+  return param.type === 'image' || param.type === 'video' || param.type === 'audio' || param.type === 'mask';
 }
 
 /**

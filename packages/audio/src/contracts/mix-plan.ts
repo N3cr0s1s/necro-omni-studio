@@ -1,4 +1,4 @@
-import type { AssetPath, ClipId, FrameIndex, FrameSpan, TrackId } from '@nos/core';
+import type { AssetPath, ClipId, FrameSpan, TrackId } from '@nos/core';
 
 /**
  * Audio mix planning.

@@ -1,4 +1,11 @@
-import { type CSSProperties, type KeyboardEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
 import type { AssetPath } from '@nos/core';
 import {
   type DirectoryNode,
@@ -54,9 +61,7 @@ export function MediaBrowser({
   detail,
   onRescan,
 }: MediaBrowserProps): ReactNode {
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () => new Set(DEFAULT_EXPANDED),
-  );
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(DEFAULT_EXPANDED));
 
   const toggle = useCallback((path: string) => {
     setExpanded((current) => {
@@ -304,9 +309,7 @@ function TreeRow({
           height: 9,
           flex: 'none',
           borderRadius: 2,
-          background: isDirectory
-            ? folderSwatch(node.name)
-            : assetSwatch((node as FileNode).assetType),
+          background: isDirectory ? folderSwatch(node.name) : assetSwatch((node as FileNode).assetType),
         }}
       />
 

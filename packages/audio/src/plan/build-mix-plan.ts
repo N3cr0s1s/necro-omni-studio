@@ -184,9 +184,7 @@ export function hasAudibleContent(document: TimelineDocument): boolean {
   const anySoloed = document.sequence.tracks.some((track) => track.solo);
   return document.sequence.tracks.some(
     (track) =>
-      track.kind === 'audio' &&
-      isTrackAudible(track, anySoloed) &&
-      track.clips.some((clip) => clip.enabled),
+      track.kind === 'audio' && isTrackAudible(track, anySoloed) && track.clips.some((clip) => clip.enabled),
   );
 }
 
@@ -195,10 +193,7 @@ export function hasAudibleContent(document: TimelineDocument): boolean {
  *
  * Used by scrubbing, which needs "what is under the playhead right now" rather than a range.
  */
-export function sourcesAtFrame(
-  document: TimelineDocument,
-  frame: FrameIndex,
-): readonly MixSource[] {
+export function sourcesAtFrame(document: TimelineDocument, frame: FrameIndex): readonly MixSource[] {
   return buildMixPlan({
     document,
     span: spanFromBounds(frame, frameIndex(frame + 1)),
@@ -221,8 +216,7 @@ export function peakConcurrency(plan: MixPlan): number {
   let peak = 0;
   for (const boundary of boundaries) {
     const active = plan.sources.filter(
-      (source) =>
-        source.startSeconds <= boundary && source.startSeconds + source.durationSeconds > boundary,
+      (source) => source.startSeconds <= boundary && source.startSeconds + source.durationSeconds > boundary,
     ).length;
     if (active > peak) peak = active;
   }

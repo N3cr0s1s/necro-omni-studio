@@ -7,11 +7,7 @@ import { type EffectStackEntry, EffectStack, reorder } from './EffectStack.js';
 
 afterEach(cleanup);
 
-function entry(
-  id: string,
-  label: string,
-  overrides: Partial<EffectStackEntry> = {},
-): EffectStackEntry {
+function entry(id: string, label: string, overrides: Partial<EffectStackEntry> = {}): EffectStackEntry {
   return {
     instance: {
       id: effectInstanceId(id),

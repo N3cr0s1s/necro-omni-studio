@@ -38,7 +38,15 @@ const group: JobGroup = {
 };
 
 function run(id: string, overrides: Partial<JobRun> = {}): JobRun {
-  return { id: jobRunId(id), group: group.id, seed: 1, seeds: [1], status: 'queued', outputs: [], ...overrides };
+  return {
+    id: jobRunId(id),
+    group: group.id,
+    seed: 1,
+    seeds: [1],
+    status: 'queued',
+    outputs: [],
+    ...overrides,
+  };
 }
 
 const done = (id: string, seed: number): JobRun =>
@@ -220,9 +228,7 @@ describe('interaction', () => {
 
 describe('the placeholder body', () => {
   it('shows how many variants have landed', () => {
-    render(
-      <VariantPlaceholder selection={selectionOf(partial)} left={40} width={200} height={56} />,
-    );
+    render(<VariantPlaceholder selection={selectionOf(partial)} left={40} width={200} height={56} />);
     expect(screen.getByText('1/3')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Warehouse drone placeholder' })).toBeDefined();
   });

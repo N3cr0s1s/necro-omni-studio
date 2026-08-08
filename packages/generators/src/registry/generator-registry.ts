@@ -1,10 +1,5 @@
 import type { GeneratorId, PresetId } from '@nos/core';
-import type {
-  GeneratorEntry,
-  GeneratorManifest,
-  ManifestStatus,
-  SurfaceId,
-} from '../contracts/manifest.js';
+import type { GeneratorEntry, GeneratorManifest, ManifestStatus, SurfaceId } from '../contracts/manifest.js';
 import { entriesFor, isUnbound, manifestLabel } from '../contracts/manifest.js';
 import {
   type PointerResolution,
@@ -79,10 +74,7 @@ export interface GeneratorRegistry {
  * Every problem is collected rather than stopping at the first. A manifest with three broken pointers
  * should report three, or fixing them becomes three reload cycles.
  */
-export function validateManifest(
-  manifest: GeneratorManifest,
-  context: ValidationContext,
-): RegistryRecord {
+export function validateManifest(manifest: GeneratorManifest, context: ValidationContext): RegistryRecord {
   const entries = entriesFor(manifest);
 
   // An unbound manifest is checked no further: its pointers are `null` by design, and reporting them as

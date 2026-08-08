@@ -54,7 +54,12 @@ describe('round tripping', () => {
   });
 
   it('handles a single pixel in every corner', () => {
-    for (const rows of [['#...', '....'], ['...#', '....'], ['....', '#...'], ['....', '...#']]) {
+    for (const rows of [
+      ['#...', '....'],
+      ['...#', '....'],
+      ['....', '#...'],
+      ['....', '...#'],
+    ]) {
       const { bitmap, width, height } = bitmapOf(rows);
       const counts = encodeRle(bitmap, width, height);
       expect(pictureOf(decodeRle(counts, width, height), width, height), rows.join('/')).toEqual(rows);
@@ -66,7 +71,9 @@ describe('round tripping', () => {
     // everything else.
     const rows = ['#..', '.#.', '..#', '#.#'];
     const { bitmap, width, height } = bitmapOf(rows);
-    expect(pictureOf(decodeRle(encodeRle(bitmap, width, height), width, height), width, height)).toEqual(rows);
+    expect(pictureOf(decodeRle(encodeRle(bitmap, width, height), width, height), width, height)).toEqual(
+      rows,
+    );
   });
 });
 

@@ -63,10 +63,14 @@ export function SegmentationPanel({
     >
       <PanelHeader
         caption="Segmentation"
-        trailing={<Badge tone={unavailable ? 'danger' : 'mask'}>{unavailable ? 'unavailable' : 'SAM 2'}</Badge>}
+        trailing={
+          <Badge tone={unavailable ? 'danger' : 'mask'}>{unavailable ? 'unavailable' : 'SAM 2'}</Badge>
+        }
       />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: token.space4, padding: `0 ${token.space5}` }}>
+      <div
+        style={{ display: 'flex', flexDirection: 'column', gap: token.space4, padding: `0 ${token.space5}` }}
+      >
         {unavailable && (
           <Mono tone={token.danger}>{capabilities?.detail ?? 'segmentation is unavailable'}</Mono>
         )}
@@ -98,7 +102,11 @@ export function SegmentationPanel({
           >
             {session.frames.size > 0 ? 'Re-run' : 'Segment'}
           </Button>
-          <Button disabled={!session.running} onClick={onCancel} title="Stop, keeping the frames already masked">
+          <Button
+            disabled={!session.running}
+            onClick={onCancel}
+            title="Stop, keeping the frames already masked"
+          >
             Cancel
           </Button>
         </div>

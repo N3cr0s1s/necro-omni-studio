@@ -26,13 +26,7 @@ import { type FrameIndex, frameIndex } from '../time/frame-time.js';
  */
 export type Easing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
 
-export const EASINGS: readonly Easing[] = [
-  'linear',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'hold',
-];
+export const EASINGS: readonly Easing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'];
 
 export function isEasing(value: string): value is Easing {
   return (EASINGS as readonly string[]).includes(value);

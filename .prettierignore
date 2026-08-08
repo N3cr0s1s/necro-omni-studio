@@ -1,0 +1,8 @@
+node_modules
+dist
+**/dist
+package-lock.json
+docs/comfy
+generators/*.json
+!generators/*.manifest.json
+apps/sidecar

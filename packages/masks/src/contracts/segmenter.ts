@@ -59,10 +59,7 @@ export interface Segmenter {
    * Yields progress and the frames as they land, so a long propagation is auditionable while it runs
    * rather than appearing all at once at the end.
    */
-  run(
-    request: SegmentationRequest,
-    signal?: AbortSignal,
-  ): AsyncIterable<SegmentationEvent>;
+  run(request: SegmentationRequest, signal?: AbortSignal): AsyncIterable<SegmentationEvent>;
 }
 
 export type SegmentationEvent =

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generatorId, presetId } from '@nos/core';
+import { generatorId } from '@nos/core';
 import type { GeneratorManifest } from '../contracts/manifest.js';
 import {
   MAX_VARIANTS,
@@ -46,7 +46,11 @@ function manifestWithoutBatch(): GeneratorManifest {
 }
 
 const plan = (overrides: Parameters<typeof planVariants>[0] extends infer T ? Partial<T> : never) =>
-  planVariants({ manifest: manifest(), nextSeed: createFixedSeedSource([11, 22, 33, 44, 55, 66, 77]), ...overrides });
+  planVariants({
+    manifest: manifest(),
+    nextSeed: createFixedSeedSource([11, 22, 33, 44, 55, 66, 77]),
+    ...overrides,
+  });
 
 describe('seed constraint', () => {
   it('forces one variant when the manifest has no seed parameter', () => {
@@ -164,8 +168,16 @@ describe('seed sources', () => {
   });
 
   it('makes a plan reproducible', () => {
-    const first = planVariants({ manifest: manifest(), requested: 3, nextSeed: createFixedSeedSource([1, 2, 3]) });
-    const second = planVariants({ manifest: manifest(), requested: 3, nextSeed: createFixedSeedSource([1, 2, 3]) });
+    const first = planVariants({
+      manifest: manifest(),
+      requested: 3,
+      nextSeed: createFixedSeedSource([1, 2, 3]),
+    });
+    const second = planVariants({
+      manifest: manifest(),
+      requested: 3,
+      nextSeed: createFixedSeedSource([1, 2, 3]),
+    });
     expect(first).toEqual(second);
   });
 });

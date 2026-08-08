@@ -87,10 +87,7 @@ export function typewriterAt(advances: GlyphAdvances, reveal: number): Typewrite
  * Exposed so a rasterizer only has to measure each glyph; the prefix sum belongs here, next to the code
  * that consumes it, rather than being reimplemented by every rasterizer.
  */
-export function toCumulativeAdvances(
-  widths: readonly number[],
-  letterSpacing = 0,
-): readonly number[] {
+export function toCumulativeAdvances(widths: readonly number[], letterSpacing = 0): readonly number[] {
   const advances: number[] = [];
   let total = 0;
   for (const width of widths) {
@@ -223,11 +220,7 @@ export function buildAdvances(
   };
 }
 
-function alignOrigin(
-  lineWidth: number,
-  boxWidth: number,
-  align: 'left' | 'center' | 'right',
-): number {
+function alignOrigin(lineWidth: number, boxWidth: number, align: 'left' | 'center' | 'right'): number {
   switch (align) {
     case 'center':
       return (boxWidth - lineWidth) / 2;

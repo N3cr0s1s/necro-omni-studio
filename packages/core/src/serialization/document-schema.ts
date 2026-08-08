@@ -21,12 +21,7 @@ import {
   vWithDefault,
 } from '../lang/validate.js';
 import { type FrameRate, parseFrameRate } from '../time/frame-rate.js';
-import {
-  type FrameCount,
-  type FrameIndex,
-  frameCount,
-  frameIndex,
-} from '../time/frame-time.js';
+import { type FrameCount, type FrameIndex, frameCount, frameIndex } from '../time/frame-time.js';
 import { type FrameSpan } from '../time/frame-span.js';
 import {
   type AnimatableNumber,
@@ -79,12 +74,7 @@ import {
   type Transition,
   type VideoClip,
 } from '../document/clip.js';
-import {
-  type AudioTrack,
-  type TextTrack,
-  type Track,
-  type VideoTrack,
-} from '../document/track.js';
+import { type AudioTrack, type TextTrack, type Track, type VideoTrack } from '../document/track.js';
 import {
   type MaskDefinition,
   type MaskPoint,
@@ -124,10 +114,7 @@ export const vProjectId: Validator<ProjectId> = vId(projectId, 'project id');
 export const vSequenceId: Validator<SequenceId> = vId(sequenceId, 'sequence id');
 export const vTrackId: Validator<TrackId> = vId(trackId, 'track id');
 export const vClipId: Validator<ClipId> = vId(clipId, 'clip id');
-export const vEffectInstanceId: Validator<EffectInstanceId> = vId(
-  effectInstanceId,
-  'effect instance id',
-);
+export const vEffectInstanceId: Validator<EffectInstanceId> = vId(effectInstanceId, 'effect instance id');
 export const vKeyframeId: Validator<KeyframeId> = vId(keyframeId, 'keyframe id');
 export const vMaskId: Validator<MaskId> = vId(maskId, 'mask id');
 export const vEffectId: Validator<EffectId> = vId(effectId, 'effect id');
@@ -171,9 +158,8 @@ export const vKeyframe: Validator<Keyframe> = vObject<Keyframe>({
  */
 export const vAnimatableNumber: Validator<AnimatableNumber> = (value, path) => {
   if (typeof value === 'number') return vMap(vNumber, staticNumber)(value, path);
-  return vMap(
-    vObject<{ keyframes: readonly Keyframe[] }>({ keyframes: vArray(vKeyframe) }),
-    (parsed) => animatedNumber(parsed.keyframes),
+  return vMap(vObject<{ keyframes: readonly Keyframe[] }>({ keyframes: vArray(vKeyframe) }), (parsed) =>
+    animatedNumber(parsed.keyframes),
   )(value, path);
 };
 
@@ -197,8 +183,10 @@ export const vParamValue: Validator<AnimatableNumber | StaticValue> = (value, pa
   return vAnimatableNumber(value, path);
 };
 
-export const vParams: Validator<Readonly<Record<string, AnimatableNumber | StaticValue>>> =
-  vWithDefault(vRecord(vParamValue), {});
+export const vParams: Validator<Readonly<Record<string, AnimatableNumber | StaticValue>>> = vWithDefault(
+  vRecord(vParamValue),
+  {},
+);
 
 export const vEffectInstance: Validator<EffectInstance> = vObject<EffectInstance>({
   id: vEffectInstanceId,
@@ -214,14 +202,13 @@ export const vMediaSource: Validator<MediaSource> = vObject<MediaSource>({
   sourceRate: vFrameRate,
 });
 
-export const vGeneratorProvenance: Validator<GeneratorProvenance> =
-  vObject<GeneratorProvenance>({
-    generator: vGeneratorId,
-    preset: vOptional(vPresetId),
-    run: vJobRunId,
-    seed: vOptional(vInteger),
-    createdAt: vWithDefault(vString, ''),
-  });
+export const vGeneratorProvenance: Validator<GeneratorProvenance> = vObject<GeneratorProvenance>({
+  generator: vGeneratorId,
+  preset: vOptional(vPresetId),
+  run: vJobRunId,
+  seed: vOptional(vInteger),
+  createdAt: vWithDefault(vString, ''),
+});
 
 export const vClipTransform: Validator<ClipTransform> = vObject<ClipTransform>({
   x: vWithDefault(vAnimatableNumber, staticNumber(0)),

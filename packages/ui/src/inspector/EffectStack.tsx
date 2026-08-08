@@ -103,9 +103,7 @@ export function EffectStack({
       </div>
 
       {overBudget && (
-        <Badge tone="warn">
-          Above {passWarningThreshold} passes — preview may not hold realtime
-        </Badge>
+        <Badge tone="warn">Above {passWarningThreshold} passes — preview may not hold realtime</Badge>
       )}
 
       <div
@@ -214,9 +212,7 @@ function EffectRow({
         padding: `${token.space3} ${token.space4}`,
         borderRadius: token.radiusCard,
         background: selected ? token.surfaceSelected : token.surface1,
-        border: `1px solid ${
-          dropTarget ? token.accent : selected ? token.accent : token.border
-        }`,
+        border: `1px solid ${dropTarget ? token.accent : selected ? token.accent : token.border}`,
         // The dragged row dims rather than following the pointer: a floating copy over a 340 px panel
         // obscures the very targets the user is aiming at.
         opacity: dragging ? 0.45 : entry.instance.enabled ? 1 : 0.5,

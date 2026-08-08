@@ -82,7 +82,9 @@ describe('editing parameters', () => {
   it('offers every parameter type, so the inferred one is a suggestion', () => {
     renderInspector({ draft: withParam() });
     const options = [...screen.getByLabelText('Type').querySelectorAll('option')].map((o) => o.value);
-    expect(options).toEqual(expect.arrayContaining(['text', 'int', 'float', 'bool', 'enum', 'seed', 'image']));
+    expect(options).toEqual(
+      expect.arrayContaining(['text', 'int', 'float', 'bool', 'enum', 'seed', 'image']),
+    );
   });
 
   it('reports a type change', async () => {

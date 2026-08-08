@@ -4,13 +4,7 @@ import type { GeneratorManifest } from '../contracts/manifest.js';
 import { createMockBackend, createRecordingPatcher } from '../backends/mock-backend.js';
 import { createFixedSeedSource } from './variant-plan.js';
 import { createGpuSemaphore } from './gpu-semaphore.js';
-import {
-  type JobTarget,
-  completedRuns,
-  createJobQueue,
-  groupProgress,
-  runsOf,
-} from './job-queue.js';
+import { type JobTarget, completedRuns, createJobQueue, groupProgress, runsOf } from './job-queue.js';
 
 function manifest(overrides: Partial<GeneratorManifest> = {}): GeneratorManifest {
   return {
@@ -362,7 +356,7 @@ describe('backend failures', () => {
     const backend = createMockBackend({ progressSteps: 1 });
     const failing = {
       ...backend,
-      // eslint-disable-next-line require-yield
+
       async *progress(): AsyncIterable<never> {
         throw new Error('socket closed');
       },

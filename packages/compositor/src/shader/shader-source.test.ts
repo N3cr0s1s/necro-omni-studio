@@ -214,10 +214,7 @@ describe('built-in programs', () => {
 
 describe('parseShaderLog', () => {
   it('parses the ANGLE and Mesa format, rebasing onto the authored line', () => {
-    const diagnostics = parseShaderLog(
-      "ERROR: 0:25: 'u_missing' : undeclared identifier",
-      20,
-    );
+    const diagnostics = parseShaderLog("ERROR: 0:25: 'u_missing' : undeclared identifier", 20);
     expect(diagnostics).toEqual([
       { severity: 'error', line: 5, message: "'u_missing' : undeclared identifier" },
     ]);
@@ -246,16 +243,12 @@ describe('parseShaderLog', () => {
   it('keeps an unrecognized message rather than swallowing it', () => {
     // An unparsed error the user can read beats a silent one.
     const diagnostics = parseShaderLog('something the driver invented', 20);
-    expect(diagnostics).toEqual([
-      { severity: 'error', line: 0, message: 'something the driver invented' },
-    ]);
+    expect(diagnostics).toEqual([{ severity: 'error', line: 0, message: 'something the driver invented' }]);
   });
 
   it('parses a multi-line log', () => {
     const diagnostics = parseShaderLog(
-      ["ERROR: 0:25: 'a' : undeclared identifier", "ERROR: 0:27: 'b' : undeclared identifier"].join(
-        '\n',
-      ),
+      ["ERROR: 0:25: 'a' : undeclared identifier", "ERROR: 0:27: 'b' : undeclared identifier"].join('\n'),
       20,
     );
     expect(diagnostics.map((entry) => entry.line)).toEqual([5, 7]);

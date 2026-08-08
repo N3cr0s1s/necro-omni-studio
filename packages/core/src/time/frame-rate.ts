@@ -1,10 +1,8 @@
 import {
   type Rational,
-  compare,
   divide,
   equals,
   formatRational,
-  multiply,
   parseRational,
   rational,
   round,

@@ -167,11 +167,7 @@ describe('malformed input', () => {
 });
 
 /** Compares a min/max pair with float32 tolerance. */
-function expectRange(
-  actual: { readonly min: number; readonly max: number },
-  min: number,
-  max: number,
-): void {
+function expectRange(actual: { readonly min: number; readonly max: number }, min: number, max: number): void {
   expect(actual.min).toBeCloseTo(min, 6);
   expect(actual.max).toBeCloseTo(max, 6);
 }

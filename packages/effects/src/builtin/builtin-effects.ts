@@ -167,7 +167,15 @@ const WIPE: RawManifest = {
     samplers: ['from', 'to'],
     convention: 'gl-transitions',
     params: [
-      { key: 'softness', uniform: 'softness', type: 'float', label: 'Softness', min: 0, max: 0.5, default: 0.05 },
+      {
+        key: 'softness',
+        uniform: 'softness',
+        type: 'float',
+        label: 'Softness',
+        min: 0,
+        max: 0.5,
+        default: 0.05,
+      },
     ],
   },
   shaderSource: `uniform float softness;

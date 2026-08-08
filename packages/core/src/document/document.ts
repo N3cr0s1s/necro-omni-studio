@@ -120,9 +120,7 @@ export function allClips(document: TimelineDocument): readonly Clip[] {
 }
 
 export function allTransitions(document: TimelineDocument): readonly Transition[] {
-  return document.sequence.tracks.flatMap((track) =>
-    track.kind === 'video' ? track.transitions : [],
-  );
+  return document.sequence.tracks.flatMap((track) => (track.kind === 'video' ? track.transitions : []));
 }
 
 export function clipCount(document: TimelineDocument): number {
@@ -152,10 +150,7 @@ export function findMask(document: TimelineDocument, id: MaskId): MaskDefinition
   return document.masks.find((mask) => mask.id === id);
 }
 
-export function masksForClip(
-  document: TimelineDocument,
-  clip: ClipId,
-): readonly MaskDefinition[] {
+export function masksForClip(document: TimelineDocument, clip: ClipId): readonly MaskDefinition[] {
   return document.masks.filter((mask) => mask.clip === clip);
 }
 

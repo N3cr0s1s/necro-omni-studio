@@ -57,18 +57,15 @@ export const projectId = (value: string): ProjectId =>
   unsafeBrand<ProjectId>(requireNonEmpty(value, 'ProjectId'));
 export const sequenceId = (value: string): SequenceId =>
   unsafeBrand<SequenceId>(requireNonEmpty(value, 'SequenceId'));
-export const trackId = (value: string): TrackId =>
-  unsafeBrand<TrackId>(requireNonEmpty(value, 'TrackId'));
-export const clipId = (value: string): ClipId =>
-  unsafeBrand<ClipId>(requireNonEmpty(value, 'ClipId'));
+export const trackId = (value: string): TrackId => unsafeBrand<TrackId>(requireNonEmpty(value, 'TrackId'));
+export const clipId = (value: string): ClipId => unsafeBrand<ClipId>(requireNonEmpty(value, 'ClipId'));
 export const transitionId = (value: string): TransitionId =>
   unsafeBrand<TransitionId>(requireNonEmpty(value, 'TransitionId'));
 export const effectInstanceId = (value: string): EffectInstanceId =>
   unsafeBrand<EffectInstanceId>(requireNonEmpty(value, 'EffectInstanceId'));
 export const keyframeId = (value: string): KeyframeId =>
   unsafeBrand<KeyframeId>(requireNonEmpty(value, 'KeyframeId'));
-export const maskId = (value: string): MaskId =>
-  unsafeBrand<MaskId>(requireNonEmpty(value, 'MaskId'));
+export const maskId = (value: string): MaskId => unsafeBrand<MaskId>(requireNonEmpty(value, 'MaskId'));
 export const contentHash = (value: string): ContentHash =>
   unsafeBrand<ContentHash>(requireNonEmpty(value, 'ContentHash'));
 export const generatorId = (value: string): GeneratorId =>

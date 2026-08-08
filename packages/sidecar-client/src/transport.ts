@@ -81,10 +81,7 @@ export interface SidecarTransport {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-export function createTransport(
-  endpoint: SidecarEndpoint,
-  fetchImpl: FetchLike,
-): SidecarTransport {
+export function createTransport(endpoint: SidecarEndpoint, fetchImpl: FetchLike): SidecarTransport {
   async function request<T>(
     path: string,
     init: { method: string; body?: unknown },

@@ -90,11 +90,7 @@ describe('sizes and counts', () => {
   });
 
   it('counts files transitively', () => {
-    const tree = buildTree([
-      file('a/b/one.mp4'),
-      file('a/b/two.mp4'),
-      file('a/three.mp4'),
-    ]);
+    const tree = buildTree([file('a/b/one.mp4'), file('a/b/two.mp4'), file('a/three.mp4')]);
     const a = findNode(tree, 'a');
     expect(a?.kind === 'directory' && a.fileCount).toBe(3);
   });
@@ -154,11 +150,7 @@ describe('ordering', () => {
   });
 
   it('sorts files case-insensitively and numerically', () => {
-    const tree = buildTree([
-      file('media/b_10.mp4'),
-      file('media/B_2.mp4'),
-      file('media/a.mp4'),
-    ]);
+    const tree = buildTree([file('media/b_10.mp4'), file('media/B_2.mp4'), file('media/a.mp4')]);
     const media = findNode(tree, 'media');
     expect(media?.kind === 'directory' && media.children.map((node) => node.name)).toEqual([
       'a.mp4',
@@ -170,9 +162,10 @@ describe('ordering', () => {
 
 describe('applyChanges', () => {
   it('adds a new entry', () => {
-    const entries = applyChanges([], [
-      { kind: 'added', path: assetPath('media/a.mp4'), isDirectory: false, sizeBytes: 10 },
-    ]);
+    const entries = applyChanges(
+      [],
+      [{ kind: 'added', path: assetPath('media/a.mp4'), isDirectory: false, sizeBytes: 10 }],
+    );
     expect(entries).toEqual([{ path: 'media/a.mp4', isDirectory: false, sizeBytes: 10 }]);
   });
 

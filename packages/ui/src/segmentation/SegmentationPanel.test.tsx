@@ -147,10 +147,10 @@ describe('status', () => {
   });
 
   it('counts the masked frames when a run finished', () => {
-    const done = applyEvent(
-      applyEvent(beginRun(withPoint()), { kind: 'frame', mask: mask(10) }),
-      { kind: 'done', result: ok({ frames: 1, width: 2, height: 2 }) },
-    );
+    const done = applyEvent(applyEvent(beginRun(withPoint()), { kind: 'frame', mask: mask(10) }), {
+      kind: 'done',
+      result: ok({ frames: 1, width: 2, height: 2 }),
+    });
     renderPanel({ session: done });
     expect(screen.getByText('1 frames masked')).toBeDefined();
   });
@@ -255,7 +255,12 @@ describe('the click overlay', () => {
     const user = userEvent.setup();
     const onAddPrompt = vi.fn();
     const { container } = render(
-      <MaskPointOverlay session={beginSession(track(), frameIndex(77))} width={100} height={100} onAddPrompt={onAddPrompt} />,
+      <MaskPointOverlay
+        session={beginSession(track(), frameIndex(77))}
+        width={100}
+        height={100}
+        onAddPrompt={onAddPrompt}
+      />,
     );
 
     await user.click(sized(container.firstElementChild as HTMLElement, 100, 100));
@@ -297,9 +302,7 @@ describe('the click overlay', () => {
   });
 
   it('names each point by what it does', () => {
-    render(
-      <MaskPointOverlay session={addPrompt(base(), point(10, false))} width={100} height={100} />,
-    );
+    render(<MaskPointOverlay session={addPrompt(base(), point(10, false))} width={100} height={100} />);
     expect(screen.getByRole('button', { name: 'Exclude point at frame 10' })).toBeDefined();
   });
 

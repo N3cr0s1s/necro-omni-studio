@@ -1,10 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import {
-  type Clip,
-  type ClipId,
-  isGenerated,
-  passCount,
-} from '@nos/core';
+import { type Clip, type ClipId, isGenerated, passCount } from '@nos/core';
 import { token } from '../tokens/tokens.js';
 import { type SpanGeometry } from './viewport.js';
 
@@ -138,14 +133,9 @@ export function ClipBody({
           {clip.label}
         </span>
         {passes > 0 && (
-          <ClipChip
-            tone={passes > passWarningThreshold ? 'warn' : 'ok'}
-            label={`fx ${passes}`}
-          />
+          <ClipChip tone={passes > passWarningThreshold ? 'warn' : 'ok'} label={`fx ${passes}`} />
         )}
-        {clip.effects.some((effect) => effect.mask !== undefined) && (
-          <ClipChip tone="mask" label="mask" />
-        )}
+        {clip.effects.some((effect) => effect.mask !== undefined) && <ClipChip tone="mask" label="mask" />}
       </div>
 
       {clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (

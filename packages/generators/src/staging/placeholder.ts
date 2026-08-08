@@ -97,6 +97,7 @@ export function placeholderLength(request: PlaceholderRequest): PlaceholderLengt
     }
   }
 
-  const fallback = request.fallback ?? frameCount(Math.max(1, Math.round(DISCOVERED_PLACEHOLDER_SECONDS * fps)));
+  const fallback =
+    request.fallback ?? frameCount(Math.max(1, Math.round(DISCOVERED_PLACEHOLDER_SECONDS * fps)));
   return { frames: fallback, known: false };
 }

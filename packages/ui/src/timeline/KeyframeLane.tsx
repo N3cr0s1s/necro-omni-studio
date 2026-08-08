@@ -81,12 +81,9 @@ export function KeyframeLane({
   // Value under the playhead, which is what the right-edge readout shows.
   const clipRelativePlayhead = frameIndex(playhead - clipStart);
   const currentValue =
-    keyframes.length === 0
-      ? undefined
-      : evaluateAt({ kind: 'animated', keyframes }, clipRelativePlayhead);
+    keyframes.length === 0 ? undefined : evaluateAt({ kind: 'animated', keyframes }, clipRelativePlayhead);
 
-  const absoluteFrame = (keyframe: Keyframe): FrameIndex =>
-    frameIndex(clipStart + keyframe.frame);
+  const absoluteFrame = (keyframe: Keyframe): FrameIndex => frameIndex(clipStart + keyframe.frame);
 
   const handleDrag = (keyframe: Keyframe) => (event: PointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
@@ -112,8 +109,7 @@ export function KeyframeLane({
     const laneBounds = target.parentElement?.parentElement?.getBoundingClientRect();
 
     const move = (moveEvent: globalThis.PointerEvent): void => {
-      const offsetPx =
-        laneBounds === undefined ? moveEvent.clientX : moveEvent.clientX - laneBounds.left;
+      const offsetPx = laneBounds === undefined ? moveEvent.clientX : moveEvent.clientX - laneBounds.left;
       const frame = frameIndex(
         Math.max(0, Math.round(viewport.scrollFrame + offsetPx * viewport.framesPerPixel)),
       );
@@ -294,13 +290,7 @@ export function KeyframeLane({
 }
 
 /** Easing order for the cycle-on-click affordance. */
-export const EASING_CYCLE: readonly Easing[] = [
-  'linear',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-  'hold',
-];
+export const EASING_CYCLE: readonly Easing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'];
 
 /**
  * The next easing in the cycle.

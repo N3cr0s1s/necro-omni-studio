@@ -28,59 +28,127 @@
   ],
 
   "params": [
-    { "key": "source_image", "label": "Source image", "type": "image", "required": true,
-      "bind": "/62/inputs/image", "transport": "upload_image" },
+    {
+      "key": "source_image",
+      "label": "Source image",
+      "type": "image",
+      "required": true,
+      "bind": "/62/inputs/image",
+      "transport": "upload_image"
+    },
 
-    { "key": "prompt", "label": "Prompt", "type": "text", "multiline": true,
+    {
+      "key": "prompt",
+      "label": "Prompt",
+      "type": "text",
+      "multiline": true,
       "default": "convert input image to dark theme, background is black",
-      "bind": "/30:19/inputs/value" },
+      "bind": "/30:19/inputs/value"
+    },
 
-    { "key": "denoise", "label": "Strength", "type": "float",
-      "min": 0, "max": 1, "step": 0.05, "default": 0.6,
-      "bind": "/30:3/inputs/denoise" },
+    {
+      "key": "denoise",
+      "label": "Strength",
+      "type": "float",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.6,
+      "bind": "/30:3/inputs/denoise"
+    },
 
     { "key": "seed", "type": "seed", "bind": "/30:3/inputs/seed" },
 
-    { "key": "steps", "type": "int", "min": 1, "max": 40, "default": 8,
-      "bind": "/30:3/inputs/steps" },
+    { "key": "steps", "type": "int", "min": 1, "max": 40, "default": 8, "bind": "/30:3/inputs/steps" },
 
-    { "key": "cfg", "label": "CFG", "type": "float", "min": 1, "max": 10, "step": 0.5, "default": 1,
-      "bind": "/30:3/inputs/cfg" },
+    {
+      "key": "cfg",
+      "label": "CFG",
+      "type": "float",
+      "min": 1,
+      "max": 10,
+      "step": 0.5,
+      "default": 1,
+      "bind": "/30:3/inputs/cfg"
+    },
 
-    { "key": "sampler_name", "label": "Sampler", "type": "enum", "default": "euler",
+    {
+      "key": "sampler_name",
+      "label": "Sampler",
+      "type": "enum",
+      "default": "euler",
       "bind": "/30:3/inputs/sampler_name",
-      "options": { "from": "capabilities", "node_class": "KSampler", "input": "sampler_name" } },
+      "options": { "from": "capabilities", "node_class": "KSampler", "input": "sampler_name" }
+    },
 
-    { "key": "scheduler", "label": "Scheduler", "type": "enum", "default": "simple",
+    {
+      "key": "scheduler",
+      "label": "Scheduler",
+      "type": "enum",
+      "default": "simple",
       "bind": "/30:3/inputs/scheduler",
-      "options": { "from": "capabilities", "node_class": "KSampler", "input": "scheduler" } },
+      "options": { "from": "capabilities", "node_class": "KSampler", "input": "scheduler" }
+    },
 
-    { "key": "expand_prompt", "label": "Expand the prompt with an LLM", "type": "bool",
-      "default": false, "bind": "/30:24/inputs/value" },
+    {
+      "key": "expand_prompt",
+      "label": "Expand the prompt with an LLM",
+      "type": "bool",
+      "default": false,
+      "bind": "/30:24/inputs/value"
+    },
 
-    { "key": "use_lora", "label": "Apply the style LoRA", "type": "bool",
-      "default": false, "bind": "/30:23/inputs/value" },
+    {
+      "key": "use_lora",
+      "label": "Apply the style LoRA",
+      "type": "bool",
+      "default": false,
+      "bind": "/30:23/inputs/value"
+    },
 
-    { "key": "lora_name", "label": "LoRA", "type": "enum",
+    {
+      "key": "lora_name",
+      "label": "LoRA",
+      "type": "enum",
       "default": "krea2_darkbrush.safetensors",
       "bind": "/30:15/inputs/lora_name",
-      "options": { "from": "capabilities", "node_class": "LoraLoaderModelOnly", "input": "lora_name" } },
+      "options": { "from": "capabilities", "node_class": "LoraLoaderModelOnly", "input": "lora_name" }
+    },
 
-    { "key": "lora_strength", "label": "LoRA strength", "type": "float",
-      "min": 0, "max": 2, "step": 0.05, "default": 0.8,
-      "bind": "/30:15/inputs/strength_model" },
+    {
+      "key": "lora_strength",
+      "label": "LoRA strength",
+      "type": "float",
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "default": 0.8,
+      "bind": "/30:15/inputs/strength_model"
+    },
 
-    { "key": "lora_trigger", "label": "LoRA trigger words", "type": "text", "default": "",
-      "bind": "/30:27/inputs/string_b" },
+    {
+      "key": "lora_trigger",
+      "label": "LoRA trigger words",
+      "type": "text",
+      "default": "",
+      "bind": "/30:27/inputs/string_b"
+    },
 
-    { "key": "remove_background", "label": "Also produce a cut-out", "type": "bool",
-      "default": false, "bind": "/57/inputs/value" }
+    {
+      "key": "remove_background",
+      "label": "Also produce a cut-out",
+      "type": "bool",
+      "default": false,
+      "bind": "/57/inputs/value"
+    }
   ],
 
   "presets": [
-    { "id": "dark_theme", "name": "Dark theme",
-      "pin": { "prompt": "convert input image to dark theme, background is black", "denoise": 0.6 } },
-    { "id": "cutout", "name": "Cut-out",
-      "pin": { "remove_background": true, "denoise": 0.2 } }
+    {
+      "id": "dark_theme",
+      "name": "Dark theme",
+      "pin": { "prompt": "convert input image to dark theme, background is black", "denoise": 0.6 }
+    },
+    { "id": "cutout", "name": "Cut-out", "pin": { "remove_background": true, "denoise": 0.2 } }
   ]
 }

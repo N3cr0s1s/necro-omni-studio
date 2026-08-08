@@ -9,11 +9,7 @@ import {
   normalizeChanges,
 } from './watcher.js';
 
-function change(
-  kind: FileChange['kind'],
-  path: string,
-  overrides: Partial<FileChange> = {},
-): FileChange {
+function change(kind: FileChange['kind'], path: string, overrides: Partial<FileChange> = {}): FileChange {
   return { kind, path: assetPath(path), isDirectory: false, ...overrides };
 }
 
@@ -79,9 +75,7 @@ describe('coalesceChanges', () => {
       change('added', 'generated/a.mp4', { sizeBytes: 0 }),
       change('changed', 'generated/a.mp4', { sizeBytes: 900 }),
     ]);
-    expect(result).toEqual([
-      { kind: 'added', path: 'generated/a.mp4', isDirectory: false, sizeBytes: 900 },
-    ]);
+    expect(result).toEqual([{ kind: 'added', path: 'generated/a.mp4', isDirectory: false, sizeBytes: 900 }]);
   });
 
   it('cancels add-then-remove entirely, so a transient file never reaches the UI', () => {
@@ -102,10 +96,7 @@ describe('coalesceChanges', () => {
   });
 
   it('keeps change-then-remove as a remove', () => {
-    const result = coalesceChanges([
-      change('changed', 'media/a.mp4'),
-      change('removed', 'media/a.mp4'),
-    ]);
+    const result = coalesceChanges([change('changed', 'media/a.mp4'), change('removed', 'media/a.mp4')]);
     expect(result).toHaveLength(1);
     expect(result[0]!.kind).toBe('removed');
   });
@@ -125,11 +116,7 @@ describe('coalesceChanges', () => {
       change('added', 'media/a.mp4'),
       change('added', 'media/b.mp4'),
     ]);
-    expect(result.map((entry) => entry.path)).toEqual([
-      'media/c.mp4',
-      'media/a.mp4',
-      'media/b.mp4',
-    ]);
+    expect(result.map((entry) => entry.path)).toEqual(['media/c.mp4', 'media/a.mp4', 'media/b.mp4']);
   });
 
   it('is a no-op for an empty batch', () => {

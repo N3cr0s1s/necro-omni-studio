@@ -121,13 +121,17 @@ describe('transitions', () => {
 
   it('accepts the on-disk snake_case progress_uniform', () => {
     // The file format is the user's contract; the in-memory model is camelCase.
-    const registry = createEffectRegistry([manifest(validTransition, 'vec4 transition(vec2 u){return vec4(0);}')]);
+    const registry = createEffectRegistry([
+      manifest(validTransition, 'vec4 transition(vec2 u){return vec4(0);}'),
+    ]);
     expect(registry.resolve(effectId('crosswarp'))!.progressUniform).toBe('progress');
   });
 
   it('marks a gl-transitions shader as declaring its own uniforms', () => {
     // Re-declaring one would be a duplicate declaration and a compile error.
-    const registry = createEffectRegistry([manifest(validTransition, 'vec4 transition(vec2 u){return vec4(0);}')]);
+    const registry = createEffectRegistry([
+      manifest(validTransition, 'vec4 transition(vec2 u){return vec4(0);}'),
+    ]);
     expect(registry.resolve(effectId('crosswarp'))!.declaresOwnUniforms).toBe(true);
   });
 

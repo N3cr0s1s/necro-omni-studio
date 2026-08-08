@@ -357,9 +357,7 @@ describe('describeSelection', () => {
   });
 
   it('says so before the first result', () => {
-    expect(describeSelection(selectionOf([run('r1'), run('r2'), run('r3')]))).toBe(
-      'generating 3 variants',
-    );
+    expect(describeSelection(selectionOf([run('r1'), run('r2'), run('r3')]))).toBe('generating 3 variants');
   });
 
   it('says so when every variant failed', () => {

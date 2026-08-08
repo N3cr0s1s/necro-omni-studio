@@ -97,11 +97,7 @@ function assertAccepts(track: Track, clip: Clip): Result<Track, EditError> {
   });
 }
 
-function firstCollision(
-  track: Track,
-  span: FrameSpan,
-  ignore?: ClipId,
-): ClipId | undefined {
+function firstCollision(track: Track, span: FrameSpan, ignore?: ClipId): ClipId | undefined {
   for (const clip of trackClips(track)) {
     if (clip.id === ignore) continue;
     if (overlaps(clip.span, span)) return clip.id;
@@ -144,9 +140,7 @@ export function splitClip(
     ...shiftClipKeyframes(clip, -offset),
     id: newClipId,
     span: rightSpan,
-    ...(clip.kind === 'text'
-      ? {}
-      : { source: advanceSource(clip.source, offset, document.frameRate) }),
+    ...(clip.kind === 'text' ? {} : { source: advanceSource(clip.source, offset, document.frameRate) }),
   } as Clip;
 
   const withLeft = replaceClip(track, left);
@@ -174,9 +168,7 @@ function shiftClipKeyframes(clip: Clip, delta: number): Clip {
     params: Object.fromEntries(
       Object.entries(effect.params).map(([key, value]) => [
         key,
-        value.kind === 'static' || value.kind === 'animated'
-          ? shiftKeyframes(value, delta)
-          : value,
+        value.kind === 'static' || value.kind === 'animated' ? shiftKeyframes(value, delta) : value,
       ]),
     ),
   }));
@@ -284,9 +276,7 @@ export function trimClipStart(
   const next: Clip = {
     ...shifted,
     span: spanFromBounds(nextStart, end),
-    ...(clip.kind === 'text'
-      ? {}
-      : { source: advanceSource(clip.source, delta, document.frameRate) }),
+    ...(clip.kind === 'text' ? {} : { source: advanceSource(clip.source, delta, document.frameRate) }),
   } as Clip;
 
   return ok(replaceTrack(document, replaceClip(track, next)));
@@ -318,11 +308,7 @@ export function trimClipEnd(
     const bounds = options.sources?.boundsFor(clip);
     if (bounds !== undefined) {
       const requestedFrames = nextEnd - clip.span.start;
-      const requestedSource = toSourceFrames(
-        requestedFrames,
-        document.frameRate,
-        clip.source.sourceRate,
-      );
+      const requestedSource = toSourceFrames(requestedFrames, document.frameRate, clip.source.sourceRate);
       const available = bounds.totalFrames - clip.source.sourceIn;
       if (requestedSource > available) {
         return err({
@@ -381,11 +367,7 @@ export function slipClip(
 
   const bounds = options.sources?.boundsFor(clip);
   if (bounds !== undefined) {
-    const lengthInSource = toSourceFrames(
-      clip.span.duration,
-      document.frameRate,
-      clip.source.sourceRate,
-    );
+    const lengthInSource = toSourceFrames(clip.span.duration, document.frameRate, clip.source.sourceRate);
     if (nextIn + lengthInSource > bounds.totalFrames) {
       return err({
         kind: 'source-exhausted',
@@ -455,10 +437,7 @@ export function moveClip(
 }
 
 /** Removes a clip, leaving a gap — "lift". */
-export function liftClip(
-  document: TimelineDocument,
-  clipId: ClipId,
-): Result<TimelineDocument, EditError> {
+export function liftClip(document: TimelineDocument, clipId: ClipId): Result<TimelineDocument, EditError> {
   const located = locateClipOrFail(document, clipId);
   if (!located.ok) return located;
   const unlocked = assertUnlocked(located.value.track);
@@ -491,10 +470,13 @@ export function rippleDeleteClip(
     .filter((candidate) => candidate.id !== clipId)
     .map((candidate) =>
       candidate.span.start >= removedEnd
-        ? { ...candidate, span: spanFromBounds(
-            frameIndex(candidate.span.start - gap),
-            frameIndex(endExclusive(candidate.span) - gap),
-          ) }
+        ? {
+            ...candidate,
+            span: spanFromBounds(
+              frameIndex(candidate.span.start - gap),
+              frameIndex(endExclusive(candidate.span) - gap),
+            ),
+          }
         : candidate,
     );
 
@@ -528,10 +510,13 @@ export function rippleDeleteRange(
     if (!overlaps(clip.span, range)) {
       survivors.push(
         clip.span.start >= rangeEnd
-          ? ({ ...clip, span: spanFromBounds(
-              frameIndex(clip.span.start - gap),
-              frameIndex(endExclusive(clip.span) - gap),
-            ) } as Clip)
+          ? ({
+              ...clip,
+              span: spanFromBounds(
+                frameIndex(clip.span.start - gap),
+                frameIndex(endExclusive(clip.span) - gap),
+              ),
+            } as Clip)
           : clip,
       );
       continue;
@@ -541,8 +526,7 @@ export function rippleDeleteRange(
     const pieces = subtractSpan(clip.span, range);
     pieces.forEach((piece, index) => {
       const offsetIntoClip = piece.start - clip.span.start;
-      const shiftedStart =
-        piece.start >= rangeEnd ? frameIndex(piece.start - gap) : piece.start;
+      const shiftedStart = piece.start >= rangeEnd ? frameIndex(piece.start - gap) : piece.start;
       const base = shiftClipKeyframes(clip, -offsetIntoClip);
       survivors.push({
         ...base,
@@ -572,9 +556,7 @@ export function setClipEnabled(
   if (!unlocked.ok) return unlocked;
   if (located.value.clip.enabled === enabled) return ok(document);
 
-  return ok(
-    replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, enabled })),
-  );
+  return ok(replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, enabled })));
 }
 
 /** Renames a clip. */
@@ -589,7 +571,5 @@ export function setClipLabel(
   if (!unlocked.ok) return unlocked;
   if (located.value.clip.label === label) return ok(document);
 
-  return ok(
-    replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, label })),
-  );
+  return ok(replaceTrack(document, replaceClip(located.value.track, { ...located.value.clip, label })));
 }

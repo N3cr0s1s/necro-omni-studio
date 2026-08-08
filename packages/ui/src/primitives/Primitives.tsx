@@ -249,15 +249,10 @@ export function ValueField({ children, style }: WithChildren & Styled): ReactNod
 }
 
 /** Label-and-control row in the inspector, with the mockups' 66 px label column. */
-export function FieldRow({
-  label,
-  children,
-}: { readonly label: string } & WithChildren): ReactNode {
+export function FieldRow({ label, children }: { readonly label: string } & WithChildren): ReactNode {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: token.space4 }}>
-      <span style={{ width: 66, flex: 'none', font: token.textLabel, color: token.textSoft }}>
-        {label}
-      </span>
+      <span style={{ width: 66, flex: 'none', font: token.textLabel, color: token.textSoft }}>{label}</span>
       <div style={{ flex: 1, display: 'flex', gap: token.space2, minWidth: 0 }}>{children}</div>
     </div>
   );

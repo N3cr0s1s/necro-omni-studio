@@ -176,10 +176,7 @@ export function createDocumentStore(
   };
 }
 
-function buildSnapshot(
-  history: HistoryState<TimelineDocument>,
-  saved: TimelineDocument,
-): StoreSnapshot {
+function buildSnapshot(history: HistoryState<TimelineDocument>, saved: TimelineDocument): StoreSnapshot {
   return {
     document: history.present.document,
     canUndo: canUndo(history),

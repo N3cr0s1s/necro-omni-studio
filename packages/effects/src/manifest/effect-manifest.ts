@@ -215,10 +215,10 @@ const vTransitionManifest: Validator<TransitionManifest> = vObject<TransitionMan
  * An unknown category reports against that field rather than dumping both variants' failures, so a typo
  * reads as a typo.
  */
-export const vAnyEffectManifest: Validator<AnyEffectManifest> = vTagged<AnyEffectManifest>(
-  'category',
-  { effect: vEffectManifest, transition: vTransitionManifest },
-);
+export const vAnyEffectManifest: Validator<AnyEffectManifest> = vTagged<AnyEffectManifest>('category', {
+  effect: vEffectManifest,
+  transition: vTransitionManifest,
+});
 
 /**
  * Normalizes the on-disk snake_case spellings before validation.

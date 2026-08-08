@@ -114,9 +114,7 @@ export interface RasterKeyInput {
 export function rasterCacheKey(input: RasterKeyInput): string {
   const colour = `${round(input.color.r)},${round(input.color.g)},${round(input.color.b)},${round(input.color.a)}`;
   const outline =
-    input.outline === undefined
-      ? 'none'
-      : `${input.outline.width}:${round(input.outline.color.a)}`;
+    input.outline === undefined ? 'none' : `${input.outline.width}:${round(input.outline.color.a)}`;
   const shadow =
     input.shadow === undefined
       ? 'none'

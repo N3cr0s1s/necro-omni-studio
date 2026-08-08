@@ -1,9 +1,4 @@
-import {
-  type EffectId,
-  type ValidationIssue,
-  formatIssues,
-  validate,
-} from '@nos/core';
+import { type EffectId, type ValidationIssue, formatIssues, validate } from '@nos/core';
 import type {
   EffectShaderSource,
   EffectSourceResolver,
@@ -137,13 +132,11 @@ export function createEffectRegistry(manifests: readonly RawManifest[]): EffectR
     entries: () => entries,
     available: () =>
       entries.filter(
-        (entry): entry is Extract<EffectEntry, { status: 'available' }> =>
-          entry.status === 'available',
+        (entry): entry is Extract<EffectEntry, { status: 'available' }> => entry.status === 'available',
       ),
     problems: () =>
       entries.filter(
-        (entry): entry is Exclude<EffectEntry, { status: 'available' }> =>
-          entry.status !== 'available',
+        (entry): entry is Exclude<EffectEntry, { status: 'available' }> => entry.status !== 'available',
       ),
     find: (id) => byId.get(id),
     manifestFor: (id) => {
@@ -191,10 +184,7 @@ function toUniformDeclaration(param: EffectParam): EffectUniformDeclaration {
  * nothing about labels, ranges or groups. That is what lets the manifest format grow — a new UI field
  * cannot affect the render path.
  */
-export function toShaderSource(
-  manifest: AnyEffectManifest,
-  shaderSource: string,
-): EffectShaderSource {
+export function toShaderSource(manifest: AnyEffectManifest, shaderSource: string): EffectShaderSource {
   const uniforms = manifest.params.map(toUniformDeclaration);
 
   if (manifest.category === 'transition') {
@@ -205,9 +195,7 @@ export function toShaderSource(
       samplers: manifest.samplers,
       uniforms,
       ...(manifest.convention !== undefined ? { convention: manifest.convention } : {}),
-      ...(manifest.progressUniform !== undefined
-        ? { progressUniform: manifest.progressUniform }
-        : {}),
+      ...(manifest.progressUniform !== undefined ? { progressUniform: manifest.progressUniform } : {}),
       // A ported shader declares its own uniforms; one authored here relies on the generated
       // declarations. The convention flag is the only reliable signal available.
       ...(manifest.convention === 'gl-transitions' ? { declaresOwnUniforms: true } : {}),
@@ -264,9 +252,7 @@ export function defaultParams(
 }
 
 /** One-line summary of a registry problem, for a log or a tooltip. */
-export function describeEntryProblem(
-  entry: Exclude<EffectEntry, { status: 'available' }>,
-): string {
+export function describeEntryProblem(entry: Exclude<EffectEntry, { status: 'available' }>): string {
   if (entry.status === 'missing-shader') {
     return `${manifestLabel(entry.manifest)}: shader "${entry.shader}" was not found (${entry.origin})`;
   }

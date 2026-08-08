@@ -24,7 +24,14 @@ function manifest(overrides: Partial<GeneratorManifest> = {}): GeneratorManifest
     outputs: [{ key: 'audio', type: 'audio', node: '57' }],
     params: [
       { key: 'description', label: 'Description', type: 'text', multiline: true, bind: '/a' },
-      { key: 'category', label: 'Category', type: 'enum', options: ['Music', 'SFX'], default: 'Music', bind: '/b' },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'enum',
+        options: ['Music', 'SFX'],
+        default: 'Music',
+        bind: '/b',
+      },
       { key: 'duration_s', label: 'Length', type: 'float', min: 1, max: 60, default: 50, bind: '/c' },
       { key: 'enhance', label: 'Enhance', type: 'bool', default: false, bind: '/d' },
       { key: 'seed', type: 'seed', bind: '/e' },

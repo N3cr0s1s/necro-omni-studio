@@ -128,14 +128,13 @@ export function hasAudio(
  * A 90° or 270° rotation swaps width and height. Every consumer that lays out a preview or
  * chooses a proxy size needs the *displayed* size, so the swap happens once, here.
  */
-export function displayDimensions(
-  info: VideoStreamInfo,
-): { readonly width: number; readonly height: number } {
+export function displayDimensions(info: VideoStreamInfo): {
+  readonly width: number;
+  readonly height: number;
+} {
   const quarterTurns = Math.round(info.rotation / 90);
   const swapped = Math.abs(quarterTurns) % 2 === 1;
-  return swapped
-    ? { width: info.height, height: info.width }
-    : { width: info.width, height: info.height };
+  return swapped ? { width: info.height, height: info.width } : { width: info.width, height: info.height };
 }
 
 /** `1920×1080 · 29.97 · 00:00:42:11`-style summary for the browser's detail pane. */

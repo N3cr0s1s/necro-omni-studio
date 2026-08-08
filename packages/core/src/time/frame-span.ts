@@ -123,10 +123,7 @@ export function trimEnd(span: FrameSpan, delta: number): FrameSpan {
  * Returns `undefined` when the cut falls on or outside a boundary: cutting at a clip's
  * own edges is a no-op, not an error, and must not produce a zero-length clip.
  */
-export function split(
-  span: FrameSpan,
-  at: FrameIndex,
-): readonly [FrameSpan, FrameSpan] | undefined {
+export function split(span: FrameSpan, at: FrameIndex): readonly [FrameSpan, FrameSpan] | undefined {
   if (at <= span.start || at >= endExclusive(span)) return undefined;
   return [spanFromBounds(span.start, at), spanFromBounds(at, endExclusive(span))];
 }

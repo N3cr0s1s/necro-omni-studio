@@ -34,7 +34,7 @@ function droppedPerMinute(rate: FrameRate): number {
 
 export function framesToTimecode(position: FrameIndex, rate: FrameRate): Timecode {
   const negative = position < 0;
-  let remaining = Math.abs(position);
+  const remaining = Math.abs(position);
   const nominal = nominalRate(rate);
   const dropFrame = isDropFrameRate(rate);
 
@@ -89,10 +89,7 @@ export function timecodeToFrames(timecode: Timecode, rate: FrameRate): FrameInde
     const dropped = droppedPerMinute(rate);
     const droppingMinutes = totalMinutes - Math.floor(totalMinutes / 10);
     total =
-      totalMinutes * 60 * nominal +
-      timecode.seconds * nominal +
-      timecode.frames -
-      droppingMinutes * dropped;
+      totalMinutes * 60 * nominal + timecode.seconds * nominal + timecode.frames - droppingMinutes * dropped;
   } else {
     total = (totalMinutes * 60 + timecode.seconds) * nominal + timecode.frames;
   }
@@ -114,10 +111,7 @@ export function formatFrames(position: FrameIndex, rate: FrameRate): string {
   return formatTimecode(framesToTimecode(position, rate));
 }
 
-export function parseTimecode(
-  text: string,
-  rate: FrameRate,
-): Result<FrameIndex, TimecodeParseError> {
+export function parseTimecode(text: string, rate: FrameRate): Result<FrameIndex, TimecodeParseError> {
   const trimmed = text.trim();
   const negative = trimmed.startsWith('-');
   const body = negative ? trimmed.slice(1) : trimmed;
@@ -145,9 +139,7 @@ export function parseTimecode(
     }
   }
 
-  return ok(
-    timecodeToFrames({ hours, minutes, seconds, frames, dropFrame, negative }, rate),
-  );
+  return ok(timecodeToFrames({ hours, minutes, seconds, frames, dropFrame, negative }, rate));
 }
 
 function pad(value: number): string {

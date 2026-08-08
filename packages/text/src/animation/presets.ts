@@ -130,13 +130,7 @@ export function generatePreset(context: PresetContext): readonly GeneratedCurve[
 }
 
 /** Presets the UI offers, in menu order. */
-export const TEXT_PRESETS: readonly TextAnimationPreset[] = [
-  'none',
-  'fade',
-  'slide',
-  'scale',
-  'typewriter',
-];
+export const TEXT_PRESETS: readonly TextAnimationPreset[] = ['none', 'fade', 'slide', 'scale', 'typewriter'];
 
 /** Directions a slide accepts. */
 export const SLIDE_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
@@ -159,9 +153,7 @@ export function mergeGeneratedKeyframes(
   const last = generated[generated.length - 1]!;
 
   const kept = isAnimated(existing)
-    ? existing.keyframes.filter(
-        (keyframe) => keyframe.frame < first.frame || keyframe.frame > last.frame,
-      )
+    ? existing.keyframes.filter((keyframe) => keyframe.frame < first.frame || keyframe.frame > last.frame)
     : [];
 
   return animatedNumber([...kept, ...generated]);

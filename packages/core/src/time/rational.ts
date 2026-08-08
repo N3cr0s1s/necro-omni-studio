@@ -68,17 +68,11 @@ export function lcm(a: number, b: number): number {
 }
 
 export function add(a: Rational, b: Rational): Rational {
-  return rational(
-    a.numerator * b.denominator + b.numerator * a.denominator,
-    a.denominator * b.denominator,
-  );
+  return rational(a.numerator * b.denominator + b.numerator * a.denominator, a.denominator * b.denominator);
 }
 
 export function subtract(a: Rational, b: Rational): Rational {
-  return rational(
-    a.numerator * b.denominator - b.numerator * a.denominator,
-    a.denominator * b.denominator,
-  );
+  return rational(a.numerator * b.denominator - b.numerator * a.denominator, a.denominator * b.denominator);
 }
 
 export function multiply(a: Rational, b: Rational): Rational {

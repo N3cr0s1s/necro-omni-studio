@@ -13,7 +13,7 @@ import {
   isTrackAudible,
   trackClips,
 } from '@nos/core';
-import { Badge, Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
+import { Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
 import { token } from '../tokens/tokens.js';
 import { ClipBody } from './ClipBody.js';
 import {
@@ -120,11 +120,7 @@ export function Timeline(props: TimelineProps): ReactNode {
         borderTop: `1px solid ${token.border}`,
       }}
     >
-      <TimelineToolbar
-        {...props}
-        totalFrames={totalFrames}
-        clipCount={clipCount(document)}
-      />
+      <TimelineToolbar {...props} totalFrames={totalFrames} clipCount={clipCount(document)} />
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <TrackHeaderColumn
@@ -219,9 +215,7 @@ function TimelineToolbar({
 
       <div style={{ flex: 1 }} />
 
-      <Mono tone={token.textFaint}>
-        {formatTimelineStatus(document.frameRate, totalFrames, clips)}
-      </Mono>
+      <Mono tone={token.textFaint}>{formatTimelineStatus(document.frameRate, totalFrames, clips)}</Mono>
       <Button onClick={onAddTrack} style={{ height: token.controlHeightSm }}>
         + Track
       </Button>
@@ -254,7 +248,9 @@ function TrackHeaderColumn({
       }}
     >
       {/* Spacer aligning the headers with the lanes, which sit below the ruler. */}
-      <div style={{ height: token.rulerHeight, flex: 'none', borderBottom: `1px solid ${token.borderSubtle}` }} />
+      <div
+        style={{ height: token.rulerHeight, flex: 'none', borderBottom: `1px solid ${token.borderSubtle}` }}
+      />
 
       {tracks.map((track) => (
         <TrackHeader
@@ -326,9 +322,24 @@ function TrackHeader({
         {track.name}
       </span>
       <div style={{ display: 'flex', gap: token.space1, flex: 'none' }}>
-        <TrackToggle label="M" active={track.muted} title={`Mute ${track.name}`} onClick={() => onMute?.(track.id)} />
-        <TrackToggle label="S" active={track.solo} title={`Solo ${track.name}`} onClick={() => onSolo?.(track.id)} />
-        <TrackToggle label="L" active={track.locked} title={`Lock ${track.name}`} onClick={() => onLock?.(track.id)} />
+        <TrackToggle
+          label="M"
+          active={track.muted}
+          title={`Mute ${track.name}`}
+          onClick={() => onMute?.(track.id)}
+        />
+        <TrackToggle
+          label="S"
+          active={track.solo}
+          title={`Solo ${track.name}`}
+          onClick={() => onSolo?.(track.id)}
+        />
+        <TrackToggle
+          label="L"
+          active={track.locked}
+          title={`Lock ${track.name}`}
+          onClick={() => onLock?.(track.id)}
+        />
       </div>
     </div>
   );
@@ -488,9 +499,7 @@ function TrackLane({
           geometry={spanGeometry(viewport, clip.span)}
           heightPx={track.height}
           selected={selectedClips.has(clip.id)}
-          {...(stripUrls?.get(clip.id) !== undefined
-            ? { stripUrl: stripUrls.get(clip.id)! }
-            : {})}
+          {...(stripUrls?.get(clip.id) !== undefined ? { stripUrl: stripUrls.get(clip.id)! } : {})}
           onPointerDown={(clipId, event) => {
             onSelectClip?.(clipId, event.shiftKey || event.metaKey);
             onClipPointerDown?.(clipId, event);

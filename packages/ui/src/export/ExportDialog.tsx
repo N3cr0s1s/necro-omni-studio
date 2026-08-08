@@ -63,8 +63,7 @@ export function ExportDialog({
     progress.phase !== 'failed';
 
   const update = (patch: Partial<ExportSettings>): void => onChange?.({ ...settings, ...patch });
-  const issueFor = (path: string): string | undefined =>
-    issues.find((issue) => issue.path === path)?.message;
+  const issueFor = (path: string): string | undefined => issues.find((issue) => issue.path === path)?.message;
 
   return (
     <div
@@ -292,9 +291,7 @@ function ProgressSection({ progress }: { readonly progress: ExportProgress }): R
         </Mono>
       </div>
 
-      {progress.message !== undefined && !failed && (
-        <Mono tone={token.textGhost}>{progress.message}</Mono>
-      )}
+      {progress.message !== undefined && !failed && <Mono tone={token.textGhost}>{progress.message}</Mono>}
     </div>
   );
 }

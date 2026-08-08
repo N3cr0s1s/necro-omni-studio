@@ -109,11 +109,7 @@ function isPending(status: RunStatus): boolean {
  * A run that has not completed contributes a single pending candidate: there is nothing to expand yet, and
  * showing three identical "generating" chips for one submit would misreport what is happening.
  */
-function candidatesOf(
-  run: JobRun,
-  offset: number,
-  manifest: GeneratorManifest,
-): readonly VariantCandidate[] {
+function candidatesOf(run: JobRun, offset: number, manifest: GeneratorManifest): readonly VariantCandidate[] {
   const shared = {
     run: run.id,
     status: run.status,

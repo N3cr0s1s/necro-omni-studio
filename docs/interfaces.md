@@ -12,13 +12,13 @@ Az alkalmazás nem ismer modellt, node class-t, graphot vagy effektet. Minden k�
 
 Minden típushoz tartozik egy importer, amely a generátor kimenetét a projektbe hozza:
 
-| típus | importer teendői |
-|---|---|
+| típus   | importer teendői                                             |
+| ------- | ------------------------------------------------------------ |
 | `video` | proxy, filmstrip, audio stream leválasztása, klip létrehozás |
-| `audio` | waveform peak fájl, klip létrehozás |
-| `image` | thumbnail, still klip vagy asset |
-| `mask` | RLE vagy PNG sequence a `masks/` alá |
-| `text` | markdown a `notes/` alá vagy szövegklip |
+| `audio` | waveform peak fájl, klip létrehozás                          |
+| `image` | thumbnail, still klip vagy asset                             |
+| `mask`  | RLE vagy PNG sequence a `masks/` alá                         |
+| `text`  | markdown a `notes/` alá vagy szövegklip                      |
 
 ### 1.2 Capability descriptor
 
@@ -34,18 +34,18 @@ A manifest nem típusát deklarálja, hanem a be- és kimenetét. A UI ebből ve
 
 Leképezés:
 
-| consumes | produces | UI hely |
-|---|---|---|
-| `[]` | `video` | media browser, üres videósáv |
-| `[]` | `audio` | media browser, üres audiosáv |
-| `[]` | `image` | media browser |
-| `["image"]` role `first_frame` | `video` | frame jobbklikk → „generálj innen" |
-| `["video"]` | `video` | videóklip jobbklikk → feldolgozás |
-| `["video","mask"]` | `video` | maszkolt klip jobbklikk |
-| `["audio"]` | `audio` | audioklip jobbklikk |
-| `["video"]` | `audio` | videóklip → hang generálás |
-| `["audio"]` | `text` | audioklip → átirat |
-| `["text"]` role `script` | `audio` | media browser, üres audiosáv, szövegklip jobbklikk |
+| consumes                       | produces | UI hely                                            |
+| ------------------------------ | -------- | -------------------------------------------------- |
+| `[]`                           | `video`  | media browser, üres videósáv                       |
+| `[]`                           | `audio`  | media browser, üres audiosáv                       |
+| `[]`                           | `image`  | media browser                                      |
+| `["image"]` role `first_frame` | `video`  | frame jobbklikk → „generálj innen"                 |
+| `["video"]`                    | `video`  | videóklip jobbklikk → feldolgozás                  |
+| `["video","mask"]`             | `video`  | maszkolt klip jobbklikk                            |
+| `["audio"]`                    | `audio`  | audioklip jobbklikk                                |
+| `["video"]`                    | `audio`  | videóklip → hang generálás                         |
+| `["audio"]`                    | `text`   | audioklip → átirat                                 |
+| `["text"]` role `script`       | `audio`  | media browser, üres audiosáv, szövegklip jobbklikk |
 
 Az utolsó négy sor nincs implementálva. A `text` → `audio` (TTS) manifest kontraktusa megvan, a graph még nincs bekötve — lásd 2.3.
 
@@ -81,10 +81,10 @@ Egy queue minden generátor típusra. Két szint:
 
 A variánsok a `seed` paraméter változtatásával készülnek. Két végrehajtási mód:
 
-| mód | feltétel | viselkedés |
-|---|---|---|
-| sequential | default | N egymás utáni run, mindegyik saját seeddel |
-| batched | a manifest deklarál `batch` blokkot | egy submit, a batch méret patchelve, N kimenet |
+| mód        | feltétel                            | viselkedés                                     |
+| ---------- | ----------------------------------- | ---------------------------------------------- |
+| sequential | default                             | N egymás utáni run, mindegyik saját seeddel    |
+| batched    | a manifest deklarál `batch` blokkot | egy submit, a batch méret patchelve, N kimenet |
 
 A batched mód gyorsabb (a modell egyszer töltődik be), de a VRAM a batch mérettel skálázódik, és a graphnak támogatnia kell. Ezért nem default: a sequential bármilyen graphon működik, és run-onként megszakítható.
 
@@ -116,44 +116,80 @@ A batched mód gyorsabb (a modell egyszer töltődik be), de a VRAM a batch mér
   "default_variants": 3,
   "batch": { "bind": "/52:11/inputs/batch_size", "max": 4 },
 
-  "requires": ["CheckpointLoaderSimple", "EmptyLatentAudio", "CustomCombo",
-               "JsonExtractString", "TextGenerate", "ComfySwitchNode",
-               "SaveAudioAdvanced"],
-
-  "outputs": [
-    { "key": "audio", "type": "audio", "node": "57" }
+  "requires": [
+    "CheckpointLoaderSimple",
+    "EmptyLatentAudio",
+    "CustomCombo",
+    "JsonExtractString",
+    "TextGenerate",
+    "ComfySwitchNode",
+    "SaveAudioAdvanced"
   ],
 
+  "outputs": [{ "key": "audio", "type": "audio", "node": "57" }],
+
   "params": [
-    { "key": "description", "label": "Leírás", "type": "text", "multiline": true,
-      "bind": "/52:31/inputs/value" },
+    {
+      "key": "description",
+      "label": "Leírás",
+      "type": "text",
+      "multiline": true,
+      "bind": "/52:31/inputs/value"
+    },
 
-    { "key": "category", "label": "Kategória", "type": "enum",
-      "options": ["Music", "Instrument", "SFX", "One-shot"], "default": "Music",
-      "bind": "/52:43/inputs/choice" },
+    {
+      "key": "category",
+      "label": "Kategória",
+      "type": "enum",
+      "options": ["Music", "Instrument", "SFX", "One-shot"],
+      "default": "Music",
+      "bind": "/52:43/inputs/choice"
+    },
 
-    { "key": "duration_s", "label": "Hossz (s)", "type": "float",
-      "min": 1, "step": 1, "default": 50,
-      "bind": "/52:36/inputs/value" },
+    {
+      "key": "duration_s",
+      "label": "Hossz (s)",
+      "type": "float",
+      "min": 1,
+      "step": 1,
+      "default": 50,
+      "bind": "/52:36/inputs/value"
+    },
 
-    { "key": "enhance_prompt", "label": "Prompt bővítés LLM-mel", "type": "bool",
-      "default": false, "bind": "/52:35/inputs/value" },
+    {
+      "key": "enhance_prompt",
+      "label": "Prompt bővítés LLM-mel",
+      "type": "bool",
+      "default": false,
+      "bind": "/52:35/inputs/value"
+    },
 
-    { "key": "negative", "label": "Negatív prompt", "type": "text", "default": "",
-      "bind": "/52:7/inputs/text" },
+    {
+      "key": "negative",
+      "label": "Negatív prompt",
+      "type": "text",
+      "default": "",
+      "bind": "/52:7/inputs/text"
+    },
 
     { "key": "seed", "type": "seed", "bind": "/52:3/inputs/seed" },
-    { "key": "steps", "type": "int", "min": 1, "max": 100, "default": 50,
-      "bind": "/52:3/inputs/steps" },
-    { "key": "cfg", "type": "float", "min": 1, "max": 15, "step": 0.5, "default": 7,
-      "bind": "/52:3/inputs/cfg" }
+    { "key": "steps", "type": "int", "min": 1, "max": 100, "default": 50, "bind": "/52:3/inputs/steps" },
+    {
+      "key": "cfg",
+      "type": "float",
+      "min": 1,
+      "max": 15,
+      "step": 0.5,
+      "default": 7,
+      "bind": "/52:3/inputs/cfg"
+    }
   ],
 
   "presets": [
-    { "id": "music",       "name": "Zene",           "pin": { "category": "Music" } },
-    { "id": "instrumental","name": "Instrumentális", "pin": { "category": "Instrument" } },
-    { "id": "sfx",         "name": "SFX",            "pin": { "category": "SFX", "duration_s": 5 } },
-    { "id": "oneshot",     "name": "One-shot",       "pin": { "category": "One-shot", "duration_s": 2 } }
+    { "id": "music", "name": "Zene", "pin": { "category": "Music" } },
+    { "id": "instrumental", "name": "Instrumentális", "pin": { "category": "Instrument" } },
+    { "id": "sfx", "name": "SFX", "pin": { "category": "SFX", "duration_s": 5 } },
+    { "id": "oneshot", "name": "One-shot", "pin": { "category": "One-shot", "duration_s": 2 } }
   ]
 }
 ```
@@ -180,18 +216,36 @@ Csak a lényegi rész:
 
   "default_variants": 1,
   "params": [
-    { "key": "first_frame", "label": "Kezdőkocka", "type": "image", "required": true,
-      "bind": "/114/inputs/image", "transport": "upload_image" },
+    {
+      "key": "first_frame",
+      "label": "Kezdőkocka",
+      "type": "image",
+      "required": true,
+      "bind": "/114/inputs/image",
+      "transport": "upload_image"
+    },
     { "key": "prompt", "type": "text", "multiline": true, "bind": "/105:104/inputs/prompt" },
-    { "key": "duration_s", "type": "float", "min": 0.5, "max": 30, "default": 15,
-      "bind": "/105:111/inputs/value" },
+    {
+      "key": "duration_s",
+      "type": "float",
+      "min": 0.5,
+      "max": 30,
+      "default": 15,
+      "bind": "/105:111/inputs/value"
+    },
     { "key": "seed", "type": "seed", "bind": "/105:15/inputs/noise_seed" },
-    { "key": "fps", "type": "int", "default": 24,
+    {
+      "key": "fps",
+      "type": "int",
+      "default": 24,
       "bind": "/105:91/inputs/fps",
       "also": [
-        { "pointer": "/105:107/inputs/expression",
-          "template": "max(5, round(a * {fps})) + (5 - (max(5, round(a * {fps})) % 17)) % 17" }
-      ] }
+        {
+          "pointer": "/105:107/inputs/expression",
+          "template": "max(5, round(a * {fps})) + (5 - (max(5, round(a * {fps})) % 17)) % 17"
+        }
+      ]
+    }
   ]
 }
 ```
@@ -216,8 +270,7 @@ A manifest megírható a graph előtt. A `graph: null` és a `bind: null` pointe
 
   "produces": "audio",
   "consumes": [
-    { "type": "text",  "role": "script", "required": true,
-      "sources": ["inline", "notes_file", "text_clip"] },
+    { "type": "text", "role": "script", "required": true, "sources": ["inline", "notes_file", "text_clip"] },
     { "type": "audio", "role": "voice_reference", "required": false }
   ],
   "surfaces": ["media_browser", "audio_track_empty", "text_clip_context_menu"],
@@ -226,17 +279,21 @@ A manifest megírható a graph előtt. A `graph: null` és a `bind: null` pointe
   "default_variants": 1,
 
   "outputs": [
-    { "key": "audio",     "type": "audio", "node": null },
-    { "key": "alignment", "type": "text",  "node": null,
-      "format": "word_timings", "optional": true }
+    { "key": "audio", "type": "audio", "node": null },
+    { "key": "alignment", "type": "text", "node": null, "format": "word_timings", "optional": true }
   ],
 
   "params": [
     { "key": "script", "label": "Szöveg", "type": "text", "multiline": true, "bind": null },
-    { "key": "voice", "label": "Hang", "type": "enum", "bind": null,
-      "options": { "from": "capabilities" } },
-    { "key": "voice_reference", "label": "Hangminta", "type": "audio",
-      "required": false, "bind": null, "transport": "upload_audio" },
+    { "key": "voice", "label": "Hang", "type": "enum", "bind": null, "options": { "from": "capabilities" } },
+    {
+      "key": "voice_reference",
+      "label": "Hangminta",
+      "type": "audio",
+      "required": false,
+      "bind": null,
+      "transport": "upload_audio"
+    },
     { "key": "language", "type": "enum", "options": ["hu", "en"], "default": "hu", "bind": null },
     { "key": "speed", "type": "float", "min": 0.5, "max": 2, "step": 0.05, "default": 1, "bind": null },
     { "key": "seed", "type": "seed", "bind": null }
@@ -246,11 +303,11 @@ A manifest megírható a graph előtt. A `graph: null` és a `bind: null` pointe
 
 **Szöveg forrásai** (`sources`) — a `script` input három helyről kaphat tartalmat:
 
-| source | jelentés |
-|---|---|
-| `inline` | a panelen beírt szöveg |
+| source       | jelentés                                             |
+| ------------ | ---------------------------------------------------- |
+| `inline`     | a panelen beírt szöveg                               |
 | `notes_file` | markdown vagy txt fájl a projekt `notes/` mappájából |
-| `text_clip` | egy timeline-on lévő szövegklip tartalma |
+| `text_clip`  | egy timeline-on lévő szövegklip tartalma             |
 
 A `text_clip` az érdekes: a képernyőn már megjelenített szövegből generálsz narrációt, ezért van a `surfaces` között a `text_clip_context_menu`.
 
@@ -259,10 +316,12 @@ A `text_clip` az érdekes: a képernyőn már megjelenített szövegből generá
 **Alignment kimenet** — ha a motor tud szószintű időbélyeget, a `word_timings` formátum:
 
 ```json
-{ "words": [
-    { "text": "Egy", "start": 0.00, "end": 0.28 },
+{
+  "words": [
+    { "text": "Egy", "start": 0.0, "end": 0.28 },
     { "text": "rendszer", "start": 0.28, "end": 0.81 }
-  ] }
+  ]
+}
 ```
 
 Ebből később automatikusan szinkronban lévő szövegklipek generálhatók. Opcionális kimenet: ha a graph nem adja, a generátor működik nélküle.
@@ -273,23 +332,23 @@ Ebből később automatikusan szinkronban lévő szövegklipek generálhatók. O
 
 Minden manifest deklarálja, honnan derül ki a kimenet hossza:
 
-| érték | jelentés | placeholder | példa |
-|---|---|---|---|
-| `declared` | paraméter határozza meg | előre méretezett | videó és audio generálás |
-| `discovered` | csak a kimenetből derül ki | ismeretlen hosszú | TTS, stem szeparálás |
+| érték        | jelentés                   | placeholder       | példa                    |
+| ------------ | -------------------------- | ----------------- | ------------------------ |
+| `declared`   | paraméter határozza meg    | előre méretezett  | videó és audio generálás |
+| `discovered` | csak a kimenetből derül ki | ismeretlen hosszú | TTS, stem szeparálás     |
 
 `discovered` esetén a beszúrás szabálya: a klip a cél sávra kerül a playhead pozíciótól, a későbbi klipek **nem** csúsznak el. Ha ütközik egy meglévő klippel, a következő szabad audiosávra kerül, szükség esetén új sáv jön létre. Egy narráció ne rendezze át a videóvágást.
 
 ### 2.5 Paraméter típusok
 
-| type | UI kontroll | patch érték |
-|---|---|---|
-| `text` | egy- vagy többsoros input | string |
-| `int`, `float` | slider + numerikus input | szám |
-| `bool` | switch | bool |
-| `enum` | dropdown (statikus lista vagy `capabilities()`) | string |
-| `seed` | szám + randomize/lock | int |
-| `image`, `video`, `audio`, `mask` | asset picker vagy timeline-forrás | feltöltött filename |
+| type                              | UI kontroll                                     | patch érték         |
+| --------------------------------- | ----------------------------------------------- | ------------------- |
+| `text`                            | egy- vagy többsoros input                       | string              |
+| `int`, `float`                    | slider + numerikus input                        | szám                |
+| `bool`                            | switch                                          | bool                |
+| `enum`                            | dropdown (statikus lista vagy `capabilities()`) | string              |
+| `seed`                            | szám + randomize/lock                           | int                 |
+| `image`, `video`, `audio`, `mask` | asset picker vagy timeline-forrás               | feltöltött filename |
 
 Az `enum` `options: { "from": "capabilities", "node_class": "...", "input": "..." }` formában élő listát kap a backendről — a modell- és sampler-listák így mindig a valós állapotot tükrözik.
 
@@ -332,10 +391,24 @@ Effekt = GLSL fragment shader + manifest, az `effects/` mappában. A compositor 
   "shader": "film_grain.frag",
   "samplers": ["source"],
   "params": [
-    { "key": "amount", "uniform": "u_amount", "type": "float",
-      "min": 0, "max": 1, "default": 0.15, "keyframable": true },
-    { "key": "size", "uniform": "u_size", "type": "float",
-      "min": 0.5, "max": 4, "default": 1, "keyframable": true }
+    {
+      "key": "amount",
+      "uniform": "u_amount",
+      "type": "float",
+      "min": 0,
+      "max": 1,
+      "default": 0.15,
+      "keyframable": true
+    },
+    {
+      "key": "size",
+      "uniform": "u_size",
+      "type": "float",
+      "min": 0.5,
+      "max": 4,
+      "default": 1,
+      "keyframable": true
+    }
   ]
 }
 ```
@@ -351,8 +424,15 @@ Effekt = GLSL fragment shader + manifest, az `effects/` mappában. A compositor 
   "samplers": ["from", "to"],
   "progress_uniform": "progress",
   "params": [
-    { "key": "strength", "uniform": "strength", "type": "float",
-      "min": 0, "max": 1, "default": 0.4, "keyframable": false }
+    {
+      "key": "strength",
+      "uniform": "strength",
+      "type": "float",
+      "min": 0,
+      "max": 1,
+      "default": 0.4,
+      "keyframable": false
+    }
   ]
 }
 ```
@@ -367,8 +447,15 @@ A `convention: "gl-transitions"` esetén a compositor a szabvány wrappert gener
   "category": "effect",
   "samplers": ["source", "mask"],
   "params": [
-    { "key": "radius", "uniform": "u_radius", "type": "float",
-      "min": 0, "max": 40, "default": 12, "keyframable": true },
+    {
+      "key": "radius",
+      "uniform": "u_radius",
+      "type": "float",
+      "min": 0,
+      "max": 40,
+      "default": 12,
+      "keyframable": true
+    },
     { "key": "invert", "uniform": "u_invert", "type": "bool", "default": false }
   ]
 }
@@ -392,10 +479,12 @@ uniform float u_clip_length;  // klip hossza másodpercben
 Minden `keyframable: true` paraméter értéke vagy skalár, vagy keyframe lista:
 
 ```json
-{ "keyframes": [
-    { "t": 0,   "v": 0,   "ease": "linear" },
+{
+  "keyframes": [
+    { "t": 0, "v": 0, "ease": "linear" },
     { "t": 1.5, "v": 0.8, "ease": "ease-in-out" }
-  ] }
+  ]
+}
 ```
 
 A `t` klip-relatív másodperc. Interpoláció v1-ben: `linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`. Bezier görbeszerkesztő v2.
@@ -416,14 +505,14 @@ A szövegklip nem shader-effekt, hanem saját réteg-típus, de a paraméterei u
 
 ### 5.1 Szövegklip paraméterek
 
-| paraméter | típus | keyframe |
-|---|---|---|
-| `content` | text | nem |
-| `font`, `size`, `weight` | enum / int | nem |
-| `color`, `outline`, `shadow` | color / objektum | nem |
-| `x`, `y` | float (0–1 normalizált) | igen |
-| `scale`, `rotation`, `opacity` | float | igen |
-| `letter_spacing`, `line_height` | float | igen |
+| paraméter                       | típus                   | keyframe |
+| ------------------------------- | ----------------------- | -------- |
+| `content`                       | text                    | nem      |
+| `font`, `size`, `weight`        | enum / int              | nem      |
+| `color`, `outline`, `shadow`    | color / objektum        | nem      |
+| `x`, `y`                        | float (0–1 normalizált) | igen     |
+| `scale`, `rotation`, `opacity`  | float                   | igen     |
+| `letter_spacing`, `line_height` | float                   | igen     |
 
 ### 5.2 Animáció presetek
 
@@ -431,7 +520,7 @@ Preset = előre definiált keyframe-generátor. Beállításnál a rendszer lege
 
 ```json
 {
-  "in":  { "preset": "slide", "direction": "up", "duration": 0.4, "ease": "ease-out" },
+  "in": { "preset": "slide", "direction": "up", "duration": 0.4, "ease": "ease-out" },
   "out": { "preset": "fade", "duration": 0.3, "ease": "linear" }
 }
 ```

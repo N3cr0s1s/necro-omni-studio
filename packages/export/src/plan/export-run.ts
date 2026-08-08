@@ -24,13 +24,7 @@ import type { ExportSettings } from '../contracts/export-settings.js';
  */
 
 export type ExportPhase =
-  | 'preparing'
-  | 'rendering'
-  | 'encoding'
-  | 'muxing'
-  | 'complete'
-  | 'cancelled'
-  | 'failed';
+  'preparing' | 'rendering' | 'encoding' | 'muxing' | 'complete' | 'cancelled' | 'failed';
 
 export interface ExportProgress {
   readonly phase: ExportPhase;
@@ -145,16 +139,13 @@ export function createProgressTracker(framesTotal: number, startedAtMs: number):
     snapshot(atMs: number): ExportProgress {
       const elapsedMs = Math.max(1, atMs - startedAtMs);
       const averageMs =
-        recent.length === 0
-          ? 0
-          : recent.reduce((total, value) => total + value, 0) / recent.length;
+        recent.length === 0 ? 0 : recent.reduce((total, value) => total + value, 0) / recent.length;
       const fps = averageMs > 0 ? 1000 / averageMs : (framesDone / elapsedMs) * 1000;
 
       const remaining = framesTotal - framesDone;
       // Withheld until a few frames are in: an estimate from one sample is noise, and a wildly wrong
       // first number is worse than none.
-      const remainingSeconds =
-        framesDone >= 3 && fps > 0 ? Math.round(remaining / fps) : undefined;
+      const remainingSeconds = framesDone >= 3 && fps > 0 ? Math.round(remaining / fps) : undefined;
 
       return {
         phase,
@@ -175,9 +166,7 @@ export function formatRemaining(seconds: number | undefined): string {
   if (seconds < 60) return `about ${Math.max(1, seconds)} s remaining`;
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
-  return rest === 0
-    ? `about ${minutes} min remaining`
-    : `about ${minutes} min ${rest} s remaining`;
+  return rest === 0 ? `about ${minutes} min remaining` : `about ${minutes} min ${rest} s remaining`;
 }
 
 /**
@@ -186,10 +175,7 @@ export function formatRemaining(seconds: number | undefined): string {
  * Falls back to the whole sequence, which is the same rule preview loop playback uses — one definition, so
  * "export the work range" and "loop the work range" cannot disagree.
  */
-export function resolveExportRange(
-  document: TimelineDocument,
-  override?: FrameSpan,
-): FrameSpan {
+export function resolveExportRange(document: TimelineDocument, override?: FrameSpan): FrameSpan {
   if (override !== undefined) return override;
   const workRange = document.sequence.workRange;
   if (workRange !== undefined) return workRange;

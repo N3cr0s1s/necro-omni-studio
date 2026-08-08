@@ -212,9 +212,7 @@ describe('reveal against wrapped text', () => {
     const advances = advancesFor(lines);
     expect(advances.totalCharacters).toBe(6);
 
-    const counts = [0, 0.2, 0.5, 0.9, 1].map(
-      (reveal) => typewriterAt(advances, reveal).revealedCharacters,
-    );
+    const counts = [0, 0.2, 0.5, 0.9, 1].map((reveal) => typewriterAt(advances, reveal).revealedCharacters);
     expect(counts).toEqual([0, 1, 3, 5, 6]);
   });
 });

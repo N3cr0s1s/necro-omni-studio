@@ -92,10 +92,7 @@ describe('slide', () => {
 
   it('defaults to up when no direction is given', () => {
     const curves = generate({ preset: 'slide' });
-    expect(curves.find((curve) => curve.channel === 'y')!.keyframes[0]!.value).toBeCloseTo(
-      SLIDE_DISTANCE,
-      6,
-    );
+    expect(curves.find((curve) => curve.channel === 'y')!.keyframes[0]!.value).toBeCloseTo(SLIDE_DISTANCE, 6);
   });
 
   it('animates toward the authored rest position, not toward zero', () => {

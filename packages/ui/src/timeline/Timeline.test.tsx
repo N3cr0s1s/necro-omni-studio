@@ -128,12 +128,8 @@ describe('clip appearance', () => {
     ]);
     renderTimeline({ document: doc });
 
-    expect(document.querySelector('[data-clip-id="made"]')?.getAttribute('data-generated')).toBe(
-      'true',
-    );
-    expect(
-      document.querySelector('[data-clip-id="imported"]')?.getAttribute('data-generated'),
-    ).toBe('false');
+    expect(document.querySelector('[data-clip-id="made"]')?.getAttribute('data-generated')).toBe('true');
+    expect(document.querySelector('[data-clip-id="imported"]')?.getAttribute('data-generated')).toBe('false');
   });
 
   it('shows the seed on a generated clip, since reproducing a result needs it', () => {
@@ -245,9 +241,7 @@ describe('track controls', () => {
       ...doc,
       sequence: {
         ...doc.sequence,
-        tracks: doc.sequence.tracks.map((track) =>
-          track.id === 'v1' ? { ...track, muted: true } : track,
-        ),
+        tracks: doc.sequence.tracks.map((track) => (track.id === 'v1' ? { ...track, muted: true } : track)),
       },
     };
     renderTimeline({ document: muted });

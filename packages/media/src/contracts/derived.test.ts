@@ -25,15 +25,9 @@ describe('cacheKey', () => {
   it('differs when a derivation parameter differs', () => {
     // Otherwise a settings change would silently serve the old artifact, which presents as
     // "the preview is mysteriously soft" and is very hard to trace.
-    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(
-      cacheKey(hashA, { ...DEFAULT_PROXY, shortEdge: 720 }),
-    );
-    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(
-      cacheKey(hashA, { ...DEFAULT_PROXY, frameRate: 60 }),
-    );
-    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(
-      cacheKey(hashA, { ...DEFAULT_PROXY, quality: 18 }),
-    );
+    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(cacheKey(hashA, { ...DEFAULT_PROXY, shortEdge: 720 }));
+    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(cacheKey(hashA, { ...DEFAULT_PROXY, frameRate: 60 }));
+    expect(cacheKey(hashA, DEFAULT_PROXY)).not.toBe(cacheKey(hashA, { ...DEFAULT_PROXY, quality: 18 }));
   });
 
   it('differs across kinds derived from identical bytes', () => {
@@ -72,18 +66,12 @@ describe('describeSpec', () => {
 
 describe('derivedPath', () => {
   it('places artifacts under the disposable cache folder', () => {
-    expect(derivedPath(hashA, DEFAULT_PROXY)).toBe(
-      'cache/proxy_1080p30q23_9f3c1a27b4e8d016.mp4',
-    );
+    expect(derivedPath(hashA, DEFAULT_PROXY)).toBe('cache/proxy_1080p30q23_9f3c1a27b4e8d016.mp4');
   });
 
   it('uses the extension registered for the kind', () => {
-    expect(derivedPath(hashA, DEFAULT_FILMSTRIP).endsWith(`.${DERIVED_EXTENSIONS.filmstrip}`)).toBe(
-      true,
-    );
-    expect(derivedPath(hashA, DEFAULT_WAVEFORM).endsWith(`.${DERIVED_EXTENSIONS.waveform}`)).toBe(
-      true,
-    );
+    expect(derivedPath(hashA, DEFAULT_FILMSTRIP).endsWith(`.${DERIVED_EXTENSIONS.filmstrip}`)).toBe(true);
+    expect(derivedPath(hashA, DEFAULT_WAVEFORM).endsWith(`.${DERIVED_EXTENSIONS.waveform}`)).toBe(true);
   });
 });
 

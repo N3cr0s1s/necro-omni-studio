@@ -179,7 +179,9 @@ describe('capabilities', () => {
   it('reports installed node classes for the registry requires check', async () => {
     const transport = fakeTransport({
       '/object_info': {
-        CheckpointLoaderSimple: { input: { required: { ckpt_name: [['a.safetensors', 'b.safetensors'], {}] } } },
+        CheckpointLoaderSimple: {
+          input: { required: { ckpt_name: [['a.safetensors', 'b.safetensors'], {}] } },
+        },
         KSampler: { input: { required: { steps: ['INT', { default: 20 }] } } },
       },
     });
@@ -196,7 +198,9 @@ describe('capabilities', () => {
     // not dictate today's checkpoint list.
     const transport = fakeTransport({
       '/object_info': {
-        CheckpointLoaderSimple: { input: { required: { ckpt_name: [['a.safetensors', 'b.safetensors'], {}] } } },
+        CheckpointLoaderSimple: {
+          input: { required: { ckpt_name: [['a.safetensors', 'b.safetensors'], {}] } },
+        },
       },
     });
 

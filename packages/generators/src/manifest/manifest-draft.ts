@@ -271,7 +271,8 @@ export function validateDraft(draft: ManifestDraft): readonly DraftIssue[] {
     warn('/surfaces', 'with no surface declared the generator has no entry point in the UI');
   }
   if (draft.graph === null) warn('/graph', 'the graph is not connected yet');
-  if (draft.batch !== undefined && draft.batch.max < 1) error('/batch/max', 'the batch size must be at least 1');
+  if (draft.batch !== undefined && draft.batch.max < 1)
+    error('/batch/max', 'the batch size must be at least 1');
 
   return issues;
 }

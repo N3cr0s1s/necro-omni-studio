@@ -51,8 +51,7 @@ function memoryStorage(): MaskStorage & { readonly files: Map<string, string> } 
 }
 
 describe('the cache key', () => {
-  const key = (track: MaskTrack) =>
-    maskCacheKey(source, { start: 0, end: 100 }, track.prompts);
+  const key = (track: MaskTrack) => maskCacheKey(source, { start: 0, end: 100 }, track.prompts);
 
   it('is stable for the same track', () => {
     const track = withPrompt(base(), point(10));

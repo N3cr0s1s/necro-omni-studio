@@ -49,12 +49,7 @@ import {
 
 /** JSON-safe value. `unknown` would let a `Map` or a `Date` slip through unnoticed. */
 export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
+  string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export type JsonObject = { readonly [key: string]: JsonValue };
 
@@ -163,12 +158,8 @@ export function serializeTransform(transform: ClipTransform): JsonObject | undef
     x: isStaticValue(transform.x, 0) ? undefined : serializeAnimatable(transform.x),
     y: isStaticValue(transform.y, 0) ? undefined : serializeAnimatable(transform.y),
     scale: isStaticValue(transform.scale, 1) ? undefined : serializeAnimatable(transform.scale),
-    rotation: isStaticValue(transform.rotation, 0)
-      ? undefined
-      : serializeAnimatable(transform.rotation),
-    opacity: isStaticValue(transform.opacity, 1)
-      ? undefined
-      : serializeAnimatable(transform.opacity),
+    rotation: isStaticValue(transform.rotation, 0) ? undefined : serializeAnimatable(transform.rotation),
+    opacity: isStaticValue(transform.opacity, 1) ? undefined : serializeAnimatable(transform.opacity),
   });
   return Object.keys(output).length === 0 ? undefined : output;
 }
@@ -271,8 +262,7 @@ export function serializeTextClip(clip: TextClip): JsonObject {
     content: serializeTextContent(clip.content),
     transform: serializeTransform(clip.transform),
     animateIn: clip.animateIn === undefined ? undefined : serializeTextAnimation(clip.animateIn),
-    animateOut:
-      clip.animateOut === undefined ? undefined : serializeTextAnimation(clip.animateOut),
+    animateOut: clip.animateOut === undefined ? undefined : serializeTextAnimation(clip.animateOut),
     reveal: clip.reveal === undefined ? undefined : serializeAnimatable(clip.reveal),
   });
 }
@@ -322,8 +312,7 @@ export function serializeTrack(track: Track): JsonObject {
     case 'video':
       return compact({
         ...base,
-        transitions:
-          track.transitions.length === 0 ? undefined : track.transitions.map(serializeTransition),
+        transitions: track.transitions.length === 0 ? undefined : track.transitions.map(serializeTransition),
       });
     case 'audio':
       return compact({

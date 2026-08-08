@@ -67,7 +67,10 @@ export function setPropagation(session: MaskSession, span: FrameSpan): MaskSessi
 }
 
 /** The request an engine is given. `undefined` when there is nothing to segment yet. */
-export function toRequest(session: MaskSession, source: SegmentationRequest['source']): SegmentationRequest | undefined {
+export function toRequest(
+  session: MaskSession,
+  source: SegmentationRequest['source'],
+): SegmentationRequest | undefined {
   if (session.track.prompts.length === 0) return undefined;
   return { source, range: session.propagation, prompts: session.track.prompts };
 }

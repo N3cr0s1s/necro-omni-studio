@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { FRAME_RATES, frameRate } from '../time/frame-rate.js';
-import { frameCount, frameIndex } from '../time/frame-time.js';
+import { frameIndex } from '../time/frame-time.js';
 import { spanFromBounds } from '../time/frame-span.js';
 import { type TimelineDocument, SCHEMA_VERSION, createDocument } from '../document/document.js';
-import {
-  type AudioTrack,
-  type TextTrack,
-  type VideoTrack,
-} from '../document/track.js';
+import { type AudioTrack, type TextTrack, type VideoTrack } from '../document/track.js';
 import {
   assetPath,
   clipId,
@@ -400,10 +396,7 @@ describe('load failures', () => {
 
   it('rejects an asset path that escapes the project folder', () => {
     const document = serializeDocument(richDocument()) as Record<string, unknown>;
-    const text = JSON.stringify(document).replace(
-      'media/interview_a.mp4',
-      '../../etc/passwd',
-    );
+    const text = JSON.stringify(document).replace('media/interview_a.mp4', '../../etc/passwd');
     const result = loadDocument(text);
     expect(result.ok).toBe(false);
     if (!result.ok && result.error.kind === 'invalid-document') {
@@ -412,10 +405,7 @@ describe('load failures', () => {
   });
 
   it('rejects a non-positive speed factor that would divide by zero in the retimer', () => {
-    const text = JSON.stringify(serializeDocument(richDocument())).replace(
-      '"factor":0.5',
-      '"factor":0',
-    );
+    const text = JSON.stringify(serializeDocument(richDocument())).replace('"factor":0.5', '"factor":0');
     const result = loadDocument(text);
     expect(result.ok).toBe(false);
     if (!result.ok && result.error.kind === 'invalid-document') {

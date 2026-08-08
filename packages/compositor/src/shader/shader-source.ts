@@ -42,12 +42,7 @@ void main() {
 `;
 
 /** Uniforms every effect can use without declaring them, per the spec. */
-export const BUILTIN_UNIFORMS = [
-  'u_resolution',
-  'u_time',
-  'u_clip_time',
-  'u_clip_length',
-] as const;
+export const BUILTIN_UNIFORMS = ['u_resolution', 'u_time', 'u_clip_time', 'u_clip_length'] as const;
 
 export type BuiltinUniform = (typeof BUILTIN_UNIFORMS)[number];
 
@@ -119,9 +114,7 @@ export function assembleFragmentShader(effect: EffectShaderSource): AssembledSha
   const preambleLines = header.split('\n').length;
 
   const body =
-    effect.convention === 'gl-transitions'
-      ? `${effect.source}\n\n${GL_TRANSITIONS_MAIN}`
-      : effect.source;
+    effect.convention === 'gl-transitions' ? `${effect.source}\n\n${GL_TRANSITIONS_MAIN}` : effect.source;
 
   return {
     source: `${header}\n${body}\n`,

@@ -9,11 +9,7 @@ import type {
 } from '../contracts/render-plan.js';
 import type { ProgramCache, ShaderCompileError } from '../contracts/effect-source.js';
 import { type BuiltinPrograms, type GlProgram } from './program-cache.js';
-import {
-  type RenderTarget,
-  type RenderTargetPool,
-  createPingPong,
-} from './render-target.js';
+import { type RenderTarget, type RenderTargetPool, createPingPong } from './render-target.js';
 
 /**
  * Supplies textures for layer sources and masks.
@@ -377,11 +373,7 @@ export function createGlCompositor(options: GlCompositorOptions): GlCompositor {
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.disable(gl.BLEND);
       gl.useProgram(builtins.passthrough.program);
-      bindSamplers(
-        builtins.passthrough,
-        new Map([['source', accumulator.texture]]),
-        accumulator.texture,
-      );
+      bindSamplers(builtins.passthrough, new Map([['source', accumulator.texture]]), accumulator.texture);
       drawFullscreen();
 
       pool.release(accumulator);

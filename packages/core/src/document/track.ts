@@ -1,6 +1,13 @@
 import { type FrameCount, type FrameIndex, frameCount, frameIndex } from '../time/frame-time.js';
 import { type FrameSpan, compareSpans, endExclusive, overlaps } from '../time/frame-span.js';
-import { type AudioClip, type Clip, type ImageClip, type TextClip, type Transition, type VideoClip } from './clip.js';
+import {
+  type AudioClip,
+  type Clip,
+  type ImageClip,
+  type TextClip,
+  type Transition,
+  type VideoClip,
+} from './clip.js';
 import { type ClipId, type TrackId } from './ids.js';
 
 /**
@@ -83,9 +90,7 @@ export function sortedClips(track: Track): readonly Clip[] {
 
 /** The clip covering a frame, or `undefined` in a gap. */
 export function clipAt(track: Track, frame: FrameIndex): Clip | undefined {
-  return trackClips(track).find(
-    (clip) => frame >= clip.span.start && frame < endExclusive(clip.span),
-  );
+  return trackClips(track).find((clip) => frame >= clip.span.start && frame < endExclusive(clip.span));
 }
 
 /**
@@ -104,9 +109,7 @@ export function clipsIn(track: Track, span: FrameSpan): readonly Clip[] {
  * placement while being dragged.
  */
 export function isSpanFree(track: Track, span: FrameSpan, ignore?: ClipId): boolean {
-  return !trackClips(track).some(
-    (clip) => clip.id !== ignore && overlaps(clip.span, span),
-  );
+  return !trackClips(track).some((clip) => clip.id !== ignore && overlaps(clip.span, span));
 }
 
 /** Last frame occupied by any clip on the track. Zero for an empty track. */

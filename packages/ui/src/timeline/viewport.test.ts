@@ -326,8 +326,6 @@ describe('formatting', () => {
   });
 
   it('formats the status line', () => {
-    expect(formatTimelineStatus(FRAME_RATES.NTSC_29_97, 3241, 12)).toBe(
-      '29.97 fps · 3241 f · 12 clips',
-    );
+    expect(formatTimelineStatus(FRAME_RATES.NTSC_29_97, 3241, 12)).toBe('29.97 fps · 3241 f · 12 clips');
   });
 });

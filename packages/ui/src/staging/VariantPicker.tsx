@@ -1,10 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import type { JobRunId } from '@nos/core';
-import {
-  type VariantCandidate,
-  type VariantSelection,
-  describeSelection,
-} from '@nos/generators';
+import { type VariantCandidate, type VariantSelection, describeSelection } from '@nos/generators';
 import { Badge, Button, Mono, SectionCaption } from '../primitives/Primitives.js';
 import { token } from '../tokens/tokens.js';
 

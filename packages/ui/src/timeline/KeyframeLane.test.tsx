@@ -3,13 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type Easing, type Keyframe, FRAME_RATES, frameIndex, keyframeId } from '@nos/core';
-import {
-  EASING_CYCLE,
-  KEYFRAME_LANE_HEIGHT,
-  KeyframeLane,
-  laneLabel,
-  nextEasing,
-} from './KeyframeLane.js';
+import { EASING_CYCLE, KEYFRAME_LANE_HEIGHT, KeyframeLane, laneLabel, nextEasing } from './KeyframeLane.js';
 import { createViewport } from './viewport.js';
 
 afterEach(cleanup);
@@ -100,9 +94,7 @@ describe('easing badges', () => {
 
   it('shows the value alongside the easing on the selected marker', () => {
     renderLane({ selected: keyframeId('k1') });
-    expect(screen.getByRole('button', { name: /Easing after frame 0/ }).textContent).toBe(
-      '0.00 · ease-out',
-    );
+    expect(screen.getByRole('button', { name: /Easing after frame 0/ }).textContent).toBe('0.00 · ease-out');
   });
 });
 

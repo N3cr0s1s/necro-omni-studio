@@ -100,9 +100,9 @@ describe('collectSnapCandidates', () => {
   it('includes markers and both work-range edges', () => {
     const candidates = collectSnapCandidates(makeDocument([]), frameIndex(0));
     expect(candidates.filter((entry) => entry.kind === 'marker').map((e) => e.frame)).toEqual([500]);
-    expect(
-      candidates.filter((entry) => entry.kind === 'work-range').map((e) => e.frame),
-    ).toEqual([900, 1400]);
+    expect(candidates.filter((entry) => entry.kind === 'work-range').map((e) => e.frame)).toEqual([
+      900, 1400,
+    ]);
   });
 
   it('excludes the dragged clip, so it cannot snap to its own edges', () => {

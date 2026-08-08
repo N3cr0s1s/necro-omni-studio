@@ -17,7 +17,6 @@ import {
   DEFAULT_SCHEDULER,
   SCRUB_GRAIN_SECONDS,
   createPeakMeter,
-  panGains,
 } from '../contracts/index.js';
 import { buildMixPlan } from '../plan/build-mix-plan.js';
 
@@ -242,7 +241,9 @@ export function createWebAudioEngine(options: WebAudioEngineOptions): AudioEngin
       // The origin is offset back by the start frame so `timelineOrigin + startSeconds` lands correctly
       // for a source anywhere on the timeline, not only from zero.
       timelineOrigin =
-        context.currentTime + scheduler.scheduleMarginSeconds - framesToSecondsNumber(from, document.frameRate);
+        context.currentTime +
+        scheduler.scheduleMarginSeconds -
+        framesToSecondsNumber(from, document.frameRate);
       plannedThroughFrame = from;
 
       publish({ state: 'playing', frame: from, starved: false });

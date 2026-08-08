@@ -40,8 +40,17 @@ const RESOLUTION = { width: 64, height: 64 };
 function solidTexture(r: number, g: number, b: number, a = 255): WebGLTexture {
   const texture = gl!.createTexture()!;
   gl!.bindTexture(gl!.TEXTURE_2D, texture);
-  gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, 1, 1, 0, gl!.RGBA, gl!.UNSIGNED_BYTE,
-    new Uint8Array([r, g, b, a]));
+  gl!.texImage2D(
+    gl!.TEXTURE_2D,
+    0,
+    gl!.RGBA,
+    1,
+    1,
+    0,
+    gl!.RGBA,
+    gl!.UNSIGNED_BYTE,
+    new Uint8Array([r, g, b, a]),
+  );
   gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
   gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
   gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
@@ -72,7 +81,9 @@ const textures: TextureProvider = {
 const EFFECTS: Record<string, EffectShaderSource> = {
   // Swaps red and green channels, so a wrong result is obvious rather than subtle.
   swap_rg: {
-    id: effectId('swap_rg'), category: 'effect', samplers: ['source'],
+    id: effectId('swap_rg'),
+    category: 'effect',
+    samplers: ['source'],
     uniforms: [{ name: 'u_mix', type: 'float' }],
     source: `void main() {
   vec4 c = texture(source, v_uv);
@@ -81,7 +92,9 @@ const EFFECTS: Record<string, EffectShaderSource> = {
   },
   // Multiplies by the mask, proving the mask slot is bound to the right unit.
   mask_mul: {
-    id: effectId('mask_mul'), category: 'effect', samplers: ['source', 'mask'],
+    id: effectId('mask_mul'),
+    category: 'effect',
+    samplers: ['source', 'mask'],
     uniforms: [],
     // Multiplies RGB only. Scaling alpha as well would additionally dim the composite blend, making the
     // read-back depend on two effects at once and the assertion ambiguous.
@@ -92,7 +105,10 @@ const EFFECTS: Record<string, EffectShaderSource> = {
   },
   // Halves the red channel; used twice to prove the ping-pong actually chains.
   half_red: {
-    id: effectId('half_red'), category: 'effect', samplers: ['source'], uniforms: [],
+    id: effectId('half_red'),
+    category: 'effect',
+    samplers: ['source'],
+    uniforms: [],
     source: `void main() {
   vec4 c = texture(source, v_uv);
   fragColor = vec4(c.r * 0.5, c.g, c.b, c.a);
@@ -100,18 +116,27 @@ const EFFECTS: Record<string, EffectShaderSource> = {
   },
   // Reads the built-in uniforms, proving they are set.
   builtin_probe: {
-    id: effectId('builtin_probe'), category: 'effect', samplers: ['source'], uniforms: [],
+    id: effectId('builtin_probe'),
+    category: 'effect',
+    samplers: ['source'],
+    uniforms: [],
     source: `void main() {
   fragColor = vec4(u_clip_time, u_clip_length, u_resolution.x / 255.0, 1.0);
 }`,
   },
   broken: {
-    id: effectId('broken'), category: 'effect', samplers: ['source'], uniforms: [],
+    id: effectId('broken'),
+    category: 'effect',
+    samplers: ['source'],
+    uniforms: [],
     source: `void main() { this is not glsl }`,
   },
   wipe: {
-    id: effectId('wipe'), category: 'transition', samplers: ['from', 'to'],
-    convention: 'gl-transitions', uniforms: [],
+    id: effectId('wipe'),
+    category: 'transition',
+    samplers: ['from', 'to'],
+    convention: 'gl-transitions',
+    uniforms: [],
     source: `vec4 transition(vec2 uv) {
   return mix(getFromColor(uv), getToColor(uv), step(uv.x, progress));
 }`,
@@ -144,7 +169,11 @@ const builtins = createBuiltinPrograms(gl);
 const pool = createRenderTargetPool(gl);
 const compositor = createGlCompositor({ gl, programs, builtins, pool, textures });
 
-const layer = (asset: string, passes: RenderPlan['items'][number] extends never ? never : any[] = [], overrides: any = {}) => ({
+const layer = (
+  asset: string,
+  passes: RenderPlan['items'][number] extends never ? never : any[] = [],
+  overrides: any = {},
+) => ({
   clip: clipId(asset),
   source: { kind: 'video' as const, asset: asset as never, sourceFrame: frameIndex(0) },
   transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, ...overrides.transform },
@@ -192,7 +221,12 @@ results.bareLayer = renderAndRead(makePlan([{ kind: 'layer', layer: layer('media
 
 // 2. One effect pass must actually run: swapping R and G turns red into green.
 results.onePass = renderAndRead(
-  makePlan([{ kind: 'layer', layer: layer('media/red.mp4', [pass('swap_rg', { u_mix: { kind: 'float', value: 1 } })]) }]),
+  makePlan([
+    {
+      kind: 'layer',
+      layer: layer('media/red.mp4', [pass('swap_rg', { u_mix: { kind: 'float', value: 1 } })]),
+    },
+  ]),
 );
 
 // 3. Two passes must chain through the ping-pong: red halved twice is a quarter.
@@ -208,7 +242,12 @@ results.maskBinding = renderAndRead(
 
 // 5. Built-in uniforms must be set from the layer, not left at zero.
 results.builtins = renderAndRead(
-  makePlan([{ kind: 'layer', layer: layer('media/red.mp4', [pass('builtin_probe')], { clipTimeSeconds: 0.5, clipLengthSeconds: 1 }) }]),
+  makePlan([
+    {
+      kind: 'layer',
+      layer: layer('media/red.mp4', [pass('builtin_probe')], { clipTimeSeconds: 0.5, clipLengthSeconds: 1 }),
+    },
+  ]),
 );
 
 // 6. A broken shader must degrade to passthrough and still show the picture.
@@ -234,14 +273,16 @@ results.layerOrder = renderAndRead(
 
 // 9. A transition at progress 0 shows `from`, at 1 shows `to`.
 const transitionPlan = (progress: number) =>
-  makePlan([{
-    kind: 'transition',
-    group: {
-      from: layer('media/red.mp4'),
-      to: layer('media/blue.mp4'),
-      transition: { instance: effectInstanceId('tr'), effect: effectId('wipe'), progress, uniforms: {} },
+  makePlan([
+    {
+      kind: 'transition',
+      group: {
+        from: layer('media/red.mp4'),
+        to: layer('media/blue.mp4'),
+        transition: { instance: effectInstanceId('tr'), effect: effectId('wipe'), progress, uniforms: {} },
+      },
     },
-  }]);
+  ]);
 results.transitionStart = renderAndRead(transitionPlan(0));
 results.transitionEnd = renderAndRead(transitionPlan(1));
 
@@ -268,8 +309,7 @@ results.stableRepeat = renderAndRead(
 results.programFailures = programs.failures().map((error) => ({
   kind: error.kind,
   effect: 'effect' in error ? error.effect : undefined,
-  firstDiagnosticLine:
-    error.kind === 'compile-failed' ? error.diagnostics[0]?.line : undefined,
+  firstDiagnosticLine: error.kind === 'compile-failed' ? error.diagnostics[0]?.line : undefined,
 }));
 
 results.builtinLibrary = builtinResults;

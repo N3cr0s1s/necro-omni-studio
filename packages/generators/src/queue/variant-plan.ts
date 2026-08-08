@@ -1,5 +1,5 @@
 import type { GeneratorManifest } from '../contracts/manifest.js';
-import { seedParam, supportsBatch, supportsVariants } from '../contracts/manifest.js';
+import { supportsBatch, supportsVariants } from '../contracts/manifest.js';
 
 /**
  * Variant planning.

@@ -327,7 +327,13 @@ function App() {
 }
 
 /** Keyframe lanes as mockup 1b shows them: one lane per animated parameter, under the clip. */
-function KeyframeLanes({ viewport, playhead }: { viewport: ReturnType<typeof createViewport>; playhead: ReturnType<typeof frameIndex> }) {
+function KeyframeLanes({
+  viewport,
+  playhead,
+}: {
+  viewport: ReturnType<typeof createViewport>;
+  playhead: ReturnType<typeof frameIndex>;
+}) {
   const [lanes, setLanes] = useState<{ label: string; keyframes: Keyframe[] }[]>([
     {
       label: 'film_grain · amount',
@@ -406,10 +412,27 @@ function KeyframeLanes({ viewport, playhead }: { viewport: ReturnType<typeof cre
 /** The inspector column from mockup 1b: effect stack with reorderable rows. */
 function InspectorPanel() {
   const [entries, setEntries] = useState([
-    { instance: { id: effectInstanceId('fx1'), effect: effectId('film_grain'), enabled: true, params: {} }, label: 'Film Grain', keyframeCount: 2 },
-    { instance: { id: effectInstanceId('fx2'), effect: effectId('rgb_split'), enabled: true, params: {} }, label: 'RGB Split', keyframeCount: 4 },
-    { instance: { id: effectInstanceId('fx3'), effect: effectId('levels'), enabled: true, params: {} }, label: 'Levels', keyframeCount: 0 },
-    { instance: { id: effectInstanceId('fx4'), effect: effectId('broken'), enabled: true, params: {} }, label: 'Vignette', keyframeCount: 0, error: "line 12: 'u_falloff' : undeclared identifier" },
+    {
+      instance: { id: effectInstanceId('fx1'), effect: effectId('film_grain'), enabled: true, params: {} },
+      label: 'Film Grain',
+      keyframeCount: 2,
+    },
+    {
+      instance: { id: effectInstanceId('fx2'), effect: effectId('rgb_split'), enabled: true, params: {} },
+      label: 'RGB Split',
+      keyframeCount: 4,
+    },
+    {
+      instance: { id: effectInstanceId('fx3'), effect: effectId('levels'), enabled: true, params: {} },
+      label: 'Levels',
+      keyframeCount: 0,
+    },
+    {
+      instance: { id: effectInstanceId('fx4'), effect: effectId('broken'), enabled: true, params: {} },
+      label: 'Vignette',
+      keyframeCount: 0,
+      error: "line 12: 'u_falloff' : undeclared identifier",
+    },
   ]);
   const [selected, setSelected] = useState(effectInstanceId('fx2'));
 
@@ -443,9 +466,7 @@ function InspectorPanel() {
         onToggleEnabled={(id, enabled) =>
           setEntries((current) =>
             current.map((entry) =>
-              entry.instance.id === id
-                ? { ...entry, instance: { ...entry.instance, enabled } }
-                : entry,
+              entry.instance.id === id ? { ...entry, instance: { ...entry.instance, enabled } } : entry,
             ),
           )
         }

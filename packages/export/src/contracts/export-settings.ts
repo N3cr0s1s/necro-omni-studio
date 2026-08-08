@@ -79,15 +79,14 @@ export interface ExportSettings {
   readonly useProxyResolution: boolean;
 }
 
-export const DEFAULT_EXPORT: Omit<ExportSettings, 'outputPath' | 'range' | 'resolution' | 'frameRate'> =
-  {
-    videoCodec: 'h264',
-    quality: 'high',
-    speed: 'medium',
-    audioCodec: 'aac',
-    audioBitrateKbps: 320,
-    useProxyResolution: false,
-  };
+export const DEFAULT_EXPORT: Omit<ExportSettings, 'outputPath' | 'range' | 'resolution' | 'frameRate'> = {
+  videoCodec: 'h264',
+  quality: 'high',
+  speed: 'medium',
+  audioCodec: 'aac',
+  audioBitrateKbps: 320,
+  useProxyResolution: false,
+};
 
 /**
  * Validates settings before an export starts.

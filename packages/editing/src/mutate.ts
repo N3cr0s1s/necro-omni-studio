@@ -47,10 +47,7 @@ export function withClips(track: Track, next: readonly Clip[]): Track {
   return { ...track, clips: next } as Track;
 }
 
-export function findTrackOrFail(
-  document: TimelineDocument,
-  id: TrackId,
-): Result<Track, EditError> {
+export function findTrackOrFail(document: TimelineDocument, id: TrackId): Result<Track, EditError> {
   const track = document.sequence.tracks.find((candidate) => candidate.id === id);
   return track === undefined ? err({ kind: 'track-not-found', track: id }) : ok(track);
 }

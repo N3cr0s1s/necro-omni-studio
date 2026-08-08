@@ -32,11 +32,17 @@ apps/
 Spec milestones M1..M11 map to the phases below. Each phase lands with unit tests.
 
 ### Phase 0 — Repo foundation
+
 - [x] npm workspaces, TypeScript strict base config, Vitest
-- [ ] Shared lint/format config (eslint + prettier configs still to author)
+- [x] Shared lint/format config. Prettier owns formatting at the width the code
+      was already written to, so adopting it moved no logic; eslint keeps only the
+      rules a strict type checker cannot express — unused code, stray `any`,
+      `prefer-const` — because a rule everyone disables is worse than no rule.
+      `npm run verify` runs format, lint, typecheck and tests in one pass.
 - [x] `packages/core` scaffolding
 
 ### Phase 1 — M1: Document model, time math, project folder
+
 - [x] Rational time + frame-index time math (`Rational`, `FrameRate`, `FrameIndex`,
       `FrameCount`, `FrameSpan`, SMPTE timecode incl. correct drop-frame)
 - [x] Timeline document model (project, sequence, tracks, clips, transitions, effect
@@ -50,6 +56,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] Unit tests for the above (206 passing)
 
 ### Phase 2 — M2: Media
+
 - [x] Asset identity (project-relative path) + content-hash cache keys
 - [x] Media probe / proxy / filmstrip / waveform contracts
 - [x] File watcher contract (ignore rules, event coalescing) + folder tree model
@@ -67,6 +74,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       visually verified against mockup 1a via a Playwright screenshot)
 
 ### Phase 3 — M3/M4: Timeline editing + compositor
+
 - [x] Editing operations (`@nos/editing`): split/razor, cut-all-tracks, head and
       tail trim, slip, move across tracks, lift, ripple delete (clip and range),
       snapping with candidate collection. 75 tests.
@@ -87,6 +95,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       scheduler, grain-based scrubbing, peak metering with decay. 47 tests.
 
 ### Phase 4 — M5/M6: Effects + keyframes
+
 - [x] Effect/transition manifest schema + registry + validation (`@nos/effects`),
       implementing the compositor's `EffectSourceResolver`; built-in library of 4
       effects + 2 transitions, every one compiled by the GL check. 36 tests.
@@ -101,6 +110,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       Screenshot-verified against mockup 1b.
 
 ### Phase 5 — M7: Text layer
+
 - [x] Text rasterization cache contracts + cache key over exactly the
       non-animatable properties (`@nos/text`). 25 tests.
 - [x] Animation presets as pure keyframe generators, with merge/remove that
@@ -113,6 +123,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       `node packages/text/rastercheck/run.mjs`).
 
 ### Phase 6 — M8: Export
+
 - [x] Export settings, validation, size estimate, frame iteration, progress
       tracking (`@nos/export`). Calls `buildRenderPlan` directly — no
       export-specific plan builder. 34 tests, including one asserting the export
@@ -124,6 +135,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       estimate, progress, cancel. 28 tests.
 
 ### Phase 7 — M9: Generator framework
+
 - [x] Manifest contracts: consumes/produces descriptors, presets as separate UI
       entries, `also` bindings, batch descriptor, duration mode, unbound detection
 - [x] Manifest validator + registry with `available`/`unavailable`/`unbound`
@@ -140,7 +152,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] GPU semaphore: serialized, idempotent release, cancellable waits, status
       reporting. 16 tests.
 
-- [x] Registry-driven parameter panel UI: controls chosen by declared *type*
+- [x] Registry-driven parameter panel UI: controls chosen by declared _type_
       only, live enum options, presets hiding their pins, variant control tied to
       whether a seed exists. Nothing branches on a generator id. 33 tests.
 - [x] In-place variant picking: a pure staging model (candidates from a group's
@@ -154,6 +166,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       graph's literal inputs and previews the file it writes. 37 + 26 tests.
 
 ### Phase 8 — M10: ComfyUI backend
+
 - [x] Graph patching (bind pointers, `also` templates, preset pins, batch size),
       **verified against the real graphs in `docs/comfy/`**. 21 tests.
 - [x] `/prompt`, `/ws`, `/history`, `/upload/image`, `/object_info`, cancel.
@@ -167,6 +180,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       naming real parameters, no two parameters on one pointer). 17 tests.
 
 ### Phase 9 — M11: SAM 2 masks
+
 - [x] `@nos/masks`: mask model, prompts, session reducer. Engine-agnostic — the
       segmenter is an interface, and nothing in the package knows what SAM 2 is.
       73 tests.
@@ -186,6 +200,7 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       against a real WebGL2 driver**, including a transposition check.
 
 ### Phase 10 — Hardening
+
 - [x] End-to-end smoke test in `@nos/smoke`: the shipped library is discovered,
       a generator runs on the mock backend, a variant is picked, its output lands
       as a clip with provenance, the compositor plans it, the mixer hears it, the
@@ -224,11 +239,11 @@ the media browser plus a full timeline from mockup 1a.
 ### Editing rules (keep these)
 
 - Every operation is a pure `TimelineDocument -> Result<TimelineDocument,
-  EditError>`. No mutation, no I/O, no UI knowledge, so a whole gesture composes
+EditError>`. No mutation, no I/O, no UI knowledge, so a whole gesture composes
   inside one `store.transaction()` and collapses to one undo step.
 - A rejected edit returns a **reason**. Same principle as the unavailable-generator
   rule: the UI must be able to say why a drag snapped back.
-- Operations return the *same* document object for a no-op, which is how the store
+- Operations return the _same_ document object for a no-op, which is how the store
   skips recording an empty history entry.
 - Only the changed root-to-leaf path is rebuilt; untouched tracks stay by
   reference. That is what makes snapshot undo cost pointers instead of a copy, and
@@ -273,7 +288,7 @@ the media browser plus a full timeline from mockup 1a.
   falls back to plain layers rather than blanking the picture.
 - **GLSL must be verified by a real compiler, not by string assertions.** Generate
   the shaders, compile them in headless Chromium with
-  `--use-gl=swiftshader --enable-unsafe-swiftshader`, and check both compile *and*
+  `--use-gl=swiftshader --enable-unsafe-swiftshader`, and check both compile _and_
   link. Three bugs got through the unit tests and were caught only this way.
 - The wrapper generates parameter uniform declarations from the manifest, so an
   author writes `u_amount` with no `uniform` line — **unless** the source declares
@@ -289,7 +304,7 @@ the media browser plus a full timeline from mockup 1a.
   8-bit, showing as banding in gradients that each pass looks fine on, and the spec
   allows eight passes before it even warns.
 - Alpha blending uses `blendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE,
-  ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
+ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   composite alpha wherever layers overlap — invisible in preview, wrong on an
   export with an alpha channel.
 - A layer whose texture is not ready is **skipped**, not waited for: a preview that
@@ -328,7 +343,7 @@ the media browser plus a full timeline from mockup 1a.
 - The semaphore holder is **exposed**, because the mockups show jobs waiting on
   segmentation. A progress bar that stops with no explanation reads as a hang.
 - A generator that cannot run is **kept with a reason**, never dropped — including
-  from `entriesForSurface`, since filtering there *is* the disappearing-tool
+  from `entriesForSurface`, since filtering there _is_ the disappearing-tool
   behaviour the spec forbids. Every problem is reported, not just the first.
 - `unbound` is distinct from `unavailable`. Nothing is broken; the graph simply has
   not been connected. Different user response — a to-do, not a bug — so an unbound
@@ -366,14 +381,14 @@ the media browser plus a full timeline from mockup 1a.
 ### ComfyUI backend rules (keep these)
 
 - Patch order is fixed: defaults, then user values, then **preset pins last**, then
-  the seed, then batch size. A preset's purpose is to *fix* a parameter, so letting
+  the seed, then batch size. A preset's purpose is to _fix_ a parameter, so letting
   a stale user value win would make it a suggestion rather than a definition.
 - `also` targets are patched alongside the primary pointer. Patching only the
   literal leaves a dependent expression computing from a stale value — the spec's
   fps example produces a clip of the wrong duration, which looks like a backend bug
   and is not.
 - Asset parameters are **not** patched during the pure pass: the graph must
-  reference the filename the *server* assigns, which only exists after upload.
+  reference the filename the _server_ assigns, which only exists after upload.
   `patchUploadedAsset` writes it afterwards, keeping the pure part pure and
   offline-testable.
 - A required parameter with no value **throws** rather than submitting. Submitting
@@ -426,7 +441,7 @@ the media browser plus a full timeline from mockup 1a.
   applying one would yank a deliberately offset title back to centre.
 - Presets touch only the channels they need. `slide` must not pin opacity, or it
   would silently undo a hand-authored fade.
-- `mergeGeneratedKeyframes` replaces only the generated *range* and keeps keyframes
+- `mergeGeneratedKeyframes` replaces only the generated _range_ and keeps keyframes
   outside it, so applying an in-animation cannot destroy an out-animation.
   `removeRange` identifies by range, not by id, because the user may have dragged
   the markers since.
@@ -447,11 +462,11 @@ the media browser plus a full timeline from mockup 1a.
 Each covers a property that cannot be checked in Vitest, and each exits non-zero
 so it can gate a release:
 
-| What | Serve | Run |
-|---|---|---|
-| Compositor pixels (17) | `cd packages/compositor && npm run glcheck:serve` | `npm run glcheck` |
-| Text rasterizer (19) | `cd packages/text && npx vite --port 5201` | `node packages/text/rastercheck/run.mjs` |
-| UI layout (screenshots) | `cd packages/ui && npx vite` | Playwright screenshot, compare to mockups |
+| What                    | Serve                                             | Run                                       |
+| ----------------------- | ------------------------------------------------- | ----------------------------------------- |
+| Compositor pixels (17)  | `cd packages/compositor && npm run glcheck:serve` | `npm run glcheck`                         |
+| Text rasterizer (19)    | `cd packages/text && npx vite --port 5201`        | `node packages/text/rastercheck/run.mjs`  |
+| UI layout (screenshots) | `cd packages/ui && npx vite`                      | Playwright screenshot, compare to mockups |
 
 ### Effect and keyframe UI rules (keep these)
 
@@ -465,7 +480,7 @@ so it can gate a release:
 - A shader error is surfaced on the row with its compiler message. It is the only
   feedback a shader author gets, and the spec requires it to be visible.
 - A keyframe's easing badge sits **to the right of its marker**, because easing
-  governs the segment *leaving* it — and the **last marker gets no badge**, since its
+  governs the segment _leaving_ it — and the **last marker gets no badge**, since its
   easing governs nothing.
 - Drag handlers attach to the **window as well as the element**, and treat
   `setPointerCapture` as an enhancement inside a `try`. Capture is absent in some
@@ -482,7 +497,7 @@ so it can gate a release:
   compositor carries `paramKey` on each uniform declaration for exactly this.
 - A manifest that fails validation is **kept with its reason**, never dropped. Same
   justification the spec gives for generators: a silently missing tool costs hours.
-  A missing *shader file* is a distinct status from a bad manifest, because the fixes
+  A missing _shader file_ is a distinct status from a bad manifest, because the fixes
   differ.
 - Validation is total — one broken file in `effects/` must not stop the other nine
   from loading. `createEffectRegistry` never throws, whatever the input.
@@ -566,6 +581,7 @@ so it can gate a release:
   layout-dependent needs the harness plus a screenshot.
 
 ### Commands
+
 ```
 npm run test          # TypeScript suite
 npm run typecheck     # tsc --build across workspaces
@@ -585,11 +601,11 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
 ### Sidecar rules (keep these)
 
 - Every path from the renderer is untrusted. `resolve_in_project` checks
-  containment *after* resolution so a symlink pointing outside the project is
+  containment _after_ resolution so a symlink pointing outside the project is
   caught too — textual validation alone would miss it. This duplicates the
   TypeScript check on purpose: the sidecar is a localhost HTTP server and must not
   assume its only caller is well behaved.
-- ffmpeg is invoked with argument *lists*, never a shell, so a filename containing
+- ffmpeg is invoked with argument _lists_, never a shell, so a filename containing
   a quote or semicolon cannot become command injection.
 - All ffmpeg argument construction lives in `ffmpeg.py` and is a pure function of
   its inputs, so it is testable without spawning a process.
@@ -624,7 +640,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
 ### File format rules (keep these)
 
 - The on-disk shape and the in-memory shape are allowed to differ, and
-  `packages/core/src/serialization/` is the *only* place that knows both.
+  `packages/core/src/serialization/` is the _only_ place that knows both.
 - The file optimizes for being read, diffed and hand-edited: frame rates as
   `"30000/1001"`, a constant parameter as a bare number, fields equal to their
   default omitted, two-space indent, trailing newline, never `null`.
@@ -632,23 +648,23 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   "preserves a document using every field" round-trip test is what enforces this —
   extend that fixture whenever a field is added.
 - Unknown keys are ignored on load (forward compatibility), but a file from a
-  *newer* `schemaVersion` is refused outright rather than best-effort parsed,
+  _newer_ `schemaVersion` is refused outright rather than best-effort parsed,
   because dropping fields and then saving would destroy work invisibly.
-- `vWithDefault` substitutes for *absent* values only. `vFallback` also swallows
+- `vWithDefault` substitutes for _absent_ values only. `vFallback` also swallows
   invalid ones and is restricted to closed vocabularies where degrading beats
   refusing (currently only keyframe easing).
-- Migrations run on raw JSON *before* validation, one step per version, and a
+- Migrations run on raw JSON _before_ validation, one step per version, and a
   released step is never edited.
 
 ### Resolved spec conflicts (do not re-litigate)
 
-- **Keyframe time base.** `interfaces.md` §4.5 shows keyframe `t` in *seconds*;
+- **Keyframe time base.** `interfaces.md` §4.5 shows keyframe `t` in _seconds_;
   spec §7 mandates frame indices for every time value. **Frame indices win** —
   seconds reintroduce the drift the time layer exists to remove, and a keyframe off
   the frame grid cannot evaluate identically in preview and export. Seconds appear
   only in the UI and in shader uniforms.
 - **Per-marker easing direction.** A keyframe's easing governs the segment
-  *leaving* it. Only that assignment makes `hold` mean "keep this value until the
+  _leaving_ it. Only that assignment makes `hold` mean "keep this value until the
   next marker". The final keyframe's easing is deliberately unused.
 - **Undo via snapshots, not inverse patches.** The spec asks for "patch
   coalescing"; snapshot-plus-gesture-coalescing is user-visibly identical and far
@@ -658,6 +674,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   depends on mouse speed and cannot be tested.
 
 ### Conventions established (keep these)
+
 - Interface-first: types and interfaces separate from implementations; consumers
   import contracts, never concrete classes.
 - `Result<T, E>` for expected failures (validation, pointer resolution, shader
@@ -666,7 +683,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   in validating factories via `unsafeBrand`.
 - Half-open `[start, end)` frame spans — the only convention that makes clip
   adjacency unambiguous.
-- Comments explain *why*, not *what*. Tests name the behaviour and its rationale.
+- Comments explain _why_, not _what_. Tests name the behaviour and its rationale.
 
 ## Log
 
@@ -677,7 +694,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   `@nos/core` time layer: exact rational arithmetic, `FrameRate`, `FrameIndex`/
   `FrameCount`, `FrameSpan` interval algebra, SMPTE timecode with real drop-frame
   support. 72 tests. Two bugs caught by the suite while writing it: `isDropFrameRate`
-  compared 29.97 against 30 (29.97 is *below* 30, so the canonical drop-frame rate
+  compared 29.97 against 30 (29.97 is _below_ 30, so the canonical drop-frame rate
   was classified non-drop), and `ceil` leaked `-0` for negative halves.
 - 2026-08-08: Document model (`ids`, `params`, `clip`, `track`, `document`) and the
   mutation layer (`history`, `store`, `autosave`). 149 tests. `DocumentStore` is the
@@ -690,7 +707,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   JSON path, which is what the spec's "name the broken pointer" rule needs),
   `project.json` serializer, and the migration chain. 206 tests. The round-trip
   test caught that a documented behaviour did not exist: the schema comment claimed
-  an unknown easing degrades to linear, but `vWithDefault` only covers *absent*
+  an unknown easing degrades to linear, but `vWithDefault` only covers _absent_
   values, so a `"bezier"` easing failed the whole load. Added `vFallback` for that
   narrow case rather than loosening `vWithDefault`, which would have turned typos
   into silent data loss on the next save.
@@ -700,7 +717,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   that they read correctly — which caught a naming bug: `ProxySpec.maxEdge` was
   documented as "long-edge pixels", but portrait 1080×1920 came out 720×**1280**,
   exceeding the supposed cap. The filter was right for `1080p` semantics (what the
-  spec asks for); the *name* was the lie, and it would only ever have shown up on
+  spec asks for); the _name_ was the lie, and it would only ever have shown up on
   vertical footage. Renamed to `shortEdge` across both languages.
 - 2026-08-08: Sidecar HTTP layer complete — FastAPI app, content-hash cache
   (memoized by `(size, mtime_ns)` and persisted, so reopening a project rehashes
@@ -709,7 +726,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   job is driving ffmpeg correctly and refusing paths it shouldn't read — neither
   property survives stubbing. Three bugs the tests caught: the FastAPI closure
   dependency issue (every request 422'd), the `.partial` extension breaking
-  ffmpeg's container inference (exit 234), and one wrong *test* expectation — I
+  ffmpeg's container inference (exit 234), and one wrong _test_ expectation — I
   assumed lavfi's `sine` filter is full-scale, but it defaults to amplitude 0.125,
   so the peak reduction was correct all along. Rewrote the fixture to generate a
   stated amplitude via `aevalsrc`, which upgraded the assertion from "is it large"
@@ -732,6 +749,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   Fixture regeneration (run from `apps/sidecar`, writes into `@nos/sidecar-client`):
   a deterministic stereo ramp — channel 0 rising, channel 1 the negated half — so a
   channel-order or stride mistake cannot pass. See git history for the exact script.
+
 - 2026-08-08: **Phase 2 closed.** `@nos/ui` — design tokens transcribed from the
   mockups, primitives at the mockups' exact metrics (34 px header, 26 px control,
   19 px badge), and the media browser: keyboard-navigable tree with `aria-level`/
@@ -739,26 +757,28 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   rescan on failure, and a detail pane reporting derived-artifact readiness.
   27 component tests, all green first run.
 
-  Then verified it *visually* in a real browser via a Playwright screenshot, which
+  Then verified it _visually_ in a real browser via a Playwright screenshot, which
   caught a deviation jsdom could not: `project.json` had sunk to the bottom of the
   tree, because the general rule puts directories before files. The mockups place it
-  first — it is the file that *is* the project. Fixed with a root-scoped pin; the
+  first — it is the file that _is_ the project. Fixed with a root-scoped pin; the
   first attempt pinned the name at any depth, so a `notes/project.json` would have
   jumped its folder's queue too, and a test now covers both cases.
 
   Harness: `cd packages/ui && npx vite` (port 5199). Note the MCP Playwright server
   wants Chrome at `/opt/google/chrome/chrome`, which is absent here; the bundled
   Chromium via the `playwright` package works.
+
 - 2026-08-08: `@nos/editing` — the full editing operation set, 75 tests, 53 of them
   green on the first run. The interesting decisions are recorded as rules above; the
   subtle one is keyframe handling, where a split and a head trim must rebase
   clip-relative keyframes but a slip must not, and getting that backwards produces
   effects that visibly drift against the picture.
 
-  One failure was again a wrong *test*: I asserted `start + duration === 150` after
+  One failure was again a wrong _test_: I asserted `start + duration === 150` after
   an end-edge snap to a candidate at 100, which is arithmetically impossible — the
-  snapped edge lands *on* the candidate. The implementation was right and an earlier
+  snapped edge lands _on_ the candidate. The implementation was right and an earlier
   test already covered it correctly.
+
 - 2026-08-08: Timeline UI — viewport math (43 tests) plus components (24 tests),
   then screenshot-verified against mockup 1a. Two findings the screenshot produced
   that jsdom could not:
@@ -788,7 +808,7 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
      four-line built-in uniform block is one array element — every shader diagnostic
      would have pointed 3 lines off.
 
-  Verified afterwards: all 7 programs compile *and* link, including a
+  Verified afterwards: all 7 programs compile _and_ link, including a
   gl-transitions shader that reads `ratio`, one with its own `uniform` line, a
   masked blur with a `bool`, and one using all four spec-mandated built-ins. The
   passthrough program also actually draws — a 1×1 source texture reads back exactly
@@ -799,12 +819,12 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   actually running with its uniform set; two passes chaining through the ping-pong
   (red halved twice reads 64, where a target reading its own output would read 128);
   the mask sampler bound to its own unit; all four built-in uniforms set from the
-  layer; a broken shader degrading to passthrough with the picture intact *and* its
+  layer; a broken shader degrading to passthrough with the picture intact _and_ its
   diagnostic correctly rebased to authored line 1; source-over opacity blending;
   layer order; a gl-transitions wipe at both ends of its progress; a missing texture
   skipping only its own layer; and zero pool leaks after 30 frames.
 
-  One assertion failed first time and it was my *test*, not the compositor: the mask
+  One assertion failed first time and it was my _test_, not the compositor: the mask
   shader multiplied alpha as well as RGB, so the read-back depended on two effects at
   once. Also strengthened the mask fixture from white to mid-grey — against a red
   source, a white mask cannot distinguish "bound correctly" from "bound to the
@@ -828,13 +848,13 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   (`amount` → `u_amount`) would have had its parameters silently dropped — an effect
   that renders but ignores its controls, with nothing in any log. Fixed by carrying
   `paramKey` on each uniform declaration, and covered by a test that asserts the
-  emitted uniform is keyed by the *shader* name.
+  emitted uniform is keyed by the _shader_ name.
 
   Extended the GL check to compile every shipped built-in, since a syntax error in
   one is a defect every user meets on first run. 17/17 now.
 
   Two of my own harness mistakes here, both worth remembering: `manifest(json,
-  undefined)` triggers a JavaScript *default parameter* rather than overriding it, so
+undefined)` triggers a JavaScript _default parameter_ rather than overriding it, so
   a "missing shader" test silently supplied one; and appending `results.builtins`
   overwrote an existing key of that name, turning a passing pixel assertion into a
   failing one.
@@ -941,14 +961,14 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   a `VariantSelection`, a `ManifestDraft` — with the logic living in
   `@nos/generators` where it is testable without a DOM. The rule the panel exists
   to hold is worth restating: **nothing may branch on a generator id.** The switch
-  is over declared parameter *types*; a new generator is a JSON file and no code.
+  is over declared parameter _types_; a new generator is a JSON file and no code.
 
   Two bugs the tests found. `toManifest` branded the id, so previewing a draft
   whose id was still empty threw and took the whole inspector down at exactly the
   moment the user was typing it — split into `draftManifestJson` (total) and
   `toManifest` (validating, at the boundary). And a draft parameter identified by
   its pointer became unaddressable the moment its pointer was cleared, which is
-  the state the spec's unbound manifests are *written in*; parameters now carry a
+  the state the spec's unbound manifests are _written in_; parameters now carry a
   stable id separate from the binding.
 
 - 2026-08-08: A real generator library in `generators/`. Manifest files needed a
@@ -987,19 +1007,19 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
 
 - 2026-08-08: Phase 10, hardening. The end-to-end smoke test earns its place
   immediately: it caught that `buildSelection` produced **one** candidate per
-  *run*, while the spec's own audio manifest is batched — three variants arrive
+  _run_, while the spec's own audio manifest is batched — three variants arrive
   as one submit with three outputs. The panel would have shown a single variant
   and left the other two in `generated/` with no way to reach them. Every
   package's own tests passed throughout; only a test crossing the queue, the
   manifest and the staging model could see it.
 
   That is the argument for the smoke test in one sentence, and the reason its
-  assertions are written as *seams* rather than as behaviour: a backend output
+  assertions are written as _seams_ rather than as behaviour: a backend output
   becomes a clip the compositor will draw, the clip the editing layer moved is the
   clip the mix plan hears, and the whole thing survives the project file.
 
   The performance guard pairs every wall-clock threshold with a structural
   assertion — plan size proportional to the frame rather than the document,
   untouched tracks kept by reference — because a timing check alone is noisy on a
-  loaded machine and says nothing about *why* it regressed. On a 2000-clip project
+  loaded machine and says nothing about _why_ it regressed. On a 2000-clip project
   the structural claims are what fail first.

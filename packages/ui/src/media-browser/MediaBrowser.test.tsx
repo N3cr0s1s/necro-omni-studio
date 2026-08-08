@@ -71,9 +71,7 @@ describe('tree rendering', () => {
 
   it('reports the generated folder size, since there is no retention policy', () => {
     renderBrowser();
-    const generated = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('generated'));
+    const generated = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('generated'));
     expect(generated?.textContent).toContain('2.19 MB');
   });
 
@@ -98,9 +96,7 @@ describe('expansion', () => {
     renderBrowser();
 
     expect(screen.queryByText('old.mp4')).toBeNull();
-    const archive = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('archive'));
+    const archive = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('archive'));
     await user.click(archive!);
 
     expect(screen.getByText('old.mp4')).toBeDefined();
@@ -130,9 +126,7 @@ describe('expansion', () => {
 
   it('reports nesting depth, so a screen reader can convey structure', () => {
     renderBrowser();
-    const media = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('archive'));
+    const media = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('archive'));
     expect(media?.getAttribute('aria-level')).toBe('2');
   });
 });
@@ -153,9 +147,7 @@ describe('selection and activation', () => {
     const onSelect = vi.fn();
     renderBrowser({ onSelect });
 
-    const renders = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('renders'));
+    const renders = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('renders'));
     await user.click(renders!);
 
     expect(onSelect).not.toHaveBeenCalled();
@@ -187,9 +179,7 @@ describe('keyboard operation', () => {
     const onActivate = vi.fn();
     renderBrowser({ onActivate });
 
-    const row = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('interview_a.mp4'));
+    const row = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('interview_a.mp4'));
     row!.focus();
     await user.keyboard('{Enter}');
 
@@ -200,9 +190,7 @@ describe('keyboard operation', () => {
     const user = userEvent.setup();
     renderBrowser();
 
-    const archive = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('archive'));
+    const archive = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('archive'));
     archive!.focus();
     await user.keyboard('{ArrowRight}');
     expect(screen.getByText('old.mp4')).toBeDefined();
@@ -226,26 +214,20 @@ describe('keyboard operation', () => {
 describe('dragging onto the timeline', () => {
   it('makes timeline-capable assets draggable', () => {
     renderBrowser();
-    const row = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('interview_a.mp4'));
+    const row = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('interview_a.mp4'));
     expect(row?.getAttribute('draggable')).toBe('true');
   });
 
   it('does not make notes or unknown files draggable', () => {
     // A markdown note is a text asset but not something you drop on a track.
     renderBrowser();
-    const note = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('treatment.md'));
+    const note = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('treatment.md'));
     expect(note?.getAttribute('draggable')).toBe('false');
   });
 
   it('does not make directories draggable', () => {
     renderBrowser();
-    const renders = screen
-      .getAllByRole('treeitem')
-      .find((item) => item.textContent?.includes('renders'));
+    const renders = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('renders'));
     expect(renders?.getAttribute('draggable')).toBe('false');
   });
 });

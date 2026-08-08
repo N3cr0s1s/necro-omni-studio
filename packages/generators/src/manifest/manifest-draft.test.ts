@@ -137,7 +137,10 @@ describe('promoting literals', () => {
   });
 
   it('demotes without touching anything else', () => {
-    const draft = promote(promote(emptyDraft(), literal()), literal({ pointer: '/2/inputs/cfg', input: 'cfg' }));
+    const draft = promote(
+      promote(emptyDraft(), literal()),
+      literal({ pointer: '/2/inputs/cfg', input: 'cfg' }),
+    );
     const after = demote(draft, '/1/inputs/steps');
     expect(after.params.map((param) => param.key)).toEqual(['cfg']);
   });
@@ -327,7 +330,13 @@ describe('round tripping an authored manifest', () => {
     requires: ['MiniMaxNode'],
     outputs: [{ key: 'video', type: 'video', node: '92' }],
     params: [
-      { key: 'first_frame', type: 'image', required: true, bind: '/114/inputs/image', transport: 'upload_image' },
+      {
+        key: 'first_frame',
+        type: 'image',
+        required: true,
+        bind: '/114/inputs/image',
+        transport: 'upload_image',
+      },
       { key: 'duration_s', type: 'float', min: 0.5, max: 30, default: 15, bind: '/105:111/inputs/value' },
       { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
     ],

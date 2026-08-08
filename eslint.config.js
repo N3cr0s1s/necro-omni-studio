@@ -1,0 +1,53 @@
+// @ts-check
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+
+/**
+ * Lint configuration.
+ *
+ * Deliberately small. TypeScript in strict mode with `noUncheckedIndexedAccess` and
+ * `exactOptionalPropertyTypes` already catches the bulk of what a lint config usually polices, and
+ * Prettier owns formatting entirely — so the rules here are the ones a type checker cannot express:
+ * unused code, accidental `any`, floating promises in code that must not lose an error.
+ *
+ * Rules that would fight the codebase's own conventions are off rather than suppressed at hundreds of
+ * call sites, because a rule everyone disables is worse than no rule.
+ */
+export default [
+  {
+    ignores: ['**/dist/**', '**/node_modules/**', 'apps/sidecar/**', 'docs/**', 'generators/**', '**/*.d.ts'],
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.mjs'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { '@typescript-eslint': tsPlugin },
+    rules: {
+      // An unused import or variable is nearly always a leftover from a refactor. The underscore escape
+      // exists for destructuring a value away deliberately, which the codebase does use.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
+      ],
+      // `any` defeats every other guarantee in the project. Warned rather than errored so a test harness
+      // reaching into a GL stub does not have to fight it.
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'prefer-const': 'error',
+      'no-var': 'error',
+    },
+  },
+  {
+    // Harnesses and tests legitimately log, use `any` against a driver stub, and reach into globals.
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/glcheck/**', '**/rastercheck/**', '**/harness/**'],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+];

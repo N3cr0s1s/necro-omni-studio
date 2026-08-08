@@ -224,10 +224,9 @@ export function createMediaClient(transport: SidecarTransport): MediaClient {
     },
 
     async scan(subtree?: AssetPath): Promise<Result<readonly FileEntry[], TransportError>> {
-      const response = await transport.postJson<{ entries: readonly WireScanEntry[] }>(
-        '/project/scan',
-        { subtree: subtree ?? null },
-      );
+      const response = await transport.postJson<{ entries: readonly WireScanEntry[] }>('/project/scan', {
+        subtree: subtree ?? null,
+      });
       if (!response.ok) return response;
       return ok(response.value.entries.map(toFileEntry));
     },

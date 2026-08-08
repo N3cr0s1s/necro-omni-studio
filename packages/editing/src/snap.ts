@@ -133,9 +133,7 @@ export function snapSpanTranslation(
   const endResult = snapFrame(frameIndex(start + durationFrames), candidates, thresholdFrames);
 
   const startDistance =
-    startResult.snappedTo === undefined
-      ? Number.POSITIVE_INFINITY
-      : Math.abs(startResult.frame - start);
+    startResult.snappedTo === undefined ? Number.POSITIVE_INFINITY : Math.abs(startResult.frame - start);
   const endDistance =
     endResult.snappedTo === undefined
       ? Number.POSITIVE_INFINITY

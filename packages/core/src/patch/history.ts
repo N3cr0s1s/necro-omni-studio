@@ -177,8 +177,6 @@ export function redoLabel<TDocument>(state: HistoryState<TDocument>): string | u
 }
 
 /** Drops all history, keeping the current document. Used after a successful save-as. */
-export function clearHistory<TDocument>(
-  state: HistoryState<TDocument>,
-): HistoryState<TDocument> {
+export function clearHistory<TDocument>(state: HistoryState<TDocument>): HistoryState<TDocument> {
   return { present: state.present, past: [], future: [] };
 }

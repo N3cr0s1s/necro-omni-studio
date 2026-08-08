@@ -20,11 +20,7 @@ export function maskCacheKey(
   range: { readonly start: number; readonly end: number },
   prompts: readonly MaskPrompt[],
 ): string {
-  const parts = [
-    source,
-    `${range.start}-${range.end}`,
-    ...prompts.map(describePrompt),
-  ];
+  const parts = [source, `${range.start}-${range.end}`, ...prompts.map(describePrompt)];
   return `${hash(parts.join('|'))}`;
 }
 
@@ -121,7 +117,10 @@ export interface MaskCache {
 
 export function createMaskCache(storage: MaskStorage): MaskCache {
   const folderOf = (track: MaskTrack, source: AssetPath): AssetPath =>
-    maskFolder(track, maskCacheKey(source, { start: track.range.start, end: endExclusive(track.range) }, track.prompts));
+    maskFolder(
+      track,
+      maskCacheKey(source, { start: track.range.start, end: endExclusive(track.range) }, track.prompts),
+    );
 
   return {
     folderFor: folderOf,

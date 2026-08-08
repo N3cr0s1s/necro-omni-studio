@@ -109,7 +109,12 @@ describe('accumulation', () => {
 
   it('accumulates across nesting levels at once', () => {
     const validator = vObject({ items: vArray(vObject({ id: vString, size: vNumber })) });
-    const result = validate(validator, { items: [{ id: 1, size: 'a' }, { id: 'ok', size: 2 }] });
+    const result = validate(validator, {
+      items: [
+        { id: 1, size: 'a' },
+        { id: 'ok', size: 2 },
+      ],
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toHaveLength(2);
   });
@@ -188,8 +193,7 @@ describe('forward compatibility', () => {
 
 describe('vTagged', () => {
   type TestClip =
-    | { readonly kind: 'video'; readonly asset: string }
-    | { readonly kind: 'text'; readonly content: string };
+    { readonly kind: 'video'; readonly asset: string } | { readonly kind: 'text'; readonly content: string };
 
   // The union must be named explicitly: inference would otherwise fix `T` to the first
   // variant and reject the rest.
@@ -248,7 +252,12 @@ describe('vRecord', () => {
 
 describe('transformation', () => {
   it('maps a validated value', () => {
-    expect(validate(vMap(vString, (value) => value.length), 'abcd')).toEqual({
+    expect(
+      validate(
+        vMap(vString, (value) => value.length),
+        'abcd',
+      ),
+    ).toEqual({
       ok: true,
       value: 4,
     });

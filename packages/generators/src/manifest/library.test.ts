@@ -167,8 +167,10 @@ describe('manifest coherence', () => {
     for (const manifest of manifests) {
       for (const param of manifest.params) {
         if (typeof param.default !== 'number') continue;
-        if (param.min !== undefined) expect(param.default, `${manifest.id}/${param.key}`).toBeGreaterThanOrEqual(param.min);
-        if (param.max !== undefined) expect(param.default, `${manifest.id}/${param.key}`).toBeLessThanOrEqual(param.max);
+        if (param.min !== undefined)
+          expect(param.default, `${manifest.id}/${param.key}`).toBeGreaterThanOrEqual(param.min);
+        if (param.max !== undefined)
+          expect(param.default, `${manifest.id}/${param.key}`).toBeLessThanOrEqual(param.max);
       }
     }
   });
