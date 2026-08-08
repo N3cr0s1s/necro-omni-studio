@@ -8,7 +8,7 @@ import {
   createProgramCache,
   createRenderTargetPool,
 } from '@nos/compositor';
-import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+import type { EffectRegistry } from '@nos/effects';
 import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
 import { prepareFrame } from './frame-render.js';
@@ -60,6 +60,14 @@ export interface PreviewProps {
    * find the one being drawn.
    */
   readonly masks?: MaskSource | undefined;
+  /**
+   * The effects available to draw with, project-local ones included.
+   *
+   * Supplied rather than built here. This used to construct its own registry from the builtins alone,
+   * as the export did, so an effect living in the project's `effects/` folder was loaded, listed in the
+   * inspector, and drawn by neither path — a feature that existed everywhere except on screen.
+   */
+  readonly effects: EffectRegistry;
 }
 
 export function Preview({
@@ -69,6 +77,7 @@ export function Preview({
   resolveAsset,
   overlay,
   masks,
+  effects,
 }: PreviewProps): ReactNode {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [picture, setPicture] = useState<{ width: number; height: number } | undefined>(undefined);
@@ -79,7 +88,6 @@ export function Preview({
   const [textProblems, setTextProblems] = useState<readonly { clip: string; detail: string }[]>([]);
   const [glError, setGlError] = useState<string | undefined>(undefined);
 
-  const effects = useMemo(() => createEffectRegistry(BUILTIN_EFFECTS), []);
   // The same decoder the export uses. Two of them would eventually disagree about which frame a source
   // time lands on, and the delivered file would differ from what the user approved.
   const media = useMemo(

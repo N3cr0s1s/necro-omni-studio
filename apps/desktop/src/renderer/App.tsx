@@ -1477,6 +1477,7 @@ export function App(): ReactNode {
                   sidecar={sidecar}
                   resolveAsset={proxies.resolve}
                   masks={maskSource}
+                  effects={effects.registry}
                   {...(segmenting && masks.session !== undefined
                     ? {
                         overlay: (picture: { readonly width: number; readonly height: number }) => (
