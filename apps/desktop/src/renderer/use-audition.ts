@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AssetPath } from '@nos/core';
 import type { SidecarInfo } from '../main/ipc-contract.js';
+import { fileUrl } from './file-url.js';
 
 /**
  * Listening to a generated variant before accepting it.
@@ -56,7 +57,9 @@ export function useAudition(sidecar: SidecarInfo | undefined): Audition {
         setPlaying(false);
       };
 
-      audio.src = `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(asset)}&token=${encodeURIComponent(sidecar.token)}`;
+      const url = fileUrl(sidecar, asset);
+      if (url === undefined) return;
+      audio.src = url;
       current.current = asset;
       setError(undefined);
       void audio

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetPath } from '@nos/core';
 import { type AssetProvenance, parseProvenance, provenancePath } from '@nos/generators';
-import { type MarkdownBlock, isMarkdown, parseMarkdown } from '@nos/media';
+import { type AssetType, type MarkdownBlock, classifyAsset, isMarkdown, parseMarkdown } from '@nos/media';
+import { fileUrl } from './file-url.js';
 import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 import { shouldProxy } from './use-proxies.js';
 
@@ -20,6 +21,15 @@ import { shouldProxy } from './use-proxies.js';
 
 export interface AssetDetail {
   readonly name: string;
+  /** What the file is, so the pane knows whether there is anything to play. */
+  readonly assetType: AssetType | undefined;
+  /**
+   * Where the file can be fetched from, or `undefined` while the sidecar is starting.
+   *
+   * Resolved here rather than in the panel so the panel stays presentational, and so the *proxy* can
+   * be preferred later without every consumer learning that proxies exist.
+   */
+  readonly url: string | undefined;
   readonly summary: string | undefined;
   readonly hash: string | undefined;
   readonly hasProxy: boolean | undefined;
@@ -164,6 +174,8 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
 
   return {
     name: asset.slice(asset.lastIndexOf('/') + 1),
+    assetType: classifyAsset(asset),
+    url: fileUrl(sidecar, asset),
     summary: probed?.summary,
     hash: probed?.hash,
     // Undefined until the hash is known, which the pane renders as "pending" rather than "missing" —

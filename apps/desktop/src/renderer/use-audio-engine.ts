@@ -3,6 +3,7 @@ import { type AssetPath, type FrameIndex, type TimelineDocument } from '@nos/cor
 import { type AudioEngine, type MeterReading, createWebAudioEngine, hasAudibleContent } from '@nos/audio';
 import { type AudioBufferCache, createAudioBufferCache } from './audio-buffers.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
+import { fileUrl } from './file-url.js';
 
 /**
  * Playback audio.
@@ -62,7 +63,7 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
       if (sidecar === undefined || !sidecar.available) return undefined;
       // The token travels in the query because a media fetch here shares the endpoint that `<video>`
       // elements use, and that endpoint accepts it only for exactly this reason.
-      return `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(asset)}&token=${encodeURIComponent(sidecar.token)}`;
+      return fileUrl(sidecar, asset);
     },
     [sidecar],
   );

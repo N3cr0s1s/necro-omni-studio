@@ -11,6 +11,7 @@ import { decodePeaks } from '@nos/sidecar-client';
 import { type ClipStrip, fittedStrip, spanningStrip } from '@nos/ui';
 import { drawWaveform, filmstripHeightFor, thumbnailsPerSecondFor } from './clip-strips.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
+import { fileUrl } from './file-url.js';
 
 /**
  * Filmstrips and waveforms for the clips on screen.
@@ -176,8 +177,13 @@ async function deriveFilmstrip(
   // user reads a filmstrip to find a cut point.
   if (artifact?.filmstrip == null) return undefined;
 
+  // Unreachable in practice — a sidecar that answered a derivation request is available — but the
+  // helper is honest about a starting one, and a `src=""` is a broken image rather than an absent one.
+  const url = fileUrl(sidecar, artifact.path);
+  if (url === undefined) return undefined;
+
   const entry: Derived = {
-    url: fileUrl(sidecar, artifact.path),
+    url,
     revoke: false,
     sourceSeconds: artifact.filmstrip.duration_seconds,
   };
@@ -205,7 +211,10 @@ async function waveformStrip(
   const artifact = await derive(sidecar, asset, { kind: 'waveform', buckets_per_second: 100 });
   if (artifact === undefined) return undefined;
 
-  const response = await fetch(fileUrl(sidecar, artifact.path));
+  const peaksUrl = fileUrl(sidecar, artifact.path);
+  if (peaksUrl === undefined) return undefined;
+
+  const response = await fetch(peaksUrl);
   if (!response.ok) return undefined;
 
   const decoded = decodePeaks(await response.arrayBuffer());
@@ -243,6 +252,3 @@ async function derive(
 }
 
 /** The token travels in the query here, because an `<img src>` cannot send a header. */
-function fileUrl(sidecar: SidecarInfo, asset: string): string {
-  return `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(asset)}&token=${encodeURIComponent(sidecar.token)}`;
-}

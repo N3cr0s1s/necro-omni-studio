@@ -12,6 +12,7 @@ import { type RasterizedText, contentCacheKey, createCanvasRasterizer } from '@n
 import { textMaxWidth } from './text-plan.js';
 import type { LayerSource, RenderPlan, TextureProvider } from '@nos/compositor';
 import type { SidecarInfo } from '../main/ipc-contract.js';
+import { fileUrl } from './file-url.js';
 
 /**
  * Decoded frames, as textures.
@@ -163,7 +164,7 @@ export function createMediaTextures(
     const resolved = options.resolveAsset?.(asset) ?? asset;
     // The token travels in the query because `<video src>` cannot send a header — the one reason the
     // sidecar accepts it there at all.
-    return `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(resolved)}&token=${encodeURIComponent(sidecar.token)}`;
+    return fileUrl(sidecar, resolved);
   }
 
   function elementFor(source: LayerSource): HTMLVideoElement | HTMLImageElement | undefined {

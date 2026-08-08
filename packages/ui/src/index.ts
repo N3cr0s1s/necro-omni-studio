@@ -18,6 +18,7 @@ export * from './status/activity.js';
 export * from './status/StatusBar.js';
 export * from './media-browser/MediaBrowser.js';
 export * from './media-browser/AssetIcon.js';
+export * from './media-browser/MediaPreview.js';
 export * from './timeline/index.js';
 export * from './transport/index.js';
 export * from './inspector/index.js';

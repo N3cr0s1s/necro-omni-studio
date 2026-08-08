@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { DatabaseIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { provenanceRows } from '@nos/generators';
-import { AssetDetail, NoteView } from '@nos/ui';
+import { AssetDetail, MediaPreview, NoteView } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
@@ -77,14 +77,19 @@ export function BrowserDetail({ asset, cache, onOpenLink }: BrowserDetailProps):
       {asset === undefined ? (
         <p className="font-mono text-xs text-muted-foreground">select a file to see what it is</p>
       ) : (
-        <AssetDetail
-          name={asset.name}
-          isGenerated={asset.isGenerated}
-          {...(asset.summary !== undefined ? { summary: asset.summary } : {})}
-          {...(asset.hash !== undefined ? { hash: asset.hash } : {})}
-          {...(asset.hasProxy !== undefined ? { hasProxy: asset.hasProxy } : {})}
-          {...(asset.hasFilmstrip !== undefined ? { hasFilmstrip: asset.hasFilmstrip } : {})}
-        />
+        <>
+          {/* First, because it answers "what is this?" faster than any of the lines under it — and for
+              a folder of generated files whose names are job ids, it is the only thing that does. */}
+          <MediaPreview url={asset.url} assetType={asset.assetType} name={asset.name} />
+          <AssetDetail
+            name={asset.name}
+            isGenerated={asset.isGenerated}
+            {...(asset.summary !== undefined ? { summary: asset.summary } : {})}
+            {...(asset.hash !== undefined ? { hash: asset.hash } : {})}
+            {...(asset.hasProxy !== undefined ? { hasProxy: asset.hasProxy } : {})}
+            {...(asset.hasFilmstrip !== undefined ? { hasFilmstrip: asset.hasFilmstrip } : {})}
+          />
+        </>
       )}
 
       {asset?.note !== undefined && (

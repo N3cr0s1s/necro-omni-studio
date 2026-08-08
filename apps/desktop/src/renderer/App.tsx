@@ -106,6 +106,7 @@ import {
   segmentationActivity,
 } from './activities.js';
 import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js';
+import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
@@ -536,6 +537,8 @@ export function App(): ReactNode {
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
+  const columns = useStoredLayout('nos.layout.columns');
+  const rows = useStoredLayout('nos.layout.rows');
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
@@ -939,9 +942,15 @@ export function App(): ReactNode {
         and a browser is what you want gone entirely on a laptop.
 
         The handles carry a grip, because a boundary that only reveals itself on hover is one nobody
-        finds.
+        finds. Where they are left is remembered — a panel a user drags every session is one that
+        should have stayed where they put it.
       */}
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        {...(columns.layout !== undefined ? { defaultLayout: columns.layout } : {})}
+        onLayoutChange={columns.onLayoutChange}
+        className="min-h-0 flex-1"
+      >
         <ResizablePanel
           id="browser"
           defaultSize="18%"
@@ -990,7 +999,12 @@ export function App(): ReactNode {
         <ResizableHandle withHandle />
 
         <ResizablePanel id="stage" minSize="30%" className="min-w-0">
-          <ResizablePanelGroup orientation="vertical" className="min-h-0">
+          <ResizablePanelGroup
+            orientation="vertical"
+            {...(rows.layout !== undefined ? { defaultLayout: rows.layout } : {})}
+            onLayoutChange={rows.onLayoutChange}
+            className="min-h-0"
+          >
             <ResizablePanel id="viewer" defaultSize="62%" minSize="20%" className="min-h-0">
               <main className="flex h-full min-w-0 flex-col">
                 <Preview
