@@ -10,3 +10,4 @@ export * from './primitives/Primitives.js';
 export * from './media-browser/MediaBrowser.js';
 export * from './timeline/index.js';
 export * from './inspector/index.js';
+export * from './export/index.js';

@@ -5,6 +5,7 @@
  * mutation happens in the patch layer, which keeps undo/redo and autosave uniform.
  */
 export * from './ids.js';
+export * from './asset-type.js';
 export * from './params.js';
 export * from './clip.js';
 export * from './track.js';

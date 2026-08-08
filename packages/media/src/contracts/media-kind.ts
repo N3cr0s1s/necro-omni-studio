@@ -1,21 +1,7 @@
-import type { AssetPath } from '@nos/core';
+import { type AssetPath, type AssetType } from '@nos/core';
 
-/**
- * Asset types the framework knows, as fixed by the spec.
- *
- * This is the *closed* part of the system. Everything else — which model, which graph,
- * which effect — is manifest-driven and open, but every capability ultimately consumes
- * and produces values of these five types, and each type has exactly one importer that
- * knows how its output enters the project. Adding a sixth type is a deliberate,
- * cross-cutting change; adding a generator is a JSON file.
- */
-export const ASSET_TYPES = ['video', 'audio', 'image', 'mask', 'text'] as const;
-
-export type AssetType = (typeof ASSET_TYPES)[number];
-
-export function isAssetType(value: string): value is AssetType {
-  return (ASSET_TYPES as readonly string[]).includes(value);
-}
+// Re-exported so existing media consumers keep one import site, while core owns the vocabulary.
+export { ASSET_TYPES, isAssetType, type AssetType } from '@nos/core';
 
 /**
  * Extension-to-type mapping.

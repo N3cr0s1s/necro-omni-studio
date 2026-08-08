@@ -120,13 +120,19 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] ffmpeg pipe encoder in the sidecar: streaming stdin, H.264/H.265, audio
       muxing, progress, cancel. 17 tests against real ffmpeg, verifying a playable
       mp4, the frame count, the exact frame rate and **decoded pixel orientation**.
-- [ ] Export dialog UI
+- [x] Export dialog UI: continuous validation, codec/quality/speed choices, size
+      estimate, progress, cancel. 28 tests.
 
 ### Phase 7 — M9: Generator framework
-- [ ] Manifest schema + validator (pointer resolution, requires, outputs)
-- [ ] Registry with `available` / `unavailable` / `unbound` statuses + reasons
-- [ ] Job queue: groups + runs, variants, seed constraints, batch fallback
-- [ ] GPU semaphore
+- [x] Manifest contracts: consumes/produces descriptors, presets as separate UI
+      entries, `also` bindings, batch descriptor, duration mode, unbound detection
+- [ ] Manifest validator (pointer resolution, requires, outputs) + registry with
+      `available`/`unavailable`/`unbound` statuses and reasons
+- [x] Variant planning: seed constraints, sequential default, batch splitting.
+      19 tests.
+- [ ] Job queue: groups + runs, progress, cancellation
+- [x] GPU semaphore: serialized, idempotent release, cancellable waits, status
+      reporting. 16 tests.
 - [ ] Mock backend for framework tests
 - [ ] Registry-driven parameter panel UI
 - [ ] In-place variant picking on the timeline
@@ -150,8 +156,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–5 complete (M1–M7). Phase 6 in progress — encoder done, dialog UI left.**
-**832 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–6 complete (M1–M8). Phase 7 in progress — manifest contracts, variant
+planning and the GPU semaphore are done; the validator, registry and job queue
+remain.**
+**895 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -160,7 +168,7 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the export dialog UI, then Phase 7 (M9) — the generator framework. The Electron shell
+Next: the generator manifest validator and registry, then the job queue. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -243,6 +251,34 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Generator framework rules (keep these)
+
+- A manifest declares what it **consumes and produces**, never what it "is". The UI
+  derives placement from that pair, so TTS and video generation need no special
+  cases — they differ only in their descriptors.
+- A `consumes` **role** is what makes a capability placeable. The same node class
+  serves t2v and i2v, so the difference cannot be inferred from the graph and must
+  be declared.
+- Variants come from varying the **seed**. No seed parameter, or a locked seed,
+  forces one variant **and carries the reason** — the spec requires the UI to say
+  why rather than silently return identical results. A constraint is reported only
+  when it actually reduced something; explaining a limit the user did not hit trains
+  people to ignore explanations.
+- Execution is **sequential by default**. Batched is faster but scales VRAM and needs
+  graph support, so it is opt-in. Above `batch.max` the runner **splits** into
+  several batched runs rather than failing or abandoning batching.
+- The GPU semaphore is **serialized, not pooled**: the failure mode is an
+  out-of-memory abort partway through a job the user already waited minutes for. An
+  occasionally idle queue is a far better trade.
+- Release is **idempotent** — a `finally` plus an explicit release must not hand the
+  next turn out twice and run two GPU jobs at once. `withGpu` releases in a
+  `finally`, because a leaked lease deadlocks every generator, mask and export for
+  the rest of the session.
+- A cancelled wait is **removed from the queue**, so a cancelled job does not block
+  everything behind it for the duration of a run that will never happen.
+- The semaphore holder is **exposed**, because the mockups show jobs waiting on
+  segmentation. A progress bar that stops with no explanation reads as a hang.
 
 ### Export rules (keep these)
 

@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@nos/core": "*",
-    "@nos/media": "*"
+    "@nos/media": "*",
+    "@nos/export": "*"
   },
   "peerDependencies": {
     "react": "^19",
