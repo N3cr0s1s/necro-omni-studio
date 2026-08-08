@@ -46,8 +46,20 @@ from .models import (
     ProbeRequest,
     ScanRequest,
     ScanResponse,
+    SegmentCapabilitiesModel,
+    SegmentFrameModel,
+    SegmentFramesModel,
+    SegmentStartRequest,
+    SegmentStatusModel,
 )
 from .paths import PathError, ensure_project_layout, to_relative
+from .segmentation import (
+    Point,
+    SegmentationError,
+    SegmentationService,
+    SegmentJob,
+    SegmentRequest,
+)
 
 
 class Settings:
@@ -101,6 +113,15 @@ def get_encoder(request: Request) -> EncoderService:
     return resolved
 
 
+def get_segmenter(request: Request) -> SegmentationService:
+    """Resolve the segmentation service, or report that startup has not finished."""
+    resolved = getattr(request.app.state, "segmenter", None)
+    if resolved is None:
+        raise HTTPException(status_code=503, detail="sidecar is not ready")
+    assert isinstance(resolved, SegmentationService)
+    return resolved
+
+
 def get_service(request: Request) -> MediaService:
     """Resolve the media service, or report that startup has not finished."""
     resolved = getattr(request.app.state, "service", None)
@@ -114,6 +135,7 @@ Authorized = Depends(require_token)
 AuthorizedUrl = Depends(require_token_header_or_query)
 ServiceDep = Annotated[MediaService, Depends(get_service)]
 EncoderDep = Annotated[EncoderService, Depends(get_encoder)]
+SegmenterDep = Annotated[SegmentationService, Depends(get_segmenter)]
 
 
 def create_app(project_root: Path, token: str | None = None) -> FastAPI:
@@ -133,6 +155,7 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
         ensure_project_layout(settings.project_root)
         instance.state.service = MediaService(settings.project_root, tooling)
         instance.state.encoder = EncoderService(settings.project_root, tooling)
+        instance.state.segmenter = SegmentationService(settings.project_root)
         instance.state.tooling = tooling
         try:
             yield
@@ -143,8 +166,15 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
             if encoder is not None:
                 for job in encoder.active():
                     await encoder.cancel(job)
+            # Segmentation jobs hold GPU memory; leaving one running past shutdown would keep a
+            # model resident with nothing left to consume its output.
+            segmenter = getattr(instance.state, "segmenter", None)
+            if segmenter is not None:
+                for job in segmenter.active():
+                    await segmenter.cancel(job)
             instance.state.service = None
             instance.state.encoder = None
+            instance.state.segmenter = None
 
     app = FastAPI(
         title="Necro Omni Studio media sidecar",
@@ -161,6 +191,14 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
     @app.exception_handler(EncodeError)
     async def encode_error_handler(_request: Request, error: Exception) -> JSONResponse:
         assert isinstance(error, EncodeError)
+        return JSONResponse(
+            status_code=error.status,
+            content=ErrorModel(kind=error.kind, detail=error.detail).model_dump(),
+        )
+
+    @app.exception_handler(SegmentationError)
+    async def segmentation_error_handler(_request: Request, error: Exception) -> JSONResponse:
+        assert isinstance(error, SegmentationError)
         return JSONResponse(
             status_code=error.status,
             content=ErrorModel(kind=error.kind, detail=error.detail).model_dump(),
@@ -291,7 +329,106 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
         job = await encoder.cancel(encoder.get(job_id))
         return _export_status(job, media)
 
+    @app.get(
+        "/segment/capabilities",
+        response_model=SegmentCapabilitiesModel,
+        dependencies=[Authorized],
+    )
+    async def segment_capabilities(segmenter: SegmenterDep) -> SegmentCapabilitiesModel:
+        """Report whether segmentation can run, and why not when it cannot."""
+        capabilities = segmenter.capabilities()
+        return SegmentCapabilitiesModel(
+            available=capabilities.available,
+            propagates=capabilities.propagates,
+            detail=capabilities.detail,
+            model=capabilities.model,
+        )
+
+    @app.post("/segment/start", response_model=SegmentStatusModel, dependencies=[Authorized])
+    async def segment_start(
+        body: SegmentStartRequest, media: ServiceDep, segmenter: SegmenterDep
+    ) -> SegmentStatusModel:
+        """Queue a propagation over a clip's range."""
+        job = await segmenter.start(
+            body.job_id,
+            SegmentRequest(
+                source=media.require_file(body.source),
+                start_frame=body.start_frame,
+                end_frame=body.end_frame,
+                points=tuple(
+                    Point(frame=point.frame, x=point.x, y=point.y, include=point.include)
+                    for point in body.points
+                ),
+            ),
+        )
+        return _segment_status(job)
+
+    @app.get("/segment/{job_id}", response_model=SegmentStatusModel, dependencies=[Authorized])
+    async def segment_status(job_id: str, segmenter: SegmenterDep) -> SegmentStatusModel:
+        return _segment_status(segmenter.get(job_id))
+
+    @app.get(
+        "/segment/{job_id}/frames", response_model=SegmentFramesModel, dependencies=[Authorized]
+    )
+    async def segment_frames(
+        job_id: str, segmenter: SegmenterDep, since: int = 0
+    ) -> SegmentFramesModel:
+        """Masks produced since a cursor.
+
+        Polled with a cursor rather than streamed: a propagation produces one small object per
+        frame at a human-visible rate, and a cursor makes a dropped connection cost nothing — the
+        client asks again from where it was.
+        """
+        job = segmenter.get(job_id)
+        start = max(0, since)
+        return SegmentFramesModel(
+            job_id=job.job_id,
+            state=str(job.state),
+            next_cursor=len(job.frames),
+            frames=[
+                SegmentFrameModel(
+                    frame=mask.frame,
+                    width=mask.width,
+                    height=mask.height,
+                    counts=list(mask.counts),
+                )
+                for mask in job.frames[start:]
+            ],
+        )
+
+    @app.post(
+        "/segment/{job_id}/cancel", response_model=SegmentStatusModel, dependencies=[Authorized]
+    )
+    async def segment_cancel(job_id: str, segmenter: SegmenterDep) -> SegmentStatusModel:
+        return _segment_status(await segmenter.cancel(segmenter.get(job_id)))
+
+    @app.post(
+        "/segment/{job_id}/write", response_model=SegmentStatusModel, dependencies=[Authorized]
+    )
+    async def segment_write(
+        job_id: str, folder: str, media: ServiceDep, segmenter: SegmenterDep
+    ) -> SegmentStatusModel:
+        """Write a job's masks into the cache folder the renderer chose.
+
+        Containment is enforced by the media service, so this cannot write outside the project.
+        """
+        job = segmenter.get(job_id)
+        segmenter.write_masks(job, media.resolve(folder))
+        return _segment_status(job)
+
     return app
+
+
+def _segment_status(job: SegmentJob) -> SegmentStatusModel:
+    """Project a segmentation job onto the wire model."""
+    return SegmentStatusModel(
+        job_id=job.job_id,
+        state=str(job.state),
+        frames_done=len(job.frames),
+        expected_frames=job.expected,
+        progress=job.progress,
+        error=job.error,
+    )
 
 
 def _export_status(job, media: MediaService) -> ExportStatusModel:

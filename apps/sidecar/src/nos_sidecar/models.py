@@ -176,3 +176,69 @@ class ExportStatusModel(BaseModel):
     expected_frames: int
     output: str
     error: str | None = None
+
+
+class SegmentPointModel(StrictModel):
+    """A click, normalized to ``[0, 1]`` against the source resolution.
+
+    Normalized rather than in pixels so a click placed on a 720p proxy means the same thing when the
+    mask is produced at master resolution — otherwise every mask would be silently offset.
+    """
+
+    frame: int = Field(ge=0)
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    include: bool = True
+
+
+class SegmentStartRequest(StrictModel):
+    """Begins a propagation."""
+
+    job_id: str = Field(min_length=1, max_length=128)
+    source: str
+    start_frame: int = Field(ge=0)
+    end_frame: int = Field(gt=0)
+    points: list[SegmentPointModel] = Field(min_length=1)
+    # Where the masks land. Chosen by the renderer, which owns the cache key, so the key has one
+    # definition instead of two that have to agree.
+    cache_folder: str
+
+
+class SegmentFrameModel(BaseModel):
+    """One frame's mask, COCO run-length encoded, column-major."""
+
+    frame: int
+    width: int
+    height: int
+    counts: list[int]
+
+
+class SegmentStatusModel(BaseModel):
+    job_id: str
+    state: str
+    frames_done: int
+    expected_frames: int
+    progress: float
+    error: str | None = None
+
+
+class SegmentFramesModel(BaseModel):
+    """Masks produced since a cursor, so a client can poll without re-reading everything."""
+
+    job_id: str
+    state: str
+    next_cursor: int
+    frames: list[SegmentFrameModel]
+
+
+class SegmentCapabilitiesModel(BaseModel):
+    """What the engine can do — and, when it cannot, exactly why.
+
+    Reported rather than hidden: the same rule the generator registry follows, because a feature
+    that silently vanishes is far more expensive than one that explains itself.
+    """
+
+    available: bool
+    propagates: bool
+    detail: str = ""
+    model: str = ""
