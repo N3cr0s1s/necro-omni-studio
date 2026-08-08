@@ -299,3 +299,96 @@ describe('AssetDetail', () => {
     expect(within(detail!).getByText('generated')).toBeDefined();
   });
 });
+
+/**
+ * Narrowing the folder.
+ *
+ * A generator fills `generated/` with names that differ in the middle — twenty runs in, finding one
+ * take means reading forty of them. Scrolling is not a way to find a file.
+ */
+describe('filtering', () => {
+  const shown = (): readonly string[] =>
+    [...document.querySelectorAll('[role="treeitem"]')]
+      .map((row) => row.textContent ?? '')
+      .filter((text) => text.includes('.'));
+
+  it('narrows to what was typed', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.type(screen.getByLabelText('Filter the project folder'), 'seed4471');
+
+    expect(shown().some((name) => name.includes('t2v_0117_seed4471.mp4'))).toBe(true);
+    expect(shown().some((name) => name.includes('room_tone.wav'))).toBe(false);
+  });
+
+  it('opens the folders a match lives in', async () => {
+    // A match three folders down would otherwise sit behind collapsed folders, and the user would
+    // conclude the search does not work.
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.type(screen.getByLabelText('Filter the project folder'), 'old.mp4');
+
+    expect(shown().some((name) => name.includes('old.mp4'))).toBe(true);
+  });
+
+  it('says how much of the folder is showing', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.type(screen.getByLabelText('Filter the project folder'), 'mp4');
+
+    // interview_a, t2v_0117, archive/old — of nine files in the project.
+    expect(screen.getByText('3 of 9')).toBeTruthy();
+  });
+
+  it('keeps the count out of the way while nothing is filtered', () => {
+    renderBrowser();
+    expect(screen.queryByText(/ of 9$/)).toBeNull();
+  });
+
+  it('says so when nothing matches, rather than looking empty', async () => {
+    // An empty result and an empty project look identical, and only one of them means the user should
+    // try a different word.
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.type(screen.getByLabelText('Filter the project folder'), 'no such file');
+
+    expect(screen.getByText('nothing here matches')).toBeTruthy();
+  });
+
+  it('restores the folder when the filter is cleared', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    const box = screen.getByLabelText('Filter the project folder');
+    await user.type(box, 'seed4471');
+    await user.click(screen.getByRole('button', { name: 'Clear the filter' }));
+
+    expect(shown().some((name) => name.includes('room_tone.wav'))).toBe(true);
+  });
+
+  it('clears on Escape, so a stale filter cannot survive moving away', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    const box = screen.getByLabelText('Filter the project folder');
+    await user.type(box, 'seed4471');
+    await user.keyboard('{Escape}');
+
+    expect((box as HTMLInputElement).value).toBe('');
+  });
+
+  it('narrows to one kind of material', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.click(screen.getByRole('button', { name: 'Only audio' }));
+
+    expect(shown().some((name) => name.includes('room_tone.wav'))).toBe(true);
+    expect(shown().some((name) => name.includes('interview_a.mp4'))).toBe(false);
+  });
+
+  it('offers only kinds a project folder actually holds', () => {
+    // A `text` filter would always return nothing, and a control that never works teaches the user
+    // that none of them do.
+    renderBrowser();
+    expect(screen.queryByRole('button', { name: 'Only mask' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Only video' })).toBeTruthy();
+  });
+});

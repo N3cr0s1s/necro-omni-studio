@@ -6,4 +6,5 @@
  */
 export * from './contracts/index.js';
 export * from './tree/folder-tree.js';
+export * from './tree/filter-tree.js';
 export * from './notes/markdown.js';

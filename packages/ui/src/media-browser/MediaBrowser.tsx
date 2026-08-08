@@ -7,15 +7,20 @@ import {
   FolderTreeIcon,
   RadioIcon,
   RefreshCwIcon,
+  SearchIcon,
   TriangleAlertIcon,
+  XIcon,
 } from 'lucide-react';
-import type { AssetPath } from '@nos/core';
+import type { AssetPath, AssetType } from '@nos/core';
 import {
   type DirectoryNode,
   type FileNode,
+  type TreeFilter,
   type TreeNode,
   type WatcherStatus,
+  filterTree,
   formatBytes,
+  isNarrowing,
   isTimelineAsset,
 } from '@nos/media';
 import { Badge } from '@nos/ui/components/ui/badge';
@@ -25,6 +30,8 @@ import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
 import { cn } from '@nos/ui/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
+import { assetGlyph } from '../semantics/glyphs.js';
 import { AssetIcon } from './AssetIcon.js';
 
 /**
@@ -130,7 +137,23 @@ export function MediaBrowser({
   // Flattened to a single list of visible rows. A flat list is what a tree widget needs for
   // roving-focus keyboard navigation, and it is also what a virtualized list would consume if the
   // project grows past what the DOM handles comfortably.
-  const rows = useMemo(() => flattenVisible(tree, expanded), [tree, expanded]);
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<AssetType | undefined>(undefined);
+
+  const filter: TreeFilter = { query, ...(kind !== undefined ? { assetType: kind } : {}) };
+  const narrowed = isNarrowing(filter);
+  const shown = useMemo(() => filterTree(tree, filter), [tree, query, kind]);
+
+  /*
+   * Everything opens while filtering.
+   *
+   * A match three folders down would otherwise be hidden behind the collapsed folders above it: the
+   * user would type a name they can see in the finder, get a folder back, and conclude the search does
+   * not work. The user's own expansion state is untouched and comes back the moment the box is empty.
+   */
+  const visible = useMemo(() => (narrowed ? allDirectories(shown) : expanded), [narrowed, shown, expanded]);
+
+  const rows = useMemo(() => flattenVisible(shown, visible), [shown, visible]);
 
   // The menu for the empty space below the rows. This is what makes "New folder" reachable in a
   // project that has none — which is exactly when it is wanted.
@@ -147,6 +170,15 @@ export function MediaBrowser({
       </div>
       <Separator />
 
+      <BrowserFilter
+        query={query}
+        onQuery={setQuery}
+        kind={kind}
+        onKind={setKind}
+        showing={narrowed ? shown.fileCount : undefined}
+        total={tree.fileCount}
+      />
+
       <ActionMenu
         items={menu === undefined ? [] : menu.items(background)}
         onChoose={(action) => menu?.onChoose(background, action)}
@@ -154,7 +186,9 @@ export function MediaBrowser({
         <ScrollArea className="min-h-0 flex-1">
           <div role="tree" aria-label="Project folder" className="flex flex-col gap-px py-1">
             {rows.length === 0 ? (
-              <p className="p-4 font-mono text-xs text-muted-foreground">This project folder is empty</p>
+              <p className="p-4 font-mono text-xs text-muted-foreground">
+                {narrowed ? 'nothing here matches' : 'This project folder is empty'}
+              </p>
             ) : (
               rows.map((row) => (
                 <TreeRow
@@ -239,6 +273,119 @@ interface Row {
  *
  * The root's own children sit at depth 0 — the root itself is the panel, not a row.
  */
+/**
+ * The box that narrows the folder, and the kinds beside it.
+ *
+ * At the top rather than in a menu: the reason it exists is a `generated/` folder holding forty takes
+ * whose names differ in the middle, and a control you have to go looking for does not help with a list
+ * you are already lost in.
+ *
+ * The kind toggles carry the same glyphs and the same `chart` roles the rows below them use, so the
+ * filter and the thing filtered are recognisably about the same material.
+ */
+function BrowserFilter({
+  query,
+  onQuery,
+  kind,
+  onKind,
+  showing,
+  total,
+}: {
+  readonly query: string;
+  readonly onQuery: (value: string) => void;
+  readonly kind: AssetType | undefined;
+  readonly onKind: (value: AssetType | undefined) => void;
+  /** Files after filtering. Absent when nothing is being filtered, so the count stays out of the way. */
+  readonly showing: number | undefined;
+  readonly total: number;
+}): ReactNode {
+  return (
+    <div className="flex flex-none flex-col gap-1.5 px-2 py-1.5">
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          // `Escape` clears rather than blurring: the box is a filter, and leaving a stale one applied
+          // while the focus moves away is how a user ends up believing files have gone missing.
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            onQuery('');
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          aria-label="Filter the project folder"
+          placeholder="Filter…"
+          className="h-7 pr-7 pl-7 font-mono text-xs"
+        />
+        {query !== '' && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => onQuery('')}
+            aria-label="Clear the filter"
+            className="absolute top-1/2 right-1 -translate-y-1/2"
+          >
+            <XIcon />
+          </Button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <ToggleGroup
+          aria-label="Kind"
+          value={kind === undefined ? [] : [kind]}
+          onValueChange={(value) => onKind(value.at(-1) as AssetType | undefined)}
+          className="gap-0.5"
+        >
+          {FILTERABLE_KINDS.map((type) => {
+            const glyph = assetGlyph(type);
+            return (
+              <ToggleGroupItem
+                key={type}
+                value={type}
+                aria-label={`Only ${glyph.label}`}
+                title={`Only ${glyph.label}`}
+                className="size-6"
+              >
+                <glyph.icon className={cn('size-3.5', kind === type ? undefined : glyph.tone)} />
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+
+        {showing !== undefined && (
+          <span className="ml-auto pr-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+            {showing} of {total}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The kinds worth offering.
+ *
+ * Not every `AssetType`: a project folder holds no `text` files, and a `mask` is cache rather than
+ * material. Offering a filter that always returns nothing teaches the user the filter is broken.
+ */
+const FILTERABLE_KINDS: readonly AssetType[] = ['video', 'image', 'audio'];
+
+/** Every folder in a tree, for the expansion a filter forces. */
+function allDirectories(root: DirectoryNode): ReadonlySet<string> {
+  const paths = new Set<string>();
+  const walk = (node: DirectoryNode): void => {
+    for (const child of node.children) {
+      if (child.kind !== 'directory') continue;
+      paths.add(child.path);
+      walk(child);
+    }
+  };
+  walk(root);
+  return paths;
+}
+
 function flattenVisible(root: DirectoryNode, expanded: ReadonlySet<string>): readonly Row[] {
   const rows: Row[] = [];
 
