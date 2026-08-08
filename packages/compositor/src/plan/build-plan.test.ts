@@ -678,3 +678,21 @@ describe('determinism', () => {
     expect(plan(document, 42)).toEqual(plan(document, 42));
   });
 });
+
+describe('the source rate on the plan', () => {
+  it('carries the clip´s own rate, not the project´s', () => {
+    // A 24 fps clip on a 30 fps timeline seeked at the project rate lands 25% away from the right
+    // moment, and the error grows with the clip. The executor converts the frame to a seek time, so the
+    // plan has to say which rate it is counted in.
+    const clip = video('a', 0, 100) as Extract<Clip, { kind: 'video' }>;
+    const document = makeDocument({
+      v1: [{ ...clip, source: { ...clip.source, sourceRate: FRAME_RATES.FILM_24 } }],
+    });
+
+    const plan = buildRenderPlan({ document, frame: frameIndex(10), effects });
+    const item = plan.items[0];
+    expect(item?.kind).toBe('layer');
+    if (item?.kind !== 'layer' || item.layer.source.kind !== 'video') return;
+    expect(item.layer.source.sourceRate).toEqual(FRAME_RATES.FILM_24);
+  });
+});

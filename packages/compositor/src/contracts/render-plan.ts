@@ -4,6 +4,7 @@ import type {
   EffectId,
   EffectInstanceId,
   FrameIndex,
+  FrameRate,
   MaskId,
   Resolution,
   RgbaColor,
@@ -32,6 +33,14 @@ export type LayerSource =
       readonly asset: AssetPath;
       /** Frame to sample, in the *source's* own rate. */
       readonly sourceFrame: FrameIndex;
+      /**
+       * The rate `sourceFrame` is counted in.
+       *
+       * Carried on the plan because the executor has to convert it to a seek time, and the source's rate
+       * is not the project's — a 24 fps clip on a 30 fps timeline would otherwise be seeked to the wrong
+       * moment, by a factor of 1.25, with nothing in the plan to reveal it.
+       */
+      readonly sourceRate: FrameRate;
     }
   | { readonly kind: 'image'; readonly asset: AssetPath }
   /**

@@ -212,6 +212,7 @@ function resolveSource(
     kind: 'video',
     asset: clip.source.asset,
     sourceFrame: frameIndex(clip.source.sourceIn + sourceOffset),
+    sourceRate: clip.source.sourceRate,
   };
 }
 

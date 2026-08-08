@@ -16,8 +16,9 @@ import {
 } from '@nos/core';
 import { buildTree } from '@nos/media';
 import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
-import { Button, MediaBrowser, SectionCaption, Timeline, createViewport } from '@nos/ui';
+import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
+import { Preview } from './Preview.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
@@ -244,17 +245,7 @@ export function App(): ReactNode {
         <MediaBrowser tree={tree.tree ?? buildTree([])} watcher={tree.watcher} onActivate={() => undefined} />
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <div
-            style={{
-              flex: 1,
-              background: 'var(--nos-bg-canvas)',
-              display: 'grid',
-              placeItems: 'center',
-              color: 'var(--nos-text-ghost)',
-            }}
-          >
-            <SectionCaption>Preview</SectionCaption>
-          </div>
+          <Preview document={document} frame={playhead} sidecar={sidecar} />
 
           <div ref={laneRef} style={{ flex: 'none' }}>
             <Timeline
@@ -322,7 +313,16 @@ function TitleBar({
         borderBottom: '1px solid var(--nos-border)',
       }}
     >
-      <SectionCaption>Necro Omni Studio</SectionCaption>
+      <span
+        style={{
+          font: '600 10px system-ui',
+          letterSpacing: '.09em',
+          textTransform: 'uppercase',
+          color: 'var(--nos-text-dim)',
+        }}
+      >
+        Necro Omni Studio
+      </span>
       <span style={{ color: 'var(--nos-text-secondary)' }}>
         {project?.name ?? 'no project open'}
         {dirty ? ' •' : ''}
