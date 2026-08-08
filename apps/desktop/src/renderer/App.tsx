@@ -19,6 +19,7 @@ import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
 import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import { Preview } from './Preview.js';
+import { useClipDrag } from './use-clip-drag.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
@@ -99,6 +100,13 @@ export function App(): ReactNode {
   // otherwise drop every job in flight each time a manifest is edited.
   graphsRef.current = library.graphs;
 
+  const commitDocument = useCallback(
+    (label: string, next: TimelineDocument) => {
+      store.commit(label, () => next);
+    },
+    [store],
+  );
+
   const viewport = useMemo(
     () => createViewport({ framesPerPixel, scrollFrame, widthPx, frameRate: document.frameRate }),
     [framesPerPixel, scrollFrame, widthPx, document.frameRate],
@@ -146,6 +154,10 @@ export function App(): ReactNode {
       if (opened !== undefined) void adopt(opened, api);
     });
   }, [adopt]);
+
+  // The drag owns the document while a gesture is in flight, so the timeline renders its live preview
+  // and the store records exactly one entry when the pointer is released.
+  const drag = useClipDrag({ document, viewport, snapEnabled: snap, playhead, commit: commitDocument });
 
   const openProject = useCallback(async () => {
     const api = bridge();
@@ -227,7 +239,7 @@ export function App(): ReactNode {
         onSave={() => void save()}
       />
 
-      {error !== undefined && (
+      {(error ?? drag.rejection) !== undefined && (
         <div
           role="alert"
           style={{
@@ -237,7 +249,7 @@ export function App(): ReactNode {
             font: '500 11px ui-monospace, monospace',
           }}
         >
-          {error}
+          {error ?? drag.rejection}
         </div>
       )}
 
@@ -245,11 +257,11 @@ export function App(): ReactNode {
         <MediaBrowser tree={tree.tree ?? buildTree([])} watcher={tree.watcher} onActivate={() => undefined} />
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <Preview document={document} frame={playhead} sidecar={sidecar} />
+          <Preview document={drag.document} frame={playhead} sidecar={sidecar} />
 
           <div ref={laneRef} style={{ flex: 'none' }}>
             <Timeline
-              document={document}
+              document={drag.document}
               viewport={viewport}
               playhead={playhead}
               selectedClips={selected}
@@ -259,6 +271,9 @@ export function App(): ReactNode {
               onSelectClip={(clip, additive) =>
                 setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
               }
+              onClipPointerDown={(clip, event) => drag.begin('move', clip, event)}
+              onTrimStart={(clip, event) => drag.begin('trim-start', clip, event)}
+              onTrimEnd={(clip, event) => drag.begin('trim-end', clip, event)}
               onToggleSnap={() => setSnap((value) => !value)}
               onToggleRipple={() => setRipple((value) => !value)}
               onZoom={(next, anchorPx) => {
