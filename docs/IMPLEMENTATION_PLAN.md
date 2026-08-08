@@ -521,6 +521,22 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- The GPU semaphore serializes **every** consumer, not just the queue. `GpuConsumer` named four and
+  tests exercised four; production acquired with one. A lock only one caller takes is not a lock.
+- A shared resource must be created **once per window**, outside any memo whose dependencies can
+  change. Built inside the job queue's `useMemo`, the semaphore was replaced when the backend flipped
+  from mock to ComfyUI, and a lease held against the discarded instance guarded nothing.
+- `withGpu` fits work that is one `await`. Segmentation is a POST plus a poll, so the lease outlives
+  the call that took it and is released from every exit — including the terminal poll, without which
+  one propagation holds the card for the lifetime of the window.
+- Waiting for the GPU is a **named state**, not a progress fraction of zero. With the lock in place
+  waiting is normal, and silent waiting is indistinguishable from a hang.
+- An id for a job identifies **one attempt**, not one output. Deriving the encoder job id from the
+  output path and frame count made every export after the first collide with it, and the sidecar
+  refused the duplicate while the dialog sat at zero.
+- Existing is not finished. ffmpeg creates the output when it opens the muxer, so a check that reads
+  the file as soon as it appears reads a header with no frames behind it.
+
 - Unaccepted variants stay on disk by design, so something has to be able to **remove
   them later**. `generated/` reached 63 MB across 39 takes in a day of use, of which the
   sequence used one.
