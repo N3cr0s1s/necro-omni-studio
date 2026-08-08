@@ -521,6 +521,16 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- The inspector must be able to author **every** field the framework reads. `consumes` was written
+  verbatim from a draft value with no control, so everything authored there declared it consumed
+  nothing — and §5.2 derives the surfaces from exactly that field. "Kódírás nincs" fails wherever a
+  field has no control.
+- Inputs are **suggested from the parameters**, not asked for twice: a parameter of type `image` is a
+  generator taking an image, and asking again invites the two to disagree. The role is the part no
+  derivation can invent, so it stays editable and defaults to the parameter key `inputFor` matches on.
+- A field belongs to the type that reads it. `sources` on an image input is a field every reader
+  ignores and the next author has to explain away.
+
 - A text parameter's **sources** are honoured, per §10: typed, a `notes/` file, or a text clip. The
   field was declared, parsed and carried through the manifest layer while nothing read it, so a script
   already written could only be voiced by typing it again.
