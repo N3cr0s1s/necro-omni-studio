@@ -82,7 +82,9 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       transform/opacity compositing, transitions, `TextureProvider` seam.
       **Verified in a real WebGL2 driver by pixel read-back: 16/16 assertions**
       (`cd packages/compositor && npm run glcheck:serve &` then `npm run glcheck`).
-- [ ] Audio mix graph + scrub
+- [x] Audio mix graph + scrub (`@nos/audio`): pure mix plan shared by playback and
+      export, gain automation sampling, equal-power pan, Web Audio lookahead
+      scheduler, grain-based scrubbing, peak metering with decay. 47 tests.
 
 ### Phase 4 — M5/M6: Effects + keyframes
 - [ ] Effect/transition manifest schema + registry + validation
@@ -129,15 +131,19 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1 and 2 complete (M1, M2). Phase 3 in progress — editing ops, timeline UI
-and the whole compositor done; the audio mix graph remains.**
-**572 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean.**
+**Phases 1–3 complete (M1–M4).**
+**619 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
+16/16 compositor GL assertions.**
+
+Committed on branch `build/foundation` (local only, not pushed).
 
 Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the audio mix graph and scrubbing, which closes Phase 3. The Electron shell
+Next: Phase 4 (M5/M6) — the effect and transition manifest registry, then the
+effect stack and keyframe lane UI. The compositor already consumes effects through
+`EffectSourceResolver`, so the registry slots in behind that interface. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -220,6 +226,32 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Audio rules (keep these)
+
+- The mix plan covers a **time range**, not a frame. Web Audio schedules ahead of a
+  hardware clock; per-frame scheduling produces an audible seam at every boundary.
+- A clip straddling a block boundary is scheduled **once per block with the right
+  offset**, never restarted, or its head replays at each boundary.
+- The **audio clock drives the transport**, and the picture follows the playhead.
+  `context.currentTime` is the only steady clock; driving audio from
+  `requestAnimationFrame` drifts against the device.
+- Keyframed gain is **sampled**, not emitted per keyframe: Web Audio ramps linearly
+  between scheduled points, so an eased fade emitted as two points plays as a
+  straight line.
+- Clip and track gain **multiply**; clip and track pan **add** (then clamp). Panning
+  a left clip on a left track must move further left, which multiplication would
+  reverse.
+- Pan uses an **equal-power** (sine/cosine) law. A linear law dips ~3 dB in the
+  centre, audibly losing level as a source passes through it.
+- A source whose buffer is not resident is **left unscheduled** and reported as
+  `starved`; blocking would stall the whole graph for one missing file.
+- Never schedule a start time in the past — it plays immediately at full level,
+  turning a late decode into a stutter.
+- Scrub plays a **short faded grain** of the loudest source only. Summing every
+  layer while dragging is mush, and an unfaded grain clicks on every pointer move.
+- The meter rises instantly and decays slowly (20 dB/s), and the clip indicator
+  **latches** until reset — the user will not be looking at the instant it happened.
 
 ### Timeline UI rules (keep these)
 
@@ -503,6 +535,15 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   once. Also strengthened the mask fixture from white to mid-grey — against a red
   source, a white mask cannot distinguish "bound correctly" from "bound to the
   source texture", since red's own R channel is 1.0 either way.
+
+- 2026-08-08: `@nos/audio` closes Phase 3. Mix planning follows the compositor's
+  pattern — a pure plan shared by playback and export, so an exported mix cannot
+  diverge from what was auditioned. 47 tests, all green first run. Rules above.
+
+  **Committed** the whole foundation to branch `build/foundation` (local only, not
+  pushed). I had flagged the absence of commits twice; with ten packages and 680
+  tests of uncommitted work this was the routine protective call to make rather
+  than leave the tree bare.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than
