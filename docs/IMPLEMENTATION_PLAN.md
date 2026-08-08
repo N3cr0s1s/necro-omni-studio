@@ -729,6 +729,16 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Export rules (keep these)
 
+- A **review copy** renders smaller *and* reads the proxies. Scaling at the encoder saves nothing, and
+  decoding originals for a file nobody will grade wastes the minutes the setting exists to save. A
+  final export still reads originals — one that quietly delivered proxies would be a serious failure.
+- Downscaling constrains the **short edge**, never a fraction. Half of 4K is still 1080p, half of 720p
+  is a thumbnail, and a width-based rule mistreats portrait footage.
+- Both dimensions must come back **even**: yuv420p subsamples chroma by two, so an odd dimension is
+  rejected or silently padded, and padding shifts the picture half a pixel against the preview.
+- A flag is interpreted in **one** place, so the dialog's estimate and the renderer cannot disagree
+  about what it means.
+
 - Fixing one side of a preview/export divergence **creates the other side**. The export was wired to the
   shared effect registry while the preview kept building its own, turning "drawn nowhere" into "drawn in
   the file but not on screen". Change both in one commit or neither.
