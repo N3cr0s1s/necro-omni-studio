@@ -482,6 +482,18 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- A variant is identified by its **candidate key**, never by its run. A batched submit
+  is one run carrying several variants, so a run id names all of them at once — and
+  since no key ever equals a run id, code that mixed them up silently fell back to the
+  first variant instead of failing. It cost the arrow keys entirely: they did nothing
+  for every batched group, which is what the audio manifest produces by default.
+- Tests for anything that walks variants must include a **batched** fixture. Three
+  separate runs give every candidate its own run id, so run and key discriminate
+  identically and the whole class of bug is invisible.
+- The selection changes through **one channel**. Reporting a delta and letting the
+  caller work out which candidate it landed on is what let the two implementations
+  disagree; stepping is a pure function of the selection, so it belongs beside it.
+
 - A manifest declares what it **consumes and produces**, never what it "is". The UI
   derives placement from that pair, so TTS and video generation need no special
   cases — they differ only in their descriptors.
