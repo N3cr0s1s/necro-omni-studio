@@ -22,13 +22,15 @@ import {
 import { buildTree } from '@nos/media';
 import { insertGenerated, moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
-import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
+import { Button, ExportDialog, MediaBrowser, Timeline, createViewport } from '@nos/ui';
+import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
+import { defaultRange, useExportRun } from './use-export.js';
 import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
@@ -289,6 +291,21 @@ export function App(): ReactNode {
     [document.frameRate, store, tree],
   );
 
+  const exportRun = useExportRun({ document, sidecar });
+  const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
+
+  const openExport = useCallback(() => {
+    setExportSettings({
+      // A conventional destination under `renders/`, per the project layout, so the common case needs
+      // no typing at all.
+      outputPath: `renders/${project?.name ?? 'sequence'}.mp4`,
+      range: defaultRange(document),
+      resolution: document.resolution,
+      frameRate: document.frameRate,
+      ...DEFAULT_EXPORT,
+    });
+  }, [document, project?.name]);
+
   const razor = useCallback(() => {
     const target = [...selected][0];
     if (target === undefined) return;
@@ -318,9 +335,21 @@ export function App(): ReactNode {
         jobs={runtime.snapshot.activeCount}
         onOpen={() => void openProject()}
         onSave={() => void save()}
+        onExport={openExport}
       />
 
-      {(error ?? drag.rejection) !== undefined && (
+      {exportSettings !== undefined && (
+        <ExportDialog
+          settings={exportSettings}
+          {...(exportRun.progress !== undefined ? { progress: exportRun.progress } : {})}
+          onChange={setExportSettings}
+          onStart={() => exportRun.start(exportSettings)}
+          onCancel={exportRun.cancel}
+          onClose={() => setExportSettings(undefined)}
+        />
+      )}
+
+      {(error ?? drag.rejection ?? exportRun.error) !== undefined && (
         <div
           role="alert"
           style={{
@@ -330,7 +359,7 @@ export function App(): ReactNode {
             font: '500 11px ui-monospace, monospace',
           }}
         >
-          {error ?? drag.rejection}
+          {error ?? drag.rejection ?? exportRun.error}
         </div>
       )}
 
@@ -393,6 +422,7 @@ function TitleBar({
   jobs,
   onOpen,
   onSave,
+  onExport,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -402,6 +432,7 @@ function TitleBar({
   readonly jobs: number;
   readonly onOpen: () => void;
   readonly onSave: () => void;
+  readonly onExport: () => void;
 }): ReactNode {
   return (
     <header
@@ -479,8 +510,11 @@ function TitleBar({
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
       </span>
       <Button onClick={onOpen}>Open project</Button>
-      <Button tone="primary" onClick={onSave} disabled={project === undefined}>
+      <Button onClick={onSave} disabled={project === undefined}>
         Save
+      </Button>
+      <Button tone="primary" onClick={onExport} disabled={project === undefined}>
+        Export
       </Button>
     </header>
   );
