@@ -25,6 +25,15 @@ export interface MaskSession {
   readonly propagation: FrameSpan;
   readonly frames: ReadonlyMap<number, MaskFrame>;
   readonly running: boolean;
+  /**
+   * Started, but queued behind another consumer of the GPU.
+   *
+   * Separate from `running` so the panel can say which of the two it is. The spec serializes the
+   * generator backend, the segmenter and the graph-embedded LLMs on one semaphore, so waiting is a
+   * normal outcome of asking to segment while a generation is in flight — and one the user can only
+   * make sense of if it is named.
+   */
+  readonly waiting?: boolean;
   readonly progress?: number;
   readonly error?: string;
 }
@@ -99,17 +108,29 @@ export function toRequest(
  */
 export function applyEvent(session: MaskSession, event: SegmentationEvent): MaskSession {
   switch (event.kind) {
+    case 'waiting-for-gpu':
+      return { ...session, running: true, waiting: true };
+
     case 'progress':
+      // Anything from the engine means it has the card, so the wait is over by definition. Clearing it
+      // here rather than at the call site keeps "what ends a wait" a property of the reducer.
       return {
         ...session,
         running: true,
+        waiting: false,
         ...(event.progress.fraction !== undefined ? { progress: event.progress.fraction } : {}),
       };
 
     case 'frame': {
       const frames = new Map(session.frames);
       frames.set(event.mask.frame, event.mask);
-      return { ...session, frames, running: true, track: { ...session.track, status: 'pending' } };
+      return {
+        ...session,
+        frames,
+        running: true,
+        waiting: false,
+        track: { ...session.track, status: 'pending' },
+      };
     }
 
     case 'done': {
@@ -117,6 +138,7 @@ export function applyEvent(session: MaskSession, event: SegmentationEvent): Mask
         return {
           ...session,
           running: false,
+          waiting: false,
           progress: 1,
           track: { ...session.track, status: 'ready' },
         };
@@ -124,6 +146,7 @@ export function applyEvent(session: MaskSession, event: SegmentationEvent): Mask
       return {
         ...session,
         running: false,
+        waiting: false,
         error: describeSegmentationError(event.result.error),
         // Partial results are kept: 300 of 500 frames is 300 frames of expensive work.
         track: {
@@ -146,6 +169,7 @@ export function beginRun(session: MaskSession): MaskSession {
   const next: MaskSession = {
     ...session,
     running: true,
+    waiting: false,
     progress: 0,
     track: { ...session.track, status: 'pending' },
   };
@@ -201,6 +225,7 @@ export function propagationEnd(session: MaskSession): FrameIndex {
 /** One line describing the session, so the wording is asserted once. */
 export function describeSession(session: MaskSession): string {
   if (session.error !== undefined) return session.error;
+  if (session.waiting === true) return 'waiting for the GPU';
   if (session.running) {
     return session.progress === undefined
       ? 'segmenting'

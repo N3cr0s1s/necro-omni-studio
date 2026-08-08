@@ -176,6 +176,33 @@ describe('folding engine events', () => {
     expect(after.progress).toBe(0.4);
   });
 
+  it('says a run is queued behind the GPU rather than segmenting at zero', () => {
+    // The spec serializes the generator backend, the SAM 2 worker and the graph-embedded LLMs on one
+    // semaphore, so waiting is normal — and indistinguishable from a hang unless it is named.
+    const queued = applyEvent(running(), { kind: 'waiting-for-gpu' });
+    expect(queued.running).toBe(true);
+    expect(queued.waiting).toBe(true);
+  });
+
+  it('stops waiting the moment the engine says anything', () => {
+    // Whatever the first word from the engine is, it means the card is ours. Deciding that here rather
+    // than at the call site keeps "what ends a wait" a property of the reducer.
+    const queued = applyEvent(running(), { kind: 'waiting-for-gpu' });
+    expect(applyEvent(queued, { kind: 'progress', progress: { fraction: 0.1 } }).waiting).toBe(false);
+    expect(applyEvent(queued, { kind: 'frame', mask: mask(120) }).waiting).toBe(false);
+  });
+
+  it('stops waiting when a queued run fails outright', () => {
+    // A run refused while still queued must not stay on screen as though it were about to start.
+    const queued = applyEvent(running(), { kind: 'waiting-for-gpu' });
+    const failed = applyEvent(queued, {
+      kind: 'done',
+      result: { ok: false, error: { kind: 'failed', detail: 'no' } },
+    });
+    expect(failed.waiting).toBe(false);
+    expect(failed.running).toBe(false);
+  });
+
   it('marks the track ready when the run succeeds', () => {
     const done: SegmentationEvent = {
       kind: 'done',
@@ -263,6 +290,11 @@ describe('descriptions', () => {
 
   it('says a run is ready to start', () => {
     expect(describeSession(addPrompt(session(), point(120)))).toBe('ready to segment');
+  });
+
+  it('says it is queued for the GPU, not that it is segmenting', () => {
+    const queued = applyEvent(beginRun(addPrompt(session(), point(120))), { kind: 'waiting-for-gpu' });
+    expect(describeSession(queued)).toBe('waiting for the GPU');
   });
 
   it('shows progress while running', () => {

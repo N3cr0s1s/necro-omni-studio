@@ -63,6 +63,14 @@ export interface Segmenter {
 }
 
 export type SegmentationEvent =
+  /**
+   * Queued behind another GPU consumer, not yet running.
+   *
+   * Its own event rather than a progress fraction of zero because the two are different facts and the
+   * user acts on them differently: "segmenting 0%" invites waiting for a model that has not been
+   * handed the card yet, and makes a generation holding the GPU look like a segmentation that hung.
+   */
+  | { readonly kind: 'waiting-for-gpu' }
   | { readonly kind: 'progress'; readonly progress: SegmentationProgress }
   | { readonly kind: 'frame'; readonly mask: MaskFrame }
   | { readonly kind: 'done'; readonly result: Result<SegmentationSummary, SegmentationError> };

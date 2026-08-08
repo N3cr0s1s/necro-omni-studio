@@ -6,6 +6,7 @@ import {
   type GeneratorManifest,
   type JobTarget,
   type QueueSnapshot,
+  type GpuSemaphore,
   createGpuSemaphore,
   createJobQueue,
   createMockBackend,
@@ -36,6 +37,15 @@ export interface GeneratorRuntime {
   readonly error: string | undefined;
   readonly capabilities: BackendCapabilities | undefined;
   readonly snapshot: QueueSnapshot;
+  /**
+   * The window's GPU semaphore.
+   *
+   * Exposed because the spec serializes **three** consumers on one semaphore — the generator backend,
+   * the SAM 2 worker and the LLMs built into generator graphs — and only the job queue could reach it
+   * while it lived inside the queue's options. Segmentation and export therefore ran straight at a card
+   * a generation was already filling, which is the OOM this rule exists to prevent.
+   */
+  readonly gpu: GpuSemaphore;
   run(request: {
     readonly manifest: GeneratorManifest;
     readonly preset?: PresetId;
@@ -225,11 +235,22 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
 
   const backend: GeneratorBackend = mode === 'comfyui' ? comfy : mock;
 
+  /*
+   * One semaphore per window, created once.
+   *
+   * It used to be built inside the queue's `useMemo`, whose dependencies include the backend — so the
+   * moment ComfyUI answered and the mode flipped from mock, a *second* semaphore replaced the first and
+   * any lease held against the old one guarded nothing.
+   */
+  const gpuRef = useRef<GpuSemaphore | undefined>(undefined);
+  gpuRef.current ??= createGpuSemaphore();
+  const gpu = gpuRef.current;
+
   const queue = useMemo(
     () =>
       createJobQueue({
         backend,
-        gpu: createGpuSemaphore(),
+        gpu,
         patcher: {
           patch(manifest, params, seeds) {
             const graph = graphs?.current?.get(manifest.graph ?? '');
@@ -244,7 +265,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
         },
         nextSeed: () => Math.floor(Math.random() * 2 ** 31),
       }),
-    [backend, graphs],
+    [backend, graphs, gpu],
   );
 
   useEffect(() => queue.subscribe(setSnapshot), [queue]);
@@ -268,5 +289,5 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const cancelGroup = useCallback((group: JobGroupId) => queue.cancelGroup(group), [queue]);
   const dismissGroup = useCallback((group: JobGroupId) => queue.dismissGroup(group), [queue]);
 
-  return { mode, detail, error, capabilities, snapshot, run, cancelGroup, dismissGroup };
+  return { mode, detail, error, capabilities, snapshot, gpu, run, cancelGroup, dismissGroup };
 }

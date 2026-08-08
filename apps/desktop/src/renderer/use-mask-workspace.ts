@@ -23,6 +23,7 @@ import {
 } from '@nos/masks';
 import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 import { createBridgeMaskStorage } from './mask-storage.js';
+import type { GpuSemaphore } from '@nos/generators';
 import { useSegmentation } from './use-segmentation.js';
 
 /**
@@ -54,6 +55,14 @@ export function useMaskWorkspace(
   selectedClip: string | undefined,
   playhead: FrameIndex,
   sidecar: SidecarInfo | undefined,
+  /**
+   * The window's GPU semaphore, so a propagation serializes against generations.
+   *
+   * Passed in rather than created here: the spec's rule is *one* semaphore for every consumer, and a
+   * second instance would serialize segmentation against nothing but itself while still looking, from
+   * every status readout, exactly like a working lock.
+   */
+  gpu: GpuSemaphore,
   /**
    * How the cache reaches the project folder.
    *
@@ -121,7 +130,7 @@ export function useMaskWorkspace(
     [selectedClip, session],
   );
 
-  const segmentation = useSegmentation(sidecar, update);
+  const segmentation = useSegmentation(sidecar, update, gpu);
 
   /**
    * The source a clip's masks are keyed against.

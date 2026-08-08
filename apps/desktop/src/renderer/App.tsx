@@ -872,7 +872,7 @@ export function App(): ReactNode {
   // opens the generate panel — and a copy it could only read made both of those silently do nothing.
   const [rightTab, setRightTab] = useState<PanelTab>('inspector');
   const selectedClip = [...selected][0];
-  const masks = useMaskWorkspace(document, selectedClip, playhead, sidecar);
+  const masks = useMaskWorkspace(document, selectedClip, playhead, sidecar, runtime.gpu);
   // The overlay only while the segmentation panel is open. A preview that was click-to-place at all
   // times would swallow every click meant for the picture, and the crosshair would be a promise
   // about a mode the user is not in.
@@ -893,7 +893,7 @@ export function App(): ReactNode {
 
   // After the mask source, which it needs: an export that could not resolve a bound mask would render
   // it unmasked, and differ from the preview the user approved.
-  const exportRun = useExportRun({ document, sidecar, masks: maskSource });
+  const exportRun = useExportRun({ document, sidecar, masks: maskSource, gpu: runtime.gpu });
 
   /** What an effect on the selected clip may be bound to. */
   const maskChoices: readonly MaskChoice[] = useMemo(() => {
