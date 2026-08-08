@@ -11,7 +11,8 @@
   "dependencies": {
     "@nos/core": "*",
     "@nos/media": "*",
-    "@nos/export": "*"
+    "@nos/export": "*",
+    "@nos/generators": "*"
   },
   "peerDependencies": {
     "react": "^19",

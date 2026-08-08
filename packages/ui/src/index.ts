@@ -11,3 +11,4 @@ export * from './media-browser/MediaBrowser.js';
 export * from './timeline/index.js';
 export * from './inspector/index.js';
 export * from './export/index.js';
+export * from './generators/index.js';
