@@ -23,6 +23,7 @@ import { Button, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
 import { Preview } from './Preview.js';
+import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { RightPanel } from './RightPanel.js';
@@ -78,9 +79,11 @@ export function App(): ReactNode {
   const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
   useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
 
+  const audio = usePlaybackAudio({ document, sidecar });
   const transport = useTransport({
     frameRate: document.frameRate,
     endFrame: documentEnd(document),
+    audio,
   });
   useTransportKeys(transport);
   const playhead = transport.frame;

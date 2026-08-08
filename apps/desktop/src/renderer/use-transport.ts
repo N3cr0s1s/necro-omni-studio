@@ -30,22 +30,39 @@ export interface TransportOptions {
   /** One past the last frame. Playback stops here rather than running into empty timeline. */
   readonly endFrame: number;
   readonly initialFrame?: FrameIndex;
+  /**
+   * Audio playback, when there is any.
+   *
+   * The engine's contract makes the audio clock authoritative during playback — `context.currentTime` is
+   * the only steady clock available, and driving picture from it is what keeps the two locked. So when
+   * the engine reports a frame, that frame wins over this hook's own wall clock. A video-only timeline
+   * has no audio clock to follow and keeps the wall clock, which is why the fallback exists rather than
+   * simply deferring to the engine always.
+   */
+  readonly audio?: {
+    readonly available: boolean;
+    readonly frame: FrameIndex | undefined;
+    play(from: FrameIndex): void;
+    stop(): void;
+    seek(frame: FrameIndex): void;
+  };
 }
 
 export function useTransport(options: TransportOptions): Transport {
-  const { frameRate, endFrame } = options;
+  const { frameRate, endFrame, audio } = options;
   const [frame, setFrame] = useState<FrameIndex>(options.initialFrame ?? frameIndex(0));
   const [playing, setPlaying] = useState(false);
 
   // The wall-clock anchor for the current run: the moment playback started and the frame it started
   // from. Both reset on every seek, or a seek mid-playback would be undone on the next tick.
   const anchor = useRef({ startedAtMs: 0, startFrame: 0 });
-  const latest = useRef({ endFrame, frameRate });
-  latest.current = { endFrame, frameRate };
+  const latest = useRef({ endFrame, frameRate, audio });
+  latest.current = { endFrame, frameRate, audio };
 
   const seek = useCallback((next: FrameIndex) => {
     const clamped = frameIndex(Math.max(0, Math.min(latest.current.endFrame, next)));
     anchor.current = { startedAtMs: performance.now(), startFrame: clamped };
+    latest.current.audio?.seek(clamped);
     setFrame(clamped);
   }, []);
 
@@ -57,16 +74,21 @@ export function useTransport(options: TransportOptions): Transport {
         // do rather than sitting there doing nothing.
         const from = at >= latest.current.endFrame ? frameIndex(0) : at;
         anchor.current = { startedAtMs: performance.now(), startFrame: from };
+        latest.current.audio?.play(from);
         return from;
       });
       return true;
     });
   }, []);
 
-  const pause = useCallback(() => setPlaying(false), []);
+  const pause = useCallback(() => {
+    latest.current.audio?.stop();
+    setPlaying(false);
+  }, []);
   const toggle = useCallback(() => (playing ? pause() : play()), [playing, pause, play]);
 
   const step = useCallback((delta: number) => {
+    latest.current.audio?.stop();
     setPlaying(false);
     setFrame((at) => {
       const next = frameIndex(Math.max(0, Math.min(latest.current.endFrame, at + delta)));
@@ -81,11 +103,16 @@ export function useTransport(options: TransportOptions): Transport {
 
     const tick = (): void => {
       const { startedAtMs, startFrame } = anchor.current;
+      const fromAudio = latest.current.audio?.available === true ? latest.current.audio.frame : undefined;
+
+      // The audio clock wins when there is one. Falling back to the wall clock is not a degradation for a
+      // video-only timeline — there is simply nothing to lock to.
       const elapsedSeconds = (performance.now() - startedAtMs) / 1000;
       const advanced = Math.floor(elapsedSeconds * frameRateToNumber(latest.current.frameRate));
-      const next = startFrame + advanced;
+      const next = fromAudio ?? startFrame + advanced;
 
       if (next >= latest.current.endFrame) {
+        latest.current.audio?.stop();
         setFrame(frameIndex(latest.current.endFrame));
         setPlaying(false);
         return;
