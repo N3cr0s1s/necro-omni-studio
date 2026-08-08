@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -92,7 +92,10 @@ function mount(clip: Clip = audioClip(), playhead = 0) {
  * that is what a change is dispatched at — the group itself has no value to set.
  */
 function slider(label: string): HTMLInputElement {
-  const found = screen.getByLabelText(label).querySelector('input[type="range"]');
+  // The label names the range input directly now. It used to sit on the slider's *root*, where it
+  // named a `div` and left the input anonymous — so this had to reach inside to find the control.
+  const named = screen.getByLabelText(label);
+  const found = named instanceof HTMLInputElement ? named : named.querySelector('input[type="range"]');
   if (found === null) throw new Error(`no range input inside ${label}`);
   return found as HTMLInputElement;
 }
@@ -139,7 +142,10 @@ describe('decibels at the boundary', () => {
 
   it('returns to unity exactly, which dragging a fader cannot', () => {
     const { onChange } = mount(audioClip({ gain: staticNumber(0.3) }));
-    screen.getByRole('button', { name: /0 dB/ }).click();
+    // Scoped: the track below has its own unity button, and the two must not be confused.
+    within(screen.getByRole('region', { name: 'Clip audio' }))
+      .getByRole('button', { name: /0 dB/ })
+      .click();
 
     expect(evaluateAt(committed(onChange).gain, frameIndex(0))).toBe(1);
   });
@@ -179,7 +185,9 @@ describe('pan', () => {
 
   it('centres exactly on request', () => {
     const { onChange } = mount(audioClip({ pan: staticNumber(0.8) }));
-    screen.getByRole('button', { name: /centre/ }).click();
+    within(screen.getByRole('region', { name: 'Clip audio' }))
+      .getByRole('button', { name: /centre/ })
+      .click();
 
     expect(evaluateAt(committed(onChange).pan, frameIndex(0))).toBe(0);
   });
@@ -290,5 +298,63 @@ describe('the pure rules', () => {
   it('clamps gain to the range the control can show', () => {
     expect(clampGainDb(gainToDb(0))).toBe(-60);
     expect(clampGainDb(200)).toBe(12);
+  });
+});
+
+/**
+ * The track's own contribution.
+ *
+ * `track.gain` has been multiplied into every clip on the track since the mix plan was written and
+ * `track.pan` combined with each clip's — and nothing could set either, so both sat at unity and
+ * centre for the life of every project. Balancing a mix meant editing every clip one at a time.
+ */
+describe('the track under the clip', () => {
+  const trackRegion = () => within(screen.getByRole('region', { name: 'Track audio' }));
+
+  /** The audio track as the last commit left it. */
+  function committedTrack(onChange: ReturnType<typeof vi.fn>) {
+    const next = onChange.mock.calls.at(-1)?.[1] as TimelineDocument;
+    const track = next.sequence.tracks.find((entry) => entry.kind === 'audio');
+    if (track?.kind !== 'audio') throw new Error('no audio track');
+    return track;
+  }
+
+  it('is shown beside the clip, because a level is read against something', () => {
+    mount(audioClip());
+    expect(screen.getByRole('region', { name: 'Track audio' })).toBeTruthy();
+  });
+
+  it('sets the track level without touching the clip', () => {
+    const { onChange } = mount(audioClip({ gain: staticNumber(0.5) }));
+    trackRegion().getByRole('button', { name: /0 dB/ }).click();
+
+    const track = committedTrack(onChange);
+    expect(track.gain).toBe(1);
+    // The clip's own gain is untouched: two faders in series, not one.
+    const clip = committedTrack(onChange).clips[0];
+    expect(clip?.gain).toEqual(staticNumber(0.5));
+  });
+
+  it('centres the track pan', () => {
+    const { onChange } = mount(audioClip());
+    trackRegion()
+      .getByRole('button', { name: /centre/ })
+      .click();
+    expect(committedTrack(onChange).pan).toBe(0);
+  });
+
+  it('names its faders after the track, so two levels are told apart', () => {
+    mount(audioClip());
+    // The clip's is bare; the track's carries the track name, so the two are never confused.
+    expect(screen.getByLabelText('Gain in decibels')).toBeTruthy();
+    expect(screen.getByLabelText('A1 gain in decibels')).toBeTruthy();
+    expect(screen.getByLabelText('A1 pan')).toBeTruthy();
+  });
+
+  it('offers no animation, because a track is the constant clips are heard through', () => {
+    // `track.gain` is a number where `clip.gain` is an `AnimatableNumber`; the document models the
+    // difference and the panel must not offer what it cannot store.
+    mount(audioClip());
+    expect(trackRegion().queryByRole('button', { name: /animate/i })).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   type AnimatableNumber,
+  type AudioTrack,
   type AudioClip,
   type Clip,
   type TimelineDocument,
@@ -13,8 +14,10 @@ import {
   staticNumber,
 } from '@nos/core';
 import { GAIN_FLOOR_DB, dbToGain, formatDb, gainToDb } from '@nos/audio';
-import { AudioLinesIcon, DiamondIcon, RotateCcwIcon } from 'lucide-react';
+import { AudioLinesIcon, DiamondIcon, RotateCcwIcon, SlidersHorizontalIcon } from 'lucide-react';
+import { type TrackMixChange, setTrackMix } from '@nos/editing';
 import { Button } from '@nos/ui/components/ui/button';
+import { Label } from '@nos/ui/components/ui/label';
 import { Slider } from '@nos/ui/components/ui/slider';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { cn } from '@nos/ui/lib/utils';
@@ -83,98 +86,206 @@ export function AudioMix({ document, clip, playhead, onChange }: AudioMixProps):
   const gain = evaluateAt(audio.gain, frameIndex(Math.max(0, playhead - audio.span.start)));
   const pan = evaluateAt(audio.pan, frameIndex(Math.max(0, playhead - audio.span.start)));
 
+  // The track the clip sits on, so its own contribution can be read against the clip's. Narrowed
+  // rather than cast: an audio clip on a non-audio track is not a state this should paper over.
+  const holder = locateClip(document, audio.id)?.track;
+  const track = holder?.kind === 'audio' ? holder : undefined;
+
   const write = (label: string, channel: 'gain' | 'pan', value: AnimatableNumber): void => {
     onChange(label, replaceAudioChannel(document, audio, channel, value));
   };
 
   return (
     <div className="flex flex-col gap-2.5">
+      {/* Two regions rather than one nested in the other: a clip's level and its track's are separate
+          things to reach, and a reader scoping to one must not find the other's controls inside it. */}
+      <section aria-label="Clip audio" className="flex flex-col gap-2.5">
+        <div className="flex items-center gap-2">
+          <AudioLinesIcon className="size-3.5 text-chart-2" />
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Audio</span>
+        </div>
+
+        <Channel
+          label="gain"
+          readout={formatDb(gain)}
+          animated={isAnimated(audio.gain)}
+          onToggleAnimation={() =>
+            write(
+              isAnimated(audio.gain) ? 'un-animate gain' : 'animate gain',
+              'gain',
+              toggleAnimation(audio.gain, gain, `${audio.id}_gain`),
+            )
+          }
+        >
+          <Label className="w-full">
+            <span className="sr-only">Gain in decibels</span>
+            <Slider
+              min={GAIN_RANGE_DB.min}
+              max={GAIN_RANGE_DB.max}
+              step={0.5}
+              disabled={isAnimated(audio.gain)}
+              // The array form even for one value: given a scalar the registry falls back to
+              // `[min, max]` and renders a second thumb.
+              value={[clampGainDb(gainToDb(gain))]}
+              onValueChange={(next) =>
+                write(
+                  'set gain',
+                  'gain',
+                  staticNumber(dbToGain(clampGainDb(Array.isArray(next) ? (next[0] ?? 0) : next))),
+                )
+              }
+            />
+          </Label>
+        </Channel>
+
+        <Channel
+          label="pan"
+          readout={describePan(pan)}
+          animated={isAnimated(audio.pan)}
+          onToggleAnimation={() =>
+            write(
+              isAnimated(audio.pan) ? 'un-animate pan' : 'animate pan',
+              'pan',
+              toggleAnimation(audio.pan, pan, `${audio.id}_pan`),
+            )
+          }
+        >
+          <Label className="w-full">
+            <span className="sr-only">Pan</span>
+            <Slider
+              min={-1}
+              max={1}
+              step={0.01}
+              disabled={isAnimated(audio.pan)}
+              value={[pan]}
+              onValueChange={(next) =>
+                write('set pan', 'pan', staticNumber(snapPan(Array.isArray(next) ? (next[0] ?? 0) : next)))
+              }
+            />
+          </Label>
+        </Channel>
+
+        {/* Unity is a position a fader has to be able to return to exactly. Dragging back to 0.0 dB by
+          hand is a coin flip, and being 0.5 dB off is inaudible until it is summed with everything
+          else. */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isAnimated(audio.gain)}
+            onClick={() => write('reset gain', 'gain', staticNumber(1))}
+            title="Return the level to unity"
+          >
+            <RotateCcwIcon />0 dB
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isAnimated(audio.pan)}
+            onClick={() => write('centre pan', 'pan', staticNumber(0))}
+            title="Return the pan to centre"
+          >
+            <RotateCcwIcon />
+            centre
+          </Button>
+        </div>
+      </section>
+
+      {track !== undefined && <TrackMix document={document} track={track} onChange={onChange} />}
+    </div>
+  );
+}
+
+/**
+ * The whole track's contribution, under the clip's own.
+ *
+ * `track.gain` has been multiplied into every clip on the track since the mix plan was written, and
+ * `track.pan` combined with each clip's — and nothing could set either, so both sat at unity and
+ * centre for the life of every project. Balancing a mix meant editing every clip on a track one at a
+ * time, which is exactly the work a track fader exists to avoid.
+ *
+ * Shown here rather than in the track header because a level is read *against* something: the useful
+ * question is "this clip is at −3, what is the track doing to it?", and the two numbers a metre apart
+ * do not answer it. The header is also 176 px holding six controls already.
+ *
+ * Not animatable, unlike the clip's. A track is the constant the clips are heard through; an
+ * automation lane belongs to the material, and the document models it that way — `track.gain` is a
+ * number where `clip.gain` is an `AnimatableNumber`.
+ */
+function TrackMix({
+  document,
+  track,
+  onChange,
+}: {
+  readonly document: TimelineDocument;
+  readonly track: AudioTrack;
+  readonly onChange: (label: string, next: TimelineDocument) => void;
+}): ReactNode {
+  const write = (label: string, change: TrackMixChange): void => {
+    const result = setTrackMix(document, track.id, change);
+    if (result.ok) onChange(label, result.value);
+  };
+
+  return (
+    <section aria-label="Track audio" className="flex flex-col gap-2.5 border-t pt-2.5">
       <div className="flex items-center gap-2">
-        <AudioLinesIcon className="size-3.5 text-chart-2" />
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Audio</span>
+        <SlidersHorizontalIcon className="size-3.5 text-chart-2" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {track.name}
+        </span>
+        <span className="ml-auto font-mono text-xs text-muted-foreground tabular-nums">
+          {formatDb(track.gain)} · {describePan(track.pan)}
+        </span>
       </div>
 
-      <Channel
-        label="gain"
-        readout={formatDb(gain)}
-        animated={isAnimated(audio.gain)}
-        onToggleAnimation={() =>
-          write(
-            isAnimated(audio.gain) ? 'un-animate gain' : 'animate gain',
-            'gain',
-            toggleAnimation(audio.gain, gain, `${audio.id}_gain`),
-          )
-        }
-      >
+      <Label className="w-full">
+        <span className="sr-only">{`${track.name} gain in decibels`}</span>
         <Slider
-          aria-label="Gain in decibels"
           min={GAIN_RANGE_DB.min}
           max={GAIN_RANGE_DB.max}
           step={0.5}
-          disabled={isAnimated(audio.gain)}
-          // The array form even for one value: given a scalar the registry falls back to
-          // `[min, max]` and renders a second thumb.
-          value={[clampGainDb(gainToDb(gain))]}
+          value={[clampGainDb(gainToDb(track.gain))]}
           onValueChange={(next) =>
-            write(
-              'set gain',
-              'gain',
-              staticNumber(dbToGain(clampGainDb(Array.isArray(next) ? (next[0] ?? 0) : next))),
-            )
+            write('set track gain', {
+              gain: dbToGain(clampGainDb(Array.isArray(next) ? (next[0] ?? 0) : next)),
+            })
           }
         />
-      </Channel>
+      </Label>
 
-      <Channel
-        label="pan"
-        readout={describePan(pan)}
-        animated={isAnimated(audio.pan)}
-        onToggleAnimation={() =>
-          write(
-            isAnimated(audio.pan) ? 'un-animate pan' : 'animate pan',
-            'pan',
-            toggleAnimation(audio.pan, pan, `${audio.id}_pan`),
-          )
-        }
-      >
+      <Label className="w-full">
+        <span className="sr-only">{`${track.name} pan`}</span>
         <Slider
-          aria-label="Pan"
           min={-1}
           max={1}
           step={0.01}
-          disabled={isAnimated(audio.pan)}
-          value={[pan]}
+          value={[track.pan]}
           onValueChange={(next) =>
-            write('set pan', 'pan', staticNumber(snapPan(Array.isArray(next) ? (next[0] ?? 0) : next)))
+            write('set track pan', { pan: snapPan(Array.isArray(next) ? (next[0] ?? 0) : next) })
           }
         />
-      </Channel>
+      </Label>
 
-      {/* Unity is a position a fader has to be able to return to exactly. Dragging back to 0.0 dB by
-          hand is a coin flip, and being 0.5 dB off is inaudible until it is summed with everything
-          else. */}
       <div className="flex gap-2">
         <Button
           variant="outline"
           size="sm"
-          disabled={isAnimated(audio.gain)}
-          onClick={() => write('reset gain', 'gain', staticNumber(1))}
-          title="Return the level to unity"
+          onClick={() => write('reset track gain', { gain: 1 })}
+          title="Return the track to unity"
         >
           <RotateCcwIcon />0 dB
         </Button>
         <Button
           variant="outline"
           size="sm"
-          disabled={isAnimated(audio.pan)}
-          onClick={() => write('centre pan', 'pan', staticNumber(0))}
-          title="Return the pan to centre"
+          onClick={() => write('centre track pan', { pan: 0 })}
+          title="Return the track pan to centre"
         >
           <RotateCcwIcon />
           centre
         </Button>
       </div>
-    </div>
+    </section>
   );
 }
 

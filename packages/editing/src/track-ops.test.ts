@@ -21,6 +21,8 @@ import {
   createTrack,
   firstTrackOfKind,
   nextTrackId,
+  setTrackMix,
+  TRACK_GAIN_RANGE,
   nextTrackName,
   removeTrack,
   renameTrack,
@@ -434,5 +436,84 @@ describe('naming a kind with none of its own', () => {
   it('starts at one', () => {
     const trimmed = removeTrack(documentOf(), trackId('t1'));
     expect(trimmed.ok && nextTrackName(trimmed.value, 'text')).toBe('T1');
+  });
+});
+
+/**
+ * A track's contribution to the mix.
+ *
+ * `track.gain` was multiplied into every clip on it and `track.pan` combined with each clip's from the
+ * day the mix plan was written, and nothing could set either — so both sat at unity and centre for the
+ * life of every project. Balancing a mix meant editing every clip one at a time, which is the work a
+ * track control exists to avoid.
+ */
+describe('a track´s level and pan', () => {
+  const audioTrack = (document: TimelineDocument) =>
+    document.sequence.tracks.find((track) => track.kind === 'audio');
+
+  it('sets the level', () => {
+    const result = setTrackMix(documentOf(), trackId('a1'), { gain: 0.5 });
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(audioTrack(result.value)?.kind === 'audio' && audioTrack(result.value)).toMatchObject({
+        gain: 0.5,
+      });
+  });
+
+  it('sets the pan', () => {
+    const result = setTrackMix(documentOf(), trackId('a1'), { pan: -0.75 });
+    expect(result.ok && audioTrack(result.value)).toMatchObject({ pan: -0.75 });
+  });
+
+  it('leaves the other alone, so a fader move cannot recentre a pan', () => {
+    const panned = setTrackMix(documentOf(), trackId('a1'), { pan: 0.5 });
+    expect(panned.ok).toBe(true);
+    if (!panned.ok) return;
+
+    const quieter = setTrackMix(panned.value, trackId('a1'), { gain: 0.2 });
+    expect(quieter.ok && audioTrack(quieter.value)).toMatchObject({ gain: 0.2, pan: 0.5 });
+  });
+
+  it('clamps rather than refusing, because it comes from a fader', () => {
+    // The useful behaviour at the end of the travel is to stop; a rejection there would be a dialog
+    // in the middle of a drag.
+    const loud = setTrackMix(documentOf(), trackId('a1'), { gain: 99 });
+    expect(loud.ok && audioTrack(loud.value)).toMatchObject({ gain: TRACK_GAIN_RANGE.max });
+
+    const hard = setTrackMix(documentOf(), trackId('a1'), { pan: -9 });
+    expect(hard.ok && audioTrack(hard.value)).toMatchObject({ pan: -1 });
+  });
+
+  it('treats a value that is not a number as the floor', () => {
+    // `Number('')` is 0, not nothing — a cleared field must not silently become a boost.
+    const result = setTrackMix(documentOf(), trackId('a1'), { gain: Number.NaN });
+    expect(result.ok && audioTrack(result.value)).toMatchObject({ gain: 0 });
+  });
+
+  it('is unchanged when nothing actually moved', () => {
+    const document = documentOf();
+    const result = setTrackMix(document, trackId('a1'), { gain: 1, pan: 0 });
+    expect(result.ok && result.value).toBe(document);
+  });
+
+  it('takes it on a locked track, as mute and solo do', () => {
+    // Locking protects what is on a track; how loud it is being played back is not on it.
+    const base = documentOf();
+    const locked: TimelineDocument = {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        tracks: base.sequence.tracks.map((track) =>
+          track.kind === 'audio' ? { ...track, locked: true } : track,
+        ),
+      },
+    };
+    expect(setTrackMix(locked, trackId('a1'), { gain: 0.5 }).ok).toBe(true);
+  });
+
+  it('refuses a track that carries no audio', () => {
+    const result = setTrackMix(documentOf(), trackId('v1'), { gain: 0.5 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('wrong-track-kind');
   });
 });

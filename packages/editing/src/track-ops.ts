@@ -171,6 +171,59 @@ export function setTrackHeight(
   return ok({ ...document, sequence: { ...document.sequence, tracks } });
 }
 
+/** The range a track's level may take. Above unity is a boost, and 4× is where it stops being one. */
+export const TRACK_GAIN_RANGE = { min: 0, max: 4 } as const;
+
+/** What may be changed about an audio track's contribution to the mix. */
+export interface TrackMixChange {
+  /** Linear, applied after every clip's own gain. */
+  readonly gain?: number;
+  /** −1 hard left to +1 hard right. */
+  readonly pan?: number;
+}
+
+/**
+ * Sets an audio track's level and pan.
+ *
+ * The mix plan multiplied `track.gain` into every clip on the track and combined `track.pan` with each
+ * clip's from the day it was written — and nothing could set either, so both sat at unity and centre
+ * for the life of every project. Balancing a mix meant editing every clip on a track one at a time,
+ * which is precisely the work a track control exists to avoid.
+ *
+ * A **locked** track still takes both, like mute and solo: locking protects what is *on* a track, and
+ * how loud it is being played back is not on it.
+ *
+ * Clamped rather than refused. These come from a fader, where the useful behaviour at the end of the
+ * travel is to stop — a rejection there would be a dialog in the middle of a drag.
+ */
+export function setTrackMix(
+  document: TimelineDocument,
+  id: TrackId,
+  change: TrackMixChange,
+): Result<TimelineDocument, EditError> {
+  const index = document.sequence.tracks.findIndex((track) => track.id === id);
+  const track = document.sequence.tracks[index];
+  if (track === undefined) return err({ kind: 'track-not-found', track: id });
+  if (track.kind !== 'audio') {
+    return err({ kind: 'wrong-track-kind', track: id, accepts: ['audio'], received: track.kind });
+  }
+
+  const gain = change.gain === undefined ? track.gain : clamp(change.gain, TRACK_GAIN_RANGE);
+  const pan = change.pan === undefined ? track.pan : clamp(change.pan, { min: -1, max: 1 });
+  if (gain === track.gain && pan === track.pan) return ok(document);
+
+  const tracks = [...document.sequence.tracks];
+  tracks[index] = { ...track, gain, pan };
+  return ok({ ...document, sequence: { ...document.sequence, tracks } });
+}
+
+function clamp(value: number, range: { readonly min: number; readonly max: number }): number {
+  // A non-finite value would poison every sample the track contributes, and `Number('')` is 0 rather
+  // than nothing — so a cleared field must not silently become silence.
+  if (!Number.isFinite(value)) return range.min;
+  return Math.min(range.max, Math.max(range.min, value));
+}
+
 /** How many clips a removal would take with it, so the caller can say so before doing it. */
 export function clipsOnTrack(document: TimelineDocument, id: TrackId): number {
   const track = document.sequence.tracks.find((candidate) => candidate.id === id);
