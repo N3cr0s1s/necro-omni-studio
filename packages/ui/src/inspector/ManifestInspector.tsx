@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useMemo, useState } from 'react';
-import { FileJsonIcon, PlusIcon, SaveIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
+import { FileJsonIcon, PlusIcon, SaveIcon, SearchIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import {
   type DraftIssue,
   type DraftParam,
@@ -8,14 +8,21 @@ import {
   type GraphLiteral,
   type ManifestDraft,
   PARAM_TYPES,
+  TEXT_SOURCES,
   draftHasErrors,
   draftManifestJson,
+  editConsumes,
+  missingConsumes,
+  removeConsumes,
+  suggestedConsumes,
+  unmatchedConsumes,
   validateDraft,
 } from '@nos/generators';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { Checkbox } from '@nos/ui/components/ui/checkbox';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Label } from '@nos/ui/components/ui/label';
 import { Input } from '@nos/ui/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@nos/ui/components/ui/input-group';
 import { Item, ItemContent, ItemGroup, ItemMedia } from '@nos/ui/components/ui/item';
@@ -302,6 +309,8 @@ function DraftColumn({
           ))}
         </div>
 
+        <Consumes draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
+        <Separator />
         <Outputs draft={draft} nodeIds={nodeIds} {...(onChange !== undefined ? { onChange } : {})} />
         <Issues issues={issues} />
         <Preview draft={draft} />
@@ -657,6 +666,119 @@ function Preview({ draft }: { readonly draft: ManifestDraft }): ReactNode {
       >
         {json}
       </pre>
+    </div>
+  );
+}
+
+/**
+ * What the generator takes.
+ *
+ * §5.2 makes this the declaration the whole framework turns on: a manifest says what it consumes and
+ * produces, and the UI derives *where the action appears* from that. §5.9 promises the inspector writes
+ * manifests without anyone touching code — and this had no control at all, so everything authored here
+ * declared it consumed nothing and had to be finished by hand-editing the JSON.
+ *
+ * Suggested from the parameters rather than asked for twice: a parameter of type `image` is a generator
+ * taking an image, and asking again invites the two to disagree. What the derivation cannot invent is
+ * the **role** — `first_frame` and `style_reference` are both images — so that stays editable, and it
+ * defaults to the parameter's key, which is what binds a text input's sources to its parameter.
+ */
+function Consumes({
+  draft,
+  onChange,
+}: {
+  readonly draft: ManifestDraft;
+  readonly onChange?: (draft: ManifestDraft) => void;
+}): ReactNode {
+  const suggestions = missingConsumes(draft.consumes, suggestedConsumes(draft.params));
+  const unmatched = unmatchedConsumes(draft.consumes, draft.params);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Consumes</span>
+        {suggestions.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => onChange?.({ ...draft, consumes: [...draft.consumes, ...suggestions] })}
+          >
+            <PlusIcon />
+            {`Add ${suggestions.length} from parameters`}
+          </Button>
+        )}
+      </div>
+
+      {draft.consumes.length === 0 && (
+        <p className="font-mono text-xs text-muted-foreground">
+          nothing declared — the surfaces this generator appears on are derived from these
+        </p>
+      )}
+
+      {draft.consumes.map((input, index) => (
+        <div key={`${input.type}:${input.role ?? index}`} className="flex flex-col gap-2">
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+            <Labelled label="Role">
+              {(id) => (
+                <Input
+                  id={id}
+                  value={input.role ?? ''}
+                  onChange={(event) =>
+                    onChange?.({
+                      ...draft,
+                      consumes: editConsumes(draft.consumes, index, { role: event.target.value }),
+                    })
+                  }
+                />
+              )}
+            </Labelled>
+            <Labelled label="Type">
+              {(id) => <Input id={id} value={input.type} readOnly aria-readonly="true" />}
+            </Labelled>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove ${input.role ?? input.type}`}
+              onClick={() => onChange?.({ ...draft, consumes: removeConsumes(draft.consumes, index) })}
+            >
+              <Trash2Icon />
+            </Button>
+          </div>
+
+          {/* Sources are a text-only notion: on an image input they would be a field every reader
+              ignores and the next author has to explain away. */}
+          {input.type === 'text' && (
+            <div className="flex flex-wrap items-center gap-3 pl-1">
+              {TEXT_SOURCES.map((source) => (
+                <Label key={source} className="flex items-center gap-1.5 text-xs font-normal">
+                  <Checkbox
+                    checked={(input.sources ?? []).includes(source)}
+                    onCheckedChange={(checked) => {
+                      const current = new Set(input.sources ?? []);
+                      if (checked === true) current.add(source);
+                      else current.delete(source);
+                      onChange?.({
+                        ...draft,
+                        consumes: editConsumes(draft.consumes, index, {
+                          sources: TEXT_SOURCES.filter((entry) => current.has(entry)),
+                        }),
+                      });
+                    }}
+                  />
+                  {source}
+                </Label>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {unmatched.length > 0 && (
+        <p className="font-mono text-xs text-muted-foreground">
+          {`${unmatched.map((input) => input.role ?? input.type).join(', ')}: no parameter of that key, so the panel cannot ask for it`}
+        </p>
+      )}
     </div>
   );
 }

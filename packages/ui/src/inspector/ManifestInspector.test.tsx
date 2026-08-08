@@ -247,3 +247,88 @@ describe('the preview', () => {
     expect(manifest.status).toBe('unbound');
   });
 });
+
+describe('declaring what the generator consumes', () => {
+  /** A draft with a text parameter promoted from the graph, which is what implies a text input. */
+  const withScript = (): ManifestDraft => {
+    const promoted = promote(usable(), literals[2]!);
+    const param = promoted.params[0]!;
+    return editParam(promoted, param.id, { key: 'script', type: 'text' });
+  };
+
+  it('says nothing is declared, and why that matters', () => {
+    // §5.2 derives the surfaces an action appears on from this, so an empty list is worth explaining
+    // rather than leaving as blank space.
+    renderInspector();
+    expect(screen.getByText(/nothing declared/)).toBeDefined();
+  });
+
+  it('offers to derive the inputs from the parameters', () => {
+    renderInspector({ draft: withScript() });
+    expect(screen.getByRole('button', { name: /Add 1 from parameters/ })).toBeDefined();
+  });
+
+  it('does not offer to derive anything from a draft with no parameters', () => {
+    // Nothing to suggest is not a button that does nothing.
+    renderInspector();
+    expect(screen.queryByRole('button', { name: /from parameters/ })).toBeNull();
+  });
+
+  it('declares the input when the offer is taken, with the parameter´s key as its role', () => {
+    const onChange = vi.fn();
+    renderInspector({ draft: withScript(), onChange });
+
+    void userEvent.click(screen.getByRole('button', { name: /Add 1 from parameters/ }));
+
+    return vi.waitFor(() => {
+      const next = onChange.mock.calls.at(-1)?.[0] as ManifestDraft;
+      expect(next.consumes).toEqual([
+        { type: 'text', role: 'script', required: false, sources: ['inline', 'notes_file', 'text_clip'] },
+      ]);
+    });
+  });
+
+  it('stops offering what is already declared', () => {
+    renderInspector({
+      draft: { ...withScript(), consumes: [{ type: 'text', role: 'script' }] },
+    });
+    expect(screen.queryByRole('button', { name: /from parameters/ })).toBeNull();
+  });
+
+  it('offers the three sources for a text input and nothing for the others', () => {
+    const { rerender } = renderInspector({
+      draft: { ...withScript(), consumes: [{ type: 'text', role: 'script', sources: ['inline'] }] },
+    });
+    expect(screen.getByRole('checkbox', { name: 'notes_file' })).toBeDefined();
+
+    rerender(
+      <ManifestInspector
+        draft={{ ...withScript(), consumes: [{ type: 'audio', role: 'voice' }] }}
+        literals={literals}
+      />,
+    );
+    expect(screen.queryByRole('checkbox', { name: 'notes_file' })).toBeNull();
+  });
+
+  it('adds a source when its box is ticked, keeping the declared order', () => {
+    const onChange = vi.fn();
+    renderInspector({
+      draft: { ...withScript(), consumes: [{ type: 'text', role: 'script', sources: ['inline'] }] },
+      onChange,
+    });
+
+    void userEvent.click(screen.getByRole('checkbox', { name: 'text_clip' }));
+
+    return vi.waitFor(() => {
+      const next = onChange.mock.calls.at(-1)?.[0] as ManifestDraft;
+      expect(next.consumes[0]?.sources).toEqual(['inline', 'text_clip']);
+    });
+  });
+
+  it('names an input no parameter can fill, since the panel cannot ask for it', () => {
+    renderInspector({
+      draft: { ...withScript(), consumes: [{ type: 'audio', role: 'voice_reference' }] },
+    });
+    expect(screen.getByText(/voice_reference: no parameter of that key/)).toBeDefined();
+  });
+});
