@@ -1267,6 +1267,8 @@ function TrackLane({
         <ClipBody
           key={clip.id}
           clip={clip}
+          rollableStart={flushBefore(track, clip)}
+          rollableEnd={flushAfter(track, clip)}
           geometry={spanGeometry(viewport, clip.span)}
           heightPx={track.height}
           selected={selectedClips.has(clip.id)}
@@ -1289,6 +1291,24 @@ function TrackLane({
       ))}
     </div>
   );
+}
+
+/**
+ * Whether a clip's head sits flush against the clip before it, and its tail against the one after.
+ *
+ * What makes an edge a *cut* rather than merely an end, and therefore what makes rolling it possible.
+ * Exported so the rule has one definition: the handle's affordance and the edit itself have to agree
+ * about which edges are cuts, or the tooltip promises a gesture that refuses.
+ */
+export function flushBefore(track: Track, clip: Clip): boolean {
+  return trackClips(track).some(
+    (candidate) => candidate.id !== clip.id && endExclusive(candidate.span) === clip.span.start,
+  );
+}
+
+export function flushAfter(track: Track, clip: Clip): boolean {
+  const end = endExclusive(clip.span);
+  return trackClips(track).some((candidate) => candidate.id !== clip.id && candidate.span.start === end);
 }
 
 /**

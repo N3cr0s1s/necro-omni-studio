@@ -40,7 +40,15 @@ export type EditError =
   /** A name that is blank, which nothing could be referred to by. */
   | { readonly kind: 'empty-name'; readonly track?: TrackId; readonly clip?: ClipId }
   /** A clip that already belongs to a linked pair. Stealing it would leave a one-sided link. */
-  | { readonly kind: 'already-linked'; readonly clip: ClipId };
+  | { readonly kind: 'already-linked'; readonly clip: ClipId }
+  /**
+   * A roll was asked for across clips that do not meet.
+   *
+   * Its own kind rather than a collision or a missing clip: both clips exist and neither is in the
+   * other's way — they simply have a gap between them, and rolling across one would silently close it.
+   * That is a ripple, a different edit with a different name, and the message has to say so.
+   */
+  | { readonly kind: 'no-shared-cut'; readonly clips: readonly [ClipId, ClipId] };
 
 export function describeEditError(error: EditError): string {
   switch (error.kind) {
@@ -66,6 +74,8 @@ export function describeEditError(error: EditError): string {
       return `Track ${error.track} already exists`;
     case 'empty-name':
       return 'A name cannot be blank';
+    case 'no-shared-cut':
+      return `${error.clips[0]} and ${error.clips[1]} do not share a cut — there is a gap between them`;
     case 'already-linked':
       return `Clip ${error.clip} is already linked to something else`;
     default: {

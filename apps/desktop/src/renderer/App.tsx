@@ -978,8 +978,11 @@ export function App(): ReactNode {
               // Alt turns a move into a slip. The clip stays put and its content slides inside it —
               // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
               onClipPointerDown={(clip, event) => drag.begin(event.altKey ? 'slip' : 'move', clip, event)}
-              onTrimStart={(clip, event) => drag.begin('trim-start', clip, event)}
-              onTrimEnd={(clip, event) => drag.begin('trim-end', clip, event)}
+              // Shift rolls the cut instead of trimming one side of it: the outgoing clip gains
+              // exactly what the incoming one gives up, so nothing downstream moves. It is the edit
+              // an editor reaches for constantly — the cut is a frame late, so you move the cut.
+              onTrimStart={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)}
+              onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
               {...(expandedClip !== undefined ? { expandedClip } : {})}
               onToggleExpandClip={(clip) =>
                 setExpandedClip((current) => (current === clip ? undefined : clip))

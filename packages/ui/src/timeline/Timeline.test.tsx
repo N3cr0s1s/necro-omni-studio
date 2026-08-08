@@ -22,7 +22,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { Timeline, assetDropTarget, regionFor } from './Timeline.js';
+import { Timeline, assetDropTarget, flushAfter, flushBefore, regionFor } from './Timeline.js';
 import { clipAccessibleLabel } from './ClipBody.js';
 import { createViewport } from './viewport.js';
 
@@ -484,6 +484,59 @@ describe('many tracks', () => {
  * `assetDropTarget`, exercised directly above: which track a point falls on, which frame, and the
  * refusal below the last track. What is left in the component is one call and one piece of state.
  */
+
+describe('which edges are cuts', () => {
+  // What makes rolling possible, and what the handle's tooltip promises. The affordance and the edit
+  // must agree about which edges are cuts, or the tooltip offers a gesture that refuses.
+  const track = (clips: readonly Clip[]) =>
+    ({ ...(makeDocument(clips).sequence.tracks[0] as VideoTrack) }) as unknown as Parameters<
+      typeof flushBefore
+    >[0];
+
+  it('is a cut where one clip ends and the next begins', () => {
+    const clips = [video('a', 0, 100), video('b', 100, 200)];
+    const t = track(clips);
+    expect(flushAfter(t, clips[0] as Clip)).toBe(true);
+    expect(flushBefore(t, clips[1] as Clip)).toBe(true);
+  });
+
+  it('is not a cut across a gap', () => {
+    const clips = [video('a', 0, 100), video('b', 150, 250)];
+    const t = track(clips);
+    expect(flushAfter(t, clips[0] as Clip)).toBe(false);
+    expect(flushBefore(t, clips[1] as Clip)).toBe(false);
+  });
+
+  it('is not a cut at the ends of the sequence', () => {
+    const clips = [video('a', 0, 100), video('b', 100, 200)];
+    const t = track(clips);
+    expect(flushBefore(t, clips[0] as Clip)).toBe(false);
+    expect(flushAfter(t, clips[1] as Clip)).toBe(false);
+  });
+
+  it('never counts a clip against itself', () => {
+    // A zero-length clip cannot exist, but a rule comparing a clip's end to its own start would
+    // report every clip as flush with itself and offer a roll against nothing.
+    const clips = [video('only', 0, 100)];
+    const t = track(clips);
+    expect(flushBefore(t, clips[0] as Clip)).toBe(false);
+    expect(flushAfter(t, clips[0] as Clip)).toBe(false);
+  });
+
+  it('marks the handle so the gesture can be found', () => {
+    renderTimeline({
+      document: makeDocument([video('a', 0, 300), video('b', 300, 600)]),
+      onTrimStart: vi.fn(),
+      onTrimEnd: vi.fn(),
+    });
+
+    const shared = document.querySelector('[data-clip-id="b"] [data-trim-handle="start"]');
+    const outer = document.querySelector('[data-clip-id="a"] [data-trim-handle="start"]');
+    expect(shared?.getAttribute('data-rollable')).toBe('');
+    expect(outer?.hasAttribute('data-rollable')).toBe(false);
+    expect(shared?.getAttribute('title')).toContain('Shift');
+  });
+});
 
 describe('the context menu', () => {
   it('reports the lane a right-click on empty track area was on', async () => {

@@ -22,6 +22,14 @@ export interface ClipBodyProps {
   /** Filmstrip or waveform image and its placement, once derived. Absent means not ready yet. */
   readonly strip?: ClipStrip;
   readonly onPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+  /**
+   * Whether each edge is a cut shared with a neighbour, so shift-dragging it rolls rather than trims.
+   *
+   * Passed in rather than worked out here: whether two clips are flush is a question about the
+   * document, and this component is given a clip and a rectangle.
+   */
+  readonly rollableStart?: boolean | undefined;
+  readonly rollableEnd?: boolean | undefined;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   /** Above the spec's 8-pass budget, the clip carries a warning badge. */
@@ -83,6 +91,8 @@ export function ClipBody({
   selected,
   strip,
   onPointerDown,
+  rollableStart,
+  rollableEnd,
   onTrimStart,
   onTrimEnd,
   passWarningThreshold = 8,
@@ -225,8 +235,16 @@ export function ClipBody({
 
       {showHandles && (
         <>
-          <TrimHandle side="start" onPointerDown={(event) => onTrimStart?.(clip.id, event)} />
-          <TrimHandle side="end" onPointerDown={(event) => onTrimEnd?.(clip.id, event)} />
+          <TrimHandle
+            side="start"
+            rollable={rollableStart}
+            onPointerDown={(event) => onTrimStart?.(clip.id, event)}
+          />
+          <TrimHandle
+            side="end"
+            rollable={rollableEnd}
+            onPointerDown={(event) => onTrimEnd?.(clip.id, event)}
+          />
         </>
       )}
     </div>
@@ -318,14 +336,21 @@ function ClipChip({
  */
 function TrimHandle({
   side,
+  rollable,
   onPointerDown,
 }: {
   readonly side: 'start' | 'end';
+  /** True when this edge is a cut shared with a neighbour, so shift-dragging it rolls. */
+  readonly rollable?: boolean | undefined;
   readonly onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 }): ReactNode {
   return (
     <div
       data-trim-handle={side}
+      data-rollable={rollable === true ? '' : undefined}
+      // A title rather than a visible mark: the affordance is one held key on a handle that is already
+      // there, and a badge on every flush cut would clutter a busy sequence to teach one shortcut.
+      title={rollable === true ? `Drag to trim, or hold Shift to roll the cut` : 'Drag to trim'}
       aria-hidden="true"
       onPointerDown={(event) => {
         event.stopPropagation();

@@ -12,10 +12,14 @@ import {
   type SnapCandidate,
   DEFAULT_SNAP_PIXELS,
   collectSnapCandidates,
+  clampRoll,
+  clipAfter,
+  clipBefore,
   eligibleTracksFor,
   limitedStart,
   moveClip,
   moveClipsBy,
+  rollEdit,
   trackForOffset,
   slipClip,
   snapSpanTranslation,
@@ -49,11 +53,19 @@ import { type TimelineViewport, pxToFrames } from '@nos/ui';
  * one edit whose result is invisible in the clip's outline — nothing moves — so a user who triggered
  * it by accident would see no reason for the picture changing.
  */
-export type DragKind = 'move' | 'trim-start' | 'trim-end' | 'slip';
+export type DragKind = 'move' | 'trim-start' | 'trim-end' | 'slip' | 'roll';
 
 export interface DragState {
   readonly clip: ClipId;
   readonly kind: DragKind;
+  /**
+   * The pair whose cut a roll moves, resolved when the drag begins.
+   *
+   * Resolved once rather than per pointer move: the two clips stop being adjacent as soon as the
+   * first frame of the roll is applied to the preview, so looking them up again would find no shared
+   * cut and abandon the gesture after one frame.
+   */
+  readonly rolling?: { readonly outgoing: ClipId; readonly incoming: ClipId };
   readonly originX: number;
   /**
    * Where the drag started vertically, so a clip can change track.
@@ -111,7 +123,18 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 
   const begin = useCallback(
     (kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>) => {
-      setDrag({ clip, kind, originX: event.clientX, originY: event.clientY, document });
+      // Shift turns a trim into a roll. A modifier rather than a handle of its own because the cut is
+      // exactly where the two trim handles already are: a roll strip wide enough to grab would cover
+      // one of them, and losing head-trim on every flush clip is a worse trade than a held key.
+      const rolling = kind === 'roll' ? rollPair(document, clip, event) : undefined;
+      setDrag({
+        clip,
+        kind,
+        originX: event.clientX,
+        originY: event.clientY,
+        document,
+        ...(rolling !== undefined ? { rolling } : {}),
+      });
       setPreview(undefined);
       setRejection(undefined);
       setSnappedTo(undefined);
@@ -210,6 +233,21 @@ function applyDrag(
 
   const { track, clip } = located;
 
+  if (state.kind === 'roll') {
+    const pair = state.rolling;
+    // Nothing to roll: the grabbed edge is not a shared cut. Reported rather than silently treated as
+    // a trim, because a gesture that quietly became a different edit is worse than one that refuses.
+    if (pair === undefined) {
+      return { ok: false, error: { kind: 'no-shared-cut', clips: [state.clip, state.clip] } };
+    }
+    // Clamped so the cut slides up to the limit instead of the drag being refused past it — the same
+    // rule a move follows. The source handles are still enforced by the trims underneath.
+    const delta = clampRoll(state.document, pair.outgoing, pair.incoming, deltaFrames);
+    return plain(
+      rollEdit({ document: state.document, outgoing: pair.outgoing, incoming: pair.incoming, delta }),
+    );
+  }
+
   if (state.kind === 'trim-start') {
     return plain(trimClipStart(state.document, state.clip, deltaFrames));
   }
@@ -304,4 +342,27 @@ export function describeEditError(error: EditError): string {
     default:
       return `the edit was rejected: ${String(error.kind).replace(/-/g, ' ')}`;
   }
+}
+
+/**
+ * The pair whose cut a roll should move, from the edge that was grabbed.
+ *
+ * Grabbing a clip's head rolls the cut it shares with the clip before it; grabbing its tail rolls the
+ * one it shares with the clip after. `undefined` when that edge is not a shared cut at all — the
+ * start of the sequence, or a gap — and the caller refuses rather than falling back to a trim.
+ */
+function rollPair(
+  document: TimelineDocument,
+  clip: ClipId,
+  event: ReactPointerEvent<HTMLElement>,
+): { readonly outgoing: ClipId; readonly incoming: ClipId } | undefined {
+  const side = (event.currentTarget as HTMLElement).dataset['trimHandle'];
+
+  if (side === 'start') {
+    const previous = clipBefore(document, clip);
+    return previous === undefined ? undefined : { outgoing: previous, incoming: clip };
+  }
+
+  const next = clipAfter(document, clip);
+  return next === undefined ? undefined : { outgoing: clip, incoming: next };
 }
