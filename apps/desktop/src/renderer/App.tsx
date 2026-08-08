@@ -577,6 +577,7 @@ export function App(): ReactNode {
           onStart={() => exportRun.start(exportSettings)}
           onCancel={exportRun.cancel}
           onClose={() => setExportSettings(undefined)}
+          onReveal={() => void bridge()?.revealInFolder(exportSettings.outputPath)}
         />
       )}
 

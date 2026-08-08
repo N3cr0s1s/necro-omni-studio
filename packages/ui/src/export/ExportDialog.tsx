@@ -40,6 +40,8 @@ export interface ExportDialogProps {
   readonly onClose?: () => void;
   /** Opens a file picker for the destination. */
   readonly onBrowse?: () => void;
+  /** Shows the finished file in the file manager. Offered only once there is one. */
+  readonly onReveal?: () => void;
 }
 
 export function ExportDialog({
@@ -49,6 +51,7 @@ export function ExportDialog({
   onStart,
   onCancel,
   onClose,
+  onReveal,
   onBrowse,
 }: ExportDialogProps): ReactNode {
   const validation = useMemo(() => validateExportSettings(settings), [settings]);
@@ -153,7 +156,13 @@ export function ExportDialog({
         {settings.useProxyResolution && <Badge tone="warn">proxy resolution</Badge>}
       </div>
 
-      {progress !== undefined && <ProgressSection progress={progress} />}
+      {progress !== undefined && (
+        <ProgressSection
+          progress={progress}
+          outputPath={settings.outputPath}
+          {...(onReveal !== undefined ? { onReveal } : {})}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: token.space3, justifyContent: 'flex-end' }}>
         {running ? (
@@ -245,7 +254,15 @@ function Choice<T extends string>({
 }
 
 /** Progress bar, rate and remaining estimate. */
-function ProgressSection({ progress }: { readonly progress: ExportProgress }): ReactNode {
+function ProgressSection({
+  progress,
+  outputPath,
+  onReveal,
+}: {
+  readonly progress: ExportProgress;
+  readonly outputPath?: string;
+  readonly onReveal?: () => void;
+}): ReactNode {
   const failed = progress.phase === 'failed';
   const done = progress.phase === 'complete';
 
@@ -292,6 +309,18 @@ function ProgressSection({ progress }: { readonly progress: ExportProgress }): R
       </div>
 
       {progress.message !== undefined && !failed && <Mono tone={token.textGhost}>{progress.message}</Mono>}
+
+      {done && onReveal !== undefined && (
+        // A way to get to the file. After a render that took minutes, "show me the file" is the next
+        // thing anyone wants — and the destination is already named in the field above, so this adds
+        // the action rather than repeating the path.
+        <div style={{ display: 'flex' }}>
+          <div style={{ flex: 1 }} />
+          <Button onClick={onReveal} title={`Show ${outputPath ?? 'the finished file'} in the file manager`}>
+            Reveal
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

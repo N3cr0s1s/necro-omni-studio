@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1940 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1944 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2032,3 +2032,14 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   The look has its **own** clipboard, reached by the shifted chords — copying a
   grade must not lose the clips a user copied a moment earlier.
+
+- 2026-08-08: A finished export can be revealed. `revealInFolder` has been on the
+  bridge since the shell was built and had no callers; the dialog said "complete"
+  and stopped there, leaving the user to go looking for a folder they never chose.
+  After a render that took minutes, "show me the file" is the next thing anyone
+  wants.
+
+  The first version printed the output path beside the button and a test caught it
+  as a duplicate — the destination is already named in the field above. The control
+  now carries the path in its own title and adds the *action* rather than a second
+  copy of the information.

@@ -235,3 +235,40 @@ describe('proxy warning', () => {
     expect(screen.queryByText('proxy resolution')).toBeNull();
   });
 });
+
+describe('when it finishes', () => {
+  const complete = {
+    phase: 'complete' as const,
+    fraction: 1,
+    framesDone: 300,
+    framesTotal: 300,
+    fps: 24,
+    remainingSeconds: 0,
+  };
+
+  it('names the file the reveal will show, rather than repeating the path', () => {
+    // The destination is already in the field above; this adds the action, not a second copy of it.
+    renderDialog({ progress: complete, onReveal: vi.fn() });
+    expect(screen.getByTitle('Show renders/breakdown_v3.mp4 in the file manager')).toBeDefined();
+  });
+
+  it('offers to show it', () => {
+    const onReveal = vi.fn();
+    renderDialog({ progress: complete, onReveal });
+
+    screen.getByText('Reveal').click();
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers nothing to reveal while it is still running', () => {
+    renderDialog({
+      progress: { ...complete, phase: 'encoding', fraction: 0.5, framesDone: 150 },
+    });
+    expect(screen.queryByText('Reveal')).toBeNull();
+  });
+
+  it('says nothing about revealing when the shell cannot', () => {
+    renderDialog({ progress: complete });
+    expect(screen.queryByText('Reveal')).toBeNull();
+  });
+});
