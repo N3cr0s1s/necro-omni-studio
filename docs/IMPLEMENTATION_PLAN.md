@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1304 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1339 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -231,10 +231,16 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 `@nos/backend-comfyui`, `@nos/masks`, `@nos/ui` (tokens + components),
 `apps/sidecar` (Python). Generator library in `generators/`.
 
-Next: the Electron shell
-(`apps/desktop`) is still to be created; the `@nos/ui` visual harness
-(`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
-the media browser plus a full timeline from mockup 1a.
+The **Electron shell** (`apps/desktop`) now exists and runs: `cd apps/desktop &&
+npm start` builds the main process, the preload and the renderer, then opens the
+editor. Verified by launching it and inspecting the live window — the editor
+paints, `window.require` is undefined, the bridge exposes exactly its eight
+methods, and no page errors are raised. The `@nos/ui` visual harness
+(`cd packages/ui && npx vite`, port 5199) remains for component work.
+
+Next: wiring the remaining panels into the shell — the generator panel, the
+variant picker and the segmentation panel are all built and tested, and the shell
+currently mounts the media browser, the timeline and a minimal inspector.
 
 ### Editing rules (keep these)
 
@@ -1023,3 +1029,30 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   untouched tracks kept by reference — because a timing check alone is noisy on a
   loaded machine and says nothing about _why_ it regressed. On a 2000-clip project
   the structural claims are what fail first.
+
+- 2026-08-08: The Electron shell. Its job is deliberately three things — a window,
+  the project folder, the sidecar's lifetime — and everything else stays in
+  packages that have never imported Electron, which is why they have been testable
+  in Node from M1.
+
+  Two security decisions are worth stating because both are easy to erode by
+  accident. The preload exposes **eight named methods**, not a generic
+  `invoke(channel, payload)`: a generic bridge hands the whole main-process surface
+  to any renderer bug that lets an attacker choose the channel name, and the named
+  list is the entire trust boundary in one reviewable place. And the sidecar token
+  travels in the **environment**, never in argv — a command line is world-readable
+  through the process table on every platform this runs on. A test asserts the
+  token does not appear in the arguments, because that is the kind of thing a
+  refactor reintroduces silently.
+
+  Readiness is polled on `/health` rather than parsed from stdout. A readiness line
+  printed before the socket is actually bound is a race that shows up once a week
+  on a slow machine and never on the developer's.
+
+  Verified by launching it: the window paints the editor, `window.require` is
+  `undefined`, the bridge exposes exactly its eight methods, and no page errors are
+  raised.
+
+- 2026-08-08: `npm run verify` — format, lint, typecheck and the full suite — is
+  green: **1339 TypeScript tests, 136 Python tests, 22/22 compositor GL assertions
+  and 19/19 rasterizer assertions.** Every phase of the plan is checked.
