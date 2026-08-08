@@ -40,6 +40,7 @@ export const IPC = {
   trashEntry: 'project:trash',
   /** Writes a project-relative text file. */
   writeTextFile: 'project:write-text',
+  writeMixdown: 'export:write-mixdown',
   /** Lists a project subtree. */
   listFolder: 'project:list',
   /** The watcher's current state, for a renderer that subscribed after it started. */
@@ -214,6 +215,15 @@ export interface DesktopBridge {
    */
   trashEntry(path: string): Promise<FileOperation>;
   writeTextFile(path: string, contents: string): Promise<void>;
+  /**
+   * Writes the rendered audio mix into the project's cache, returning its project-relative path.
+   *
+   * A named method rather than a general binary write, which is the rule this whole bridge follows: a
+   * renderer that can put arbitrary bytes anywhere in the project is a different security posture from
+   * one that can hand over a mixdown. It lands in `cache/` because it is derived, disposable and
+   * regenerated on the next export — exactly what that folder is documented to hold.
+   */
+  writeMixdown(contents: Uint8Array): Promise<string>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
 
   /**

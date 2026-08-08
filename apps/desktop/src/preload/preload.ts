@@ -36,6 +36,7 @@ const bridge: DesktopBridge = {
   clearRecovery: () => ipcRenderer.invoke(IPC.clearRecovery),
   readTextFile: (path) => ipcRenderer.invoke(IPC.readTextFile, path),
   writeTextFile: (path, contents) => ipcRenderer.invoke(IPC.writeTextFile, path, contents),
+  writeMixdown: (contents) => ipcRenderer.invoke(IPC.writeMixdown, contents),
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),
   listLibrary: (path) => ipcRenderer.invoke(IPC.listLibrary, path),
   readLibraryFile: (path) => ipcRenderer.invoke(IPC.readLibraryFile, path),

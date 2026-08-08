@@ -20,7 +20,23 @@
         "id": "A1",
         "kind": "audio",
         "name": "A1",
-        "height": 64
+        "height": 64,
+        "clips": [
+          {
+            "id": "tone_1",
+            "kind": "audio",
+            "span": {
+              "start": 0,
+              "duration": 30
+            },
+            "label": "tone",
+            "source": {
+              "asset": "media/tone.wav",
+              "sourceIn": 0,
+              "sourceRate": "30"
+            }
+          }
+        ]
       },
       {
         "id": "T1",

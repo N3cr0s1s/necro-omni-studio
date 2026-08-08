@@ -17,6 +17,10 @@ import {
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { type GpuSemaphore, withGpu } from '@nos/generators';
+import { buildMixPlan, createOfflineMixRenderer, encodeWav } from '@nos/audio';
+import { createAudioBufferCache } from './audio-buffers.js';
+import { fileUrl } from './file-url.js';
+import { bridge } from './bridge.js';
 import { createMediaTextures } from './media-textures.js';
 import { prepareFrame } from './frame-render.js';
 import type { MaskSource } from './mask-source.js';
@@ -232,6 +236,28 @@ async function run(
   tracker.setPhase('preparing');
   report(tracker.snapshot(performance.now()));
 
+  /*
+   * The mix, rendered before a single frame is drawn.
+   *
+   * The export used to send an audio codec and a bitrate and never an audio *stream*, so ffmpeg muxed
+   * the picture alone and every delivered file was silent — whatever was on the audio tracks. It is
+   * rendered from the same `MixPlan` the preview schedules, so what is delivered is what was
+   * auditioned; that is the WYSIWYG guarantee applied to sound rather than only to pixels.
+   *
+   * A failure here does not stop the export. A cut delivered silent is bad; a cut not delivered at all
+   * because its music would not decode is worse, and the reason is carried into the progress message
+   * rather than lost.
+   */
+  tracker.setPhase('preparing');
+  report(tracker.snapshot(performance.now()));
+  const mixdown = await renderMixdown(documentRef.current, settings, sidecar).catch((failure: unknown) => {
+    report({
+      ...tracker.snapshot(performance.now()),
+      message: `the mix could not be rendered: ${failure instanceof Error ? failure.message : String(failure)}`,
+    });
+    return undefined;
+  });
+
   const started = await call('/export/start', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -245,6 +271,9 @@ async function run(
       crf: crfFor(settings.videoCodec, settings.quality),
       speed: settings.speed,
       expected_frames: total,
+      // Omitted rather than null when there is nothing to mix: a range with no audible clip in it is a
+      // legitimate export, and an empty stream would make the encoder wait for samples that never come.
+      ...(mixdown !== undefined ? { audio: mixdown } : {}),
       audio_codec: settings.audioCodec,
       audio_bitrate_kbps: settings.audioBitrateKbps,
     }),
@@ -460,3 +489,52 @@ function createReadbackTarget(
 export function defaultRange(document: TimelineDocument): ExportSettings['range'] {
   return renderRange(document);
 }
+
+/**
+ * Renders the export's audio and leaves it where the encoder can find it.
+ *
+ * `undefined` when the range holds nothing audible, which is a normal outcome — a title card over
+ * black has no mix — and is why the caller omits the field rather than sending an empty stream.
+ *
+ * The whole range is planned in **one** plan rather than the rolling window playback uses. The window
+ * exists so the scheduler can stay ahead of a moving clock; an offline render has no clock, and one
+ * plan means no seams to get wrong at the boundaries.
+ */
+async function renderMixdown(
+  document: TimelineDocument,
+  settings: ExportSettings,
+  sidecar: SidecarInfo,
+): Promise<string | undefined> {
+  const api = bridge();
+  if (api === undefined) return undefined;
+
+  const plan = buildMixPlan({ document, span: settings.range });
+  if (plan.sources.length === 0) return undefined;
+
+  const sampleRate = MIXDOWN_SAMPLE_RATE;
+  const channels = 2;
+
+  // Its own context, disposed with the render: the preview's belongs to the transport and reusing it
+  // would tie an export to whether the user happened to be playing.
+  const context = new AudioContext();
+  try {
+    const buffers = createAudioBufferCache({ context, urlFor: (asset) => fileUrl(sidecar, asset) });
+    const renderer = createOfflineMixRenderer({
+      buffers,
+      createContext: (count, length, rate) => new OfflineAudioContext(count, length, rate),
+    });
+
+    const rendered = await renderer.render([plan], sampleRate, channels);
+    return await api.writeMixdown(encodeWav(rendered));
+  } finally {
+    void context.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Sample rate of the rendered mix.
+ *
+ * 48 kHz because that is what video carries; resampling once here, deliberately, beats letting the
+ * encoder resample from whatever the first decoded file happened to be.
+ */
+const MIXDOWN_SAMPLE_RATE = 48_000;

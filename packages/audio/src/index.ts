@@ -7,3 +7,5 @@
 export * from './contracts/index.js';
 export * from './plan/build-mix-plan.js';
 export * from './engine/web-audio-engine.js';
+export * from './engine/offline-mix.js';
+export * from './engine/wav.js';

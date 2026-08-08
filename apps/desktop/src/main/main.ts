@@ -357,6 +357,19 @@ function registerHandlers(): void {
     await writeFile(absolute, requireString(contents), 'utf8');
   });
 
+  ipcMain.handle(IPC.writeMixdown, async (_event, contents: unknown): Promise<string> => {
+    if (!(contents instanceof Uint8Array)) throw new Error('the mixdown must be bytes');
+
+    // A fixed name, deliberately: the mixdown belongs to the export happening now, and accumulating one
+    // file per export in a folder the user never opens is how a cache quietly reaches tens of gigabytes.
+    const relative = 'cache/mixdown.wav';
+    const absolute = resolveInProject(requireProject(), relative);
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, contents);
+    return relative;
+  });
+
   ipcMain.handle(IPC.listFolder, async (_event, path: unknown): Promise<readonly FolderEntry[]> => {
     // Empty, not an error, for the same reason `readTextFile` returns nothing: a folder in a project
     // that is not open has no entries, and the mask cache and the browser both ask on mount.

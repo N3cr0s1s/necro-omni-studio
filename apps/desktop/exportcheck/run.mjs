@@ -69,6 +69,23 @@ const userData = join(work, 'user-data');
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: project }, null, 2));
 
+/*
+ * The fixture's audio, synthesized rather than committed.
+ *
+ * A binary in the repository for a one-second tone would be a strange thing to review, and ffmpeg is
+ * already required to read the delivered file back. A tone is also the right *kind* of signal here: its
+ * level is known, so "the export is silent" and "the export has audio" are separated by a number rather
+ * than by listening.
+ */
+const tone = join(project, 'media', 'tone.wav');
+mkdirSync(dirname(tone), { recursive: true });
+const synth = spawnSync('ffmpeg', [
+  ...['-v', 'error', '-y'],
+  ...['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1:sample_rate=48000'],
+  ...['-ac', '2', tone],
+]);
+if (synth.status !== 0) fail('the fixture tone could not be synthesized — is ffmpeg installed?');
+
 const port = await freePort();
 const electron = spawn(
   'npx',
@@ -212,6 +229,47 @@ try {
        * and less of it than frame 25 does. This is the check that would have caught the reveal being
        * computed and then ignored: every frame was fully typed, and nothing anywhere said so.
        */
+      /*
+       * The delivered sound.
+       *
+       * The export used to send the encoder an audio codec and a bitrate and never an audio *stream*,
+       * so every file was silent whatever was on the audio tracks — and nothing said so. A stream that
+       * exists is not enough either: an empty one would also pass a stream check, so the level is read.
+       */
+      const probe = spawnSync(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', delivered],
+        { encoding: 'utf8' },
+      );
+      if (!/\baudio\b/.test(probe.stdout ?? '')) {
+        fail('the delivered file has no audio stream, though the sequence has an audio clip');
+      } else {
+        const volume = spawnSync(
+          'ffmpeg',
+          [
+            '-v',
+            'info',
+            '-nostats',
+            '-i',
+            delivered,
+            '-map',
+            '0:a',
+            '-af',
+            'volumedetect',
+            '-f',
+            'null',
+            '-',
+          ],
+          { encoding: 'utf8' },
+        );
+        const mean = /mean_volume:\s*(-?\d+(?:\.\d+)?) dB/.exec(volume.stderr ?? '');
+        const level = mean === null ? undefined : Number(mean[1]);
+        // Digital silence reads about −91 dB. Anything above −60 is unambiguously programme material.
+        if (level === undefined) fail('the delivered audio could not be measured');
+        else if (level < -60) fail(`the delivered audio is silent at ${level} dB`);
+        else console.log(`✓ the mix reached the delivered file (mean ${level} dB)`);
+      }
+
       const early = frameAt(4);
       if (early.length < width * height) {
         fail('the early frame could not be decoded');
