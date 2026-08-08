@@ -935,6 +935,14 @@ so it can gate a release:
 
 ### Timeline UI rules (keep these)
 
+- An icon earns its place by doing work a word does badly: alignment has a universal glyph and three
+  mutually exclusive options, so it is three toggles rather than a dropdown. Decoration is not the
+  point — issue #21 calls the views raw, and the fix is legibility, not ornament.
+- Heading glyphs are **muted, never coloured**. A landmark is not a status, and colour in this
+  application already means something specific.
+- Replacing a working control with a different primitive is exactly where a value stops being
+  committed. Drive the new one and read the file, not the pressed state.
+
 - A change to something that carries several fields takes a **change object**, not a
   whole value: `undefined` means leave it, `null` means clear it. `updateMarker(…, {
   label })` must not wipe a colour it never thought about, and clearing removes the
