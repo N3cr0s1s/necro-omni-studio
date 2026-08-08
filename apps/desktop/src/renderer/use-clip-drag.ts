@@ -29,6 +29,7 @@ import {
   withLinkedClips,
 } from '@nos/editing';
 import { type TimelineViewport, pxToFrames } from '@nos/ui';
+import { describeEditError } from './edit-errors.js';
 
 /**
  * Dragging and trimming clips.
@@ -324,24 +325,6 @@ function applyDrag(
 /** An operation that cannot snap, in the shape the caller expects. */
 function plain(result: ReturnType<typeof trimClipStart>): Result<DragOutcome, EditError> {
   return result.ok ? { ok: true, value: { document: result.value, snappedTo: undefined } } : result;
-}
-
-/** A rejection the user can act on, rather than a discriminant. */
-export function describeEditError(error: EditError): string {
-  switch (error.kind) {
-    case 'collision':
-      return 'that position overlaps another clip';
-    case 'track-locked':
-      return 'the track is locked';
-    case 'clip-not-found':
-      return 'the clip is gone';
-    case 'empty-result':
-      return 'that would leave nothing of the clip';
-    case 'source-exhausted':
-      return `the source has ${error.available} frames left, ${error.requested} were asked for`;
-    default:
-      return `the edit was rejected: ${String(error.kind).replace(/-/g, ' ')}`;
-  }
 }
 
 /**

@@ -36,6 +36,7 @@ import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
+import { ClipTiming } from './ClipTiming.js';
 import { TransformInspector } from './TransformInspector.js';
 
 /**
@@ -145,8 +146,15 @@ export function ClipInspector({
         {...(onRename !== undefined ? { onCommit: (name: string) => onRename(located.clip.id, name) } : {})}
       />
 
-      {/* Framing first: where a clip is and how much of it shows are questions about the clip itself,
-          where an effect stack is about what is done to it afterwards. */}
+      {/* Timing before framing before effects: where a clip *is* comes before how it is framed, and
+          both come before what is done to it afterwards. */}
+      <ClipTiming
+        document={document}
+        clip={located.clip}
+        onChange={onChange}
+        {...(onReject !== undefined ? { onReject } : {})}
+      />
+
       <TransformInspector
         document={document}
         clip={located.clip}
