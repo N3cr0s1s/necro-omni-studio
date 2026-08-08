@@ -10,4 +10,6 @@ export * from './registry/generator-registry.js';
 export * from './queue/variant-plan.js';
 export * from './queue/gpu-semaphore.js';
 export * from './queue/job-queue.js';
+export * from './staging/placeholder.js';
+export * from './staging/variant-selection.js';
 export * from './backends/mock-backend.js';

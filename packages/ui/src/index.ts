@@ -12,3 +12,4 @@ export * from './timeline/index.js';
 export * from './inspector/index.js';
 export * from './export/index.js';
 export * from './generators/index.js';
+export * from './staging/index.js';

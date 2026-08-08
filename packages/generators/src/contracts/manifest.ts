@@ -154,6 +154,13 @@ export interface GeneratorManifest {
   readonly surfaces: readonly SurfaceId[];
 
   readonly duration: DurationMode;
+  /**
+   * Which parameter carries the declared length, for sizing a placeholder before the job runs.
+   *
+   * Optional: when absent, a documented key convention is used so the manifests printed in the spec size
+   * correctly unchanged. See `durationSource` in `staging/placeholder.ts`.
+   */
+  readonly durationFrom?: { readonly param: string; readonly unit: 'seconds' | 'frames' };
   readonly defaultVariants: number;
   readonly batch?: BatchDescriptor;
 
