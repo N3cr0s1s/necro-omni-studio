@@ -220,7 +220,9 @@ describe('a refusal', () => {
     act(() => harness.edits().remove());
 
     expect(spans(harness.store)).toHaveLength(2);
-    expect(harness.rejections[0]).toContain('track locked');
+    // The sentence, not the discriminant: this used to assert `track locked`, which is what the
+    // message said when it was the error's `kind` with its hyphens taken out.
+    expect(harness.rejections[0]).toBe('the track is locked — unlock it to change what is on it');
   });
 
   it('leaves the selection alone, because the clip is still there to act on', () => {

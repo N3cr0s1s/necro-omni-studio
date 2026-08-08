@@ -141,6 +141,7 @@ import { type PanelTab, RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
+import { describeEditError } from './edit-errors.js';
 import { useConfirmation } from './use-confirmation.js';
 import { SHORTCUT_GROUPS } from './shortcuts.js';
 
@@ -414,7 +415,7 @@ export function App(): ReactNode {
           frameIndex(Math.max(0, located.clip.span.start + delta)),
         );
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         setError(undefined);
@@ -495,7 +496,7 @@ export function App(): ReactNode {
           if (result.error.kind === 'collision' && placement === 'staged') {
             setBlocked({ outcome, manifest, track: result.error.track });
           } else {
-            setError(describeEdit(result.error));
+            setError(describeEditError(result.error));
           }
           return current;
         }
@@ -556,7 +557,7 @@ export function App(): ReactNode {
       store.commit('rename clip', (current) => {
         const result = setClipLabel(current, clip, name);
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         setError(undefined);
@@ -578,7 +579,7 @@ export function App(): ReactNode {
       store.commit('edit marker', (current) => {
         const result = updateMarker(current, frame, change);
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         setError(undefined);
@@ -910,7 +911,7 @@ export function App(): ReactNode {
       store.commit('add track', (current) => {
         const result = addTrack(current, { kind, id: nextTrackId(current, kind) });
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         return result.value.document;
@@ -924,7 +925,7 @@ export function App(): ReactNode {
       store.commit(`toggle track ${flag}`, (current) => {
         const result = toggleTrackFlag(current, id, flag);
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         return result.value;
@@ -941,7 +942,7 @@ export function App(): ReactNode {
         const lost = clipsOnTrack(current, id);
         const result = removeTrack(current, id);
         if (!result.ok) {
-          setError(describeEdit(result.error));
+          setError(describeEditError(result.error));
           return current;
         }
         if (lost > 0) setError(`removed the track and ${lost} clip${lost === 1 ? '' : 's'} on it`);
@@ -1019,7 +1020,7 @@ export function App(): ReactNode {
             if (pair === undefined) return current;
             const result = linkClips(current, pair.video, pair.audio);
             if (!result.ok) {
-              setError(describeEdit(result.error));
+              setError(describeEditError(result.error));
               return current;
             }
             return result.value;
@@ -1030,7 +1031,7 @@ export function App(): ReactNode {
             if (target.clip === undefined) return current;
             const result = unlinkClips(current, target.clip);
             if (!result.ok) {
-              setError(describeEdit(result.error));
+              setError(describeEditError(result.error));
               return current;
             }
             return result.value;
@@ -1365,7 +1366,7 @@ export function App(): ReactNode {
                     store.commit('rename track', (current) => {
                       const result = renameTrack(current, id, name);
                       if (!result.ok) {
-                        setError(describeEdit(result.error));
+                        setError(describeEditError(result.error));
                         return current;
                       }
                       return result.value;
@@ -1749,10 +1750,6 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
       {describeAutosave(status, now)}
     </span>
   );
-}
-
-function describeEdit(error: { readonly kind: string }): string {
-  return `the edit was rejected: ${error.kind.replace(/-/g, ' ')}`;
 }
 
 export { trimClipEnd, trimClipStart };

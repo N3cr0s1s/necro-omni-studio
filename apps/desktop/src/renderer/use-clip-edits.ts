@@ -12,7 +12,6 @@ import {
 import {
   type ClipAttributes,
   type Clipboard,
-  type EditError,
   EMPTY_CLIPBOARD,
   allClips,
   clearWorkRange,
@@ -30,6 +29,7 @@ import {
   splitClip,
   withLinkedClips,
 } from '@nos/editing';
+import { describeEditError } from './edit-errors.js';
 
 /**
  * Removing, disabling and cutting clips.
@@ -138,7 +138,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
             if (located === undefined) continue;
             const result = setClipEnabled(next, target, !located.clip.enabled);
             if (!result.ok) {
-              onReject(describe(result.error));
+              onReject(describeEditError(result.error));
               continue;
             }
             next = result.value;
@@ -155,7 +155,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
         store.commit('split clip', (current) => {
           const result = splitClip(current, target, playhead, clipId(`${target}_b`));
           if (!result.ok) {
-            onReject(describe(result.error));
+            onReject(describeEditError(result.error));
             return current;
           }
           return result.value;
@@ -218,7 +218,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
             effectId: (target, index) => effectInstanceId(`${target}_attr${index}`),
           });
           if (!result.ok) {
-            onReject(describe(result.error));
+            onReject(describeEditError(result.error));
             return current;
           }
           return result.value.document;
@@ -249,7 +249,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
               return clipId(`range_${range.start}_${counter}`);
             });
             if (!result.ok) {
-              onReject(describe(result.error));
+              onReject(describeEditError(result.error));
               continue;
             }
             next = result.value;
@@ -271,7 +271,7 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
             return clipId(`cut_${playhead}_${counter}`);
           });
           if (!result.ok) {
-            onReject(describe(result.error));
+            onReject(describeEditError(result.error));
             return current;
           }
           return result.value;
@@ -308,7 +308,7 @@ function pasteAt(options: ClipEditOptions, clipboard: Clipboard, at: FrameIndex)
 
     const result = pasteClips(current, clipboard, { at: target, ids });
     if (!result.ok) {
-      options.onReject(describe(result.error));
+      options.onReject(describeEditError(result.error));
       return current;
     }
     options.onPasted?.(result.value.clips);
@@ -335,7 +335,7 @@ function removeSelection(options: ClipEditOptions, ripple: boolean): void {
     for (const target of targets) {
       const result = ripple ? rippleDeleteClip(next, target) : liftClip(next, target);
       if (!result.ok) {
-        options.onReject(describe(result.error));
+        options.onReject(describeEditError(result.error));
         continue;
       }
       next = result.value;
@@ -446,10 +446,6 @@ function useEditKeys(actions: EditActions): void {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
-}
-
-function describe(error: EditError): string {
-  return `the edit was rejected: ${String(error.kind).replace(/-/g, ' ')}`;
 }
 
 /** What the Ripple toggle promises, for the control's own title. */
