@@ -269,11 +269,18 @@ playable file through the same compositor the preview uses (verified: H.264
 gives the manifest-driven effect stack with live parameters (verified: adding
 Film Grain renders one pass with visible grain).
 
-The application is feature-complete against the spec, and every subsystem is
-reachable from the shell. Remaining work is depth: keyframe editing in the
-shell (the lane component exists and is tested), and WebCodecs decoding — the
-export currently runs at about 1.4 fps because every frame costs a `<video>`
-seek.
+**Every feature in the spec is built, wired into the shell, and verified in the
+running application.** Keyframe editing is in — one lane per animated parameter,
+one drag one undo step (verified: a marker dragged from frame 300 to 420 returns
+to 300 with a single undo).
+
+The remaining opportunity is export throughput, and it is now *measured* rather
+than guessed: decode 3%, render 1%, readback 3%, **upload 78%**. The ingest path
+runs at roughly 12 MB/s over loopback HTTP, and a 1080p frame is 8 MB. The upload
+is pipelined so rendering no longer waits for it, but the ceiling is the transport
+itself — the next step is to move frames to the sidecar over a pipe from the main
+process rather than as HTTP request bodies. WebCodecs, previously assumed to be
+the fix, is not: a seek costs 2.4 ms and a texture upload 0.1 ms.
 
 ### Editing rules (keep these)
 
@@ -1213,3 +1220,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   was never installed. Verified end to end: exporting produces a 4.000000-second
   H.264 file with the composited pixels upright, and adding Film Grain shows its
   declared controls and renders visibly.
+
+- 2026-08-08: Keyframe editing, and a measurement that refuted this ledger.
+
+  The lanes follow §6.4: one per animated parameter, markers dragged horizontally,
+  and **one drag is one undo step** — the drag holds a preview document that never
+  reaches the store and commits once on release, the same pattern clip dragging
+  uses. Animating is an explicit act rather than something that happens on first
+  edit, and adding a keyframe mid-curve takes the parameter's value *at that
+  frame*, so the gesture makes an instant editable without changing what the
+  animation already does.
+
+  The more useful entry is the export measurement. This ledger recorded that the
+  export was slow "because every frame costs a `<video>` seek", and that WebCodecs
+  was the fix. Instrumenting the run — as a first-class result, because "the export
+  is slow" has four plausible causes and guessing costs a day — gave decode **3%**,
+  render **1%**, readback **3%**, upload **78%**. A direct probe confirmed it: a
+  seek is 2.4 ms and a texture upload 0.1 ms per 1080p frame, nowhere near the
+  700 ms per frame the export was spending. The assumption was wrong, and it was
+  written down confidently enough that it would have cost a day of WebCodecs work.
+
+  The upload is now pipelined so rendering does not stop while ffmpeg consumes a
+  batch, which is a real improvement wherever there are many batches. It cannot
+  raise the ceiling, though: the ingest path moves about 12 MB/s over loopback HTTP
+  and a 1080p frame is 8 MB. Moving frames to the sidecar over a pipe from the main
+  process, rather than as HTTP request bodies, is the next step — and now it is the
+  step the evidence points at rather than the one that sounded plausible.
