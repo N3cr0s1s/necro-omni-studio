@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1677 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1696 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1613,3 +1613,37 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   proxy for media/uhd.mp4", the request log shows `media/uhd.mp4` fetched first and
   `cache/proxy_1080p30q23_….mp4` fetched once it landed, and the cached proxy
   probes as 1920×1080 at 30/1.
+
+- 2026-08-08: The media browser says what a file is, and what the cache costs.
+  Selecting a file in the browser had never done anything: `onSelect` was unwired,
+  the `detail` slot was never filled, and `AssetDetail` and `summarizeMetadata`
+  had both sat unused since M2. A user could not tell a 4K source from a
+  proxy-sized one, or find out whether a clip would play back smoothly — the
+  question the pane exists to answer.
+
+  Derived artifacts are detected by **looking**, never by asking. `/media/derive`
+  would produce the missing one, turning "is there a proxy?" into a minutes-long
+  transcode nobody requested, so presence is read off a listing of `cache/`. The
+  match is on kind and content hash rather than on an exact filename, because the
+  spec in between varies — the filmstrip's thumbnail rate follows the zoom level,
+  so an exact-name check reports "no filmstrip" for an asset that has three.
+
+  A source too small to need a proxy shows **no proxy line at all** rather than a
+  pending one. There is no proxy question for a 720p file, and a "…" that never
+  resolved would read as work stuck rather than work not needed.
+
+  The cache half answers the spec's own sentence — show `cache/` with its size *so
+  the user can judge whether to clear it* — which had a size and no way to act on
+  it. Proxies made it urgent: one 4K source now leaves a large transcode behind.
+  Clearing is safe by construction rather than by care, and the response reports
+  what is *left* rather than what was removed, so a file the sidecar could not
+  delete stays counted.
+
+  One bug found by looking rather than by reasoning: the first implementation read
+  the cache listing off the browser's tree, which deliberately hides cache
+  *contents* — so the listing was always empty and both indicators could never be
+  true. The tree showed the folder; the folder had no children to inspect.
+
+  Verified in the running app: a 320×180 source reads `320×180 · h264 · 0:03` with
+  `filmstrip ✓` and no proxy line; a 3840×2160 source reads `proxy ✓ filmstrip ✓`;
+  and Clear took the cache from 5 files to 0 on disk with the footer following.

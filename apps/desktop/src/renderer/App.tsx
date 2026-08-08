@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type AssetPath,
   type AutosaveStatus,
   type Clip,
   type ClipId,
@@ -38,6 +39,9 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { describeProxies, useProxies } from './use-proxies.js';
+import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
+import { useCacheStats } from './use-cache-stats.js';
+import { BrowserDetail } from './BrowserDetail.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
@@ -390,6 +394,15 @@ export function App(): ReactNode {
   // proxy exists, so importing a 4K source shows a picture immediately and gets a cheaper one shortly.
   const proxies = useProxies({ document, sidecar });
 
+  // The browser's footer. The cache size is re-read as proxies land, because a number that only
+  // updated on relaunch would be wrong for exactly as long as it mattered.
+  const [browserSelection, setBrowserSelection] = useState<AssetPath | undefined>(undefined);
+  const cache = useCacheStats({ sidecar, revision: proxies.ready });
+  // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
+  // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
+  const cacheEntries = useCacheListing(bridge(), project?.root, proxies.ready + cache.fileCount);
+  const assetDetail = useAssetDetail({ asset: browserSelection, sidecar, cacheEntries });
+
   /**
    * The non-error status line.
    *
@@ -516,6 +529,9 @@ export function App(): ReactNode {
           tree={tree.tree ?? buildTree([])}
           watcher={tree.watcher}
           onRescan={tree.refresh}
+          {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
+          onSelect={setBrowserSelection}
+          detail={<BrowserDetail asset={assetDetail} cache={cache} />}
           onActivate={(asset) => {
             void mediaImport.run(asset, playhead).then((id) => {
               // Selected on arrival, because the next thing a user does with a clip they just added is
