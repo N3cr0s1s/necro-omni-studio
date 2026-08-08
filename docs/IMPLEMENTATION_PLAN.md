@@ -692,6 +692,20 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Text layer rules (keep these)
 
+- A value the plan computes and no renderer reads is not a feature. `reveal` was evaluated per frame,
+  the advances were measured and dropped, and `typewriterAt` — the whole cut arithmetic, fully tested —
+  had no callers. Three built parts, nothing joining them, and every title silently fully typed.
+- The typewriter cut is **three regions**, not per-line rectangles: reading order guarantees that some
+  lines are done, exactly one is mid-word, and the rest have not started. That holds for any line
+  count in three numbers; a list would need a bound the shader cannot exceed.
+- The cut belongs in the **seed copy** that starts a layer's effect chain — free, because that copy
+  happens anyway, and correct, because a glow must light the characters that exist rather than the
+  whole line with holes cut out of its halo afterwards.
+- Advances are in the raster's own pixels and the texture is frame-sized, so the **placement has to be
+  kept**, not only applied. Without it a centred title cuts half a frame from its own text.
+- A type that is the seam between two packages belongs in `core`, expressed in the units that cross
+  it. Texture coordinates cross; glyphs do not.
+
 - An animation preset is a **keyframe generator**, never a runtime behaviour.
   Applying one writes real, editable keyframes; nothing consults a preset at render
   time. The `TextAnimation` record only remembers what was applied. The spec is
