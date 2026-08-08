@@ -12,6 +12,7 @@ import {
 } from '@nos/generators';
 import { createComfyUiBackend, patchGraph } from '@nos/backend-comfyui';
 import type { DesktopBridge } from '../main/ipc-contract.js';
+import { socketMessages } from './socket-messages.js';
 
 /**
  * The generator runtime.
@@ -195,27 +196,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
           // and proxying keeps any basic-auth credentials out of this page. The WebSocket is opened
           // here because WebSockets are not subject to CORS.
           fetch: proxyFetch,
-          openSocket: (url) => {
-            const socket = new WebSocket(url);
-            const queue: unknown[] = [];
-            let notify: (() => void) | undefined;
-            socket.addEventListener('message', (event) => {
-              queue.push(event.data);
-              notify?.();
-            });
-            return {
-              async *messages() {
-                for (;;) {
-                  while (queue.length > 0) yield queue.shift();
-                  if (socket.readyState === WebSocket.CLOSED) return;
-                  await new Promise<void>((resolve) => {
-                    notify = resolve;
-                  });
-                }
-              },
-              close: () => socket.close(),
-            };
-          },
+          openSocket: (url) => socketMessages(new WebSocket(url)),
         },
         clientId: clientId.current,
       }),
