@@ -40,7 +40,9 @@ IMAGE_EXTENSIONS = frozenset(
 )
 TEXT_EXTENSIONS = frozenset({"md", "markdown", "txt", "srt", "vtt", "json"})
 
-IGNORED_NAMES = frozenset({".DS_Store", "Thumbs.db", "desktop.ini", ".gitkeep"})
+IGNORED_NAMES = frozenset(
+    {".DS_Store", "Thumbs.db", "desktop.ini", ".gitkeep", "project.recovery.json"}
+)
 IGNORED_PREFIXES = ("~$", ".#")
 IGNORED_SUFFIXES = (".tmp", ".part", ".crdownload", ".swp")
 

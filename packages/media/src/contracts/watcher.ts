@@ -15,6 +15,13 @@ export type FileChangeKind = 'added' | 'changed' | 'removed';
 export interface FileChange {
   readonly kind: FileChangeKind;
   readonly path: AssetPath;
+  /**
+   * Whether the path is a directory.
+   *
+   * Meaningful for `added` and `changed` only. A watcher learns what a path is by asking the
+   * filesystem, and a removed path is no longer there to ask about — so a consumer must never
+   * depend on this to decide how to handle a removal.
+   */
   readonly isDirectory: boolean;
   /** Absent for `removed`. */
   readonly sizeBytes?: number;
@@ -75,7 +82,16 @@ export const WATCH_DEBOUNCE_MS = 120;
  * folder with its size so the user can judge whether to clear it — but the individual
  * derived files inside are noise. Editor and OS droppings are hidden outright.
  */
-const IGNORED_NAMES: readonly string[] = ['.DS_Store', 'Thumbs.db', 'desktop.ini', '.gitkeep'];
+const IGNORED_NAMES: readonly string[] = [
+  '.DS_Store',
+  'Thumbs.db',
+  'desktop.ini',
+  '.gitkeep',
+  // The autosave sibling. It appears and disappears on its own schedule, so showing it would make
+  // the browser flicker a file in and out while the user works — and it is not something to drag
+  // onto a timeline. `project.json` is shown because it is the user's; this one is the editor's.
+  'project.recovery.json',
+];
 
 const IGNORED_PREFIXES: readonly string[] = ['~$', '.#'];
 const IGNORED_SUFFIXES: readonly string[] = ['.tmp', '.part', '.crdownload', '.swp'];

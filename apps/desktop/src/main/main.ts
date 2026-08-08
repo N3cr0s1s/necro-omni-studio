@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import {
   IPC,
+  IPC_EVENTS,
   type BackendConfig,
   type BackendResponse,
   type FolderEntry,
@@ -31,6 +32,8 @@ import {
   sidecarCommand,
   waitForSidecar,
 } from './sidecar-process.js';
+import { type ProjectWatcherHandle, watchProject } from './project-watcher.js';
+import type { WatcherStatus } from '@nos/media';
 
 /**
  * The Electron main process.
@@ -52,13 +55,58 @@ interface Session {
   /** Explicitly `| undefined` rather than optional: it is cleared on exit, which is an assignment. */
   sidecar: ChildProcess | undefined;
   info: SidecarInfo;
+  watcher: ProjectWatcherHandle | undefined;
+  watcherState: WatcherStatus;
 }
 
 const session: Session = {
   root: '',
   sidecar: undefined,
   info: { baseUrl: '', token: '', available: false, detail: 'no project is open' },
+  watcher: undefined,
+  watcherState: { watching: false },
 };
+
+/**
+ * Pushes to every open window.
+ *
+ * Broadcast rather than addressed, because a change to the folder is true for every window looking
+ * at it. Windows that have gone away are skipped rather than treated as an error — closing one
+ * during a filesystem burst is ordinary, not exceptional.
+ */
+function broadcast(channel: string, payload: unknown): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(channel, payload);
+  }
+}
+
+/**
+ * Starts watching the newly opened project.
+ *
+ * A failure is reported to the renderer rather than thrown. The browser then shows an unwatched
+ * project with a refresh button, which is honest — where a "watching" indicator over a tree that has
+ * stopped tracking reality is the worse outcome the watcher contract exists to avoid.
+ */
+function startWatching(root: string): void {
+  session.watcher?.close();
+  session.watcher = watchProject(root, {
+    onChanges: (changes) => broadcast(IPC_EVENTS.projectChanged, changes),
+    onError: (error) => setWatcherState({ watching: false, error }),
+  });
+  setWatcherState({ watching: true });
+}
+
+/**
+ * Records the watcher's state and tells every window.
+ *
+ * Held as well as broadcast, because the watcher starts while the project is still being opened —
+ * before any renderer knows there is a project to subscribe for. A push alone would be sent to
+ * nobody, and the browser would report an unwatched folder for the rest of the session.
+ */
+function setWatcherState(state: WatcherStatus): void {
+  session.watcherState = state;
+  broadcast(IPC_EVENTS.watcherStatus, state);
+}
 
 async function startSidecar(root: string): Promise<SidecarInfo> {
   await stopSidecar();
@@ -124,6 +172,7 @@ async function openFolder(root: string): Promise<ProjectInfo> {
   await ensureLayout(root);
   session.root = root;
   session.info = await startSidecar(root);
+  startWatching(root);
 
   const document = await readProjectFile(root);
   return { root, name: basename(root), ...(document !== undefined ? { document } : {}) };
@@ -207,6 +256,8 @@ function registerHandlers(): void {
     }
     return results;
   });
+
+  ipcMain.handle(IPC.watcherStatus, (): WatcherStatus => session.watcherState);
 
   ipcMain.handle(IPC.sidecarInfo, (): SidecarInfo => session.info);
 
@@ -375,11 +426,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // The sidecar holds an ffmpeg pipe and possibly a model in VRAM; leaving it running past the last
   // window would keep both alive with nothing to consume them.
+  session.watcher?.close();
+  session.watcher = undefined;
+  session.watcherState = { watching: false };
   void stopSidecar();
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
+  session.watcher?.close();
+  session.watcher = undefined;
   void stopSidecar();
 });
 

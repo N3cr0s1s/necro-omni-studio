@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import { type DirectoryNode, type FileEntry, type WatcherStatus, buildTree } from '@nos/media';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type DirectoryNode,
+  type FileChange,
+  type FileEntry,
+  type WatcherStatus,
+  applyChanges,
+  buildTree,
+  normalizeChanges,
+} from '@nos/media';
 import { assetPath } from '@nos/core';
 import type { DesktopBridge, FolderEntry } from '../main/ipc-contract.js';
 
@@ -13,6 +21,11 @@ import type { DesktopBridge, FolderEntry } from '../main/ipc-contract.js';
  * The walk is breadth-first with a depth cap. A project folder is user-controlled and can contain a
  * `node_modules`, a symlink loop or a hundred thousand cache files; an uncapped recursive walk turns
  * opening a project into a hang with no explanation.
+ *
+ * After the walk, the tree tracks the folder rather than being rebuilt: the main process watches and
+ * pushes batches of changes, and each batch is folded into the entry list. Re-walking on every event
+ * would mean thousands of IPC round trips while a generator writes a variant set — and the spec's
+ * model, that a project *is* a folder, only holds if what the folder does shows up here.
  */
 
 /** Deep enough for `media/shoot-2/day-1/a.mp4`, shallow enough that a stray tree cannot hang the open. */
@@ -74,23 +87,27 @@ export function useProjectTree(root: string | undefined): ProjectTree {
   const [truncated, setTruncated] = useState(false);
   const [watcher, setWatcher] = useState<WatcherStatus>({ watching: false });
 
+  // The flat entry list the tree is built from. Kept because a change batch names paths, and folding
+  // a path into a list is cheap where re-deriving one from a nested tree is not.
+  const entries = useRef<readonly FileEntry[]>([]);
+
   const refresh = useCallback(() => {
     const api = bridge();
     if (api === undefined || root === undefined) {
+      entries.current = [];
       setTree(undefined);
-      setWatcher({ watching: false });
       return;
     }
 
     void walkProject(api)
       .then((result) => {
+        entries.current = result.entries;
         setTree(buildTree(result.entries));
         setTruncated(result.truncated);
-        setWatcher({ watching: true });
       })
       .catch((error: unknown) => {
-        // A dead watcher is reported, never silent: the user would otherwise trust a stale tree, which
-        // is worse than having no tree at all.
+        // A failed scan leaves no tree, and says so. Silently keeping the previous one would be worse:
+        // the user would act on a listing of a folder that may no longer exist.
         setWatcher({
           watching: false,
           error: { kind: 'failed', detail: error instanceof Error ? error.message : String(error) },
@@ -99,6 +116,38 @@ export function useProjectTree(root: string | undefined): ProjectTree {
   }, [root]);
 
   useEffect(refresh, [refresh]);
+
+  // The watcher's own report, not an inference from "the scan worked". Before this the browser said
+  // "watching" whenever a scan had succeeded, which was true of a folder nothing was watching at all.
+  useEffect(() => {
+    const api = bridge();
+    if (api === undefined || root === undefined) {
+      setWatcher({ watching: false });
+      return;
+    }
+
+    // Primed from the current state, then kept up to date. The watcher starts while the project is
+    // being opened, so its first report is sent before this subscription exists.
+    let live = true;
+    void api.watcherStatus().then((current) => {
+      if (live) setWatcher(current);
+    });
+
+    const stopStatus = api.onWatcherStatus(setWatcher);
+    const stopChanges = api.onProjectChanged((changes: readonly FileChange[]) => {
+      const visible = normalizeChanges(changes);
+      if (visible.length === 0) return;
+
+      entries.current = applyChanges(entries.current, visible);
+      setTree(buildTree(entries.current));
+    });
+
+    return () => {
+      live = false;
+      stopStatus();
+      stopChanges();
+    };
+  }, [root]);
 
   return { tree, watcher, truncated, refresh };
 }

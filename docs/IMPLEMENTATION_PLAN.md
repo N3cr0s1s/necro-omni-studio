@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1613 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1630 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1500,3 +1500,45 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   killed the process with `SIGKILL`, relaunched. The banner offered the work with
   its timestamp, "Restore it" brought the in/out range back, and an explicit save
   removed the recovery file so the next launch offers nothing. No page errors.
+
+- 2026-08-08: The project folder is watched for real. The browser had been
+  reporting **"watching"** whenever the initial scan succeeded — over a folder
+  nothing was watching. A generator writing into `generated/`, a file dropped in
+  from a file manager, an external tool rewriting a note: none of it appeared until
+  the project was reopened. The spec's model that a project *is* a folder only
+  holds if the application notices what happens to that folder, and `@nos/media`
+  had the whole vocabulary — ignore rules, burst coalescing, `applyChanges` — with
+  nothing calling it.
+
+  The watcher lives in the main process; what crosses the boundary is a batch of
+  project-relative changes, never a raw path. That needed a new *direction* on the
+  trust boundary, so push channels are declared separately from `IPC` and the
+  preload wraps each one as its own named subscription — exposing `ipcRenderer.on`
+  would be the same mistake as a generic `invoke`, one channel-name bug from the
+  whole main-process surface.
+
+  Three things only the running application could have found, each measured rather
+  than guessed:
+
+  - **Status was reported by nobody.** The watcher starts while the project is
+    still opening, before any renderer knows there is a project to subscribe for,
+    so its first push went nowhere and the browser said "idle" forever. The state
+    is now held and asked for on subscribe.
+  - **Files written into a folder created moments earlier arrived with no event.**
+    The recursive watcher registers interest in a new subdirectory only once it has
+    seen it — which is precisely what a generator does: create an output folder,
+    immediately fill it. A newly added directory is now expanded into its contents.
+  - **Deleting a folder left its files in the tree.** `applyChanges` pruned
+    descendants only when the change said `isDirectory`, and a watcher *cannot*
+    know that: the only way to tell is to ask the filesystem, and by then the path
+    is gone. It now prunes on any removal, which is safe because nothing lives
+    under `media/a.mp4/`. The contract now says `isDirectory` is meaningless for a
+    removal, rather than leaving the next caller to rediscover it.
+
+  Two of my own probe runs reported failures that were the probe's fault — a folder
+  row reads `run-912`, name and count, not `run-9`. Worth recording because the
+  temptation each time was to "fix" working code.
+
+  `project.recovery.json` is now hidden from the browser on both sides of the
+  shared vocabulary: it appears and disappears on its own schedule, so showing it
+  made the tree flicker a file in and out while the user worked.

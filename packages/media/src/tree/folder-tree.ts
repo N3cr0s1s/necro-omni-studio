@@ -194,8 +194,13 @@ export function buildTree(entries: readonly FileEntry[]): DirectoryNode {
  * Applies a watcher batch to a flat entry set.
  *
  * Kept separate from `buildTree` so the caller owns the flat set and the tree is a pure
- * projection of it. A `removed` directory also removes everything beneath it, which a
- * watcher does not always report per child.
+ * projection of it.
+ *
+ * A removal prunes everything beneath the path, **whatever `isDirectory` says**. A watcher
+ * cannot know what a vanished path was — the only way to tell a file from a directory is to
+ * ask the filesystem, and by then it is gone — so requiring it to say would make deleting a
+ * folder leave its contents behind forever. Pruning unconditionally is safe because a file
+ * path can never be the parent of another entry: nothing lives under `media/a.mp4/`.
  */
 export function applyChanges(
   entries: readonly FileEntry[],
@@ -206,11 +211,9 @@ export function applyChanges(
   for (const change of changes) {
     if (change.kind === 'removed') {
       byPath.delete(change.path);
-      if (change.isDirectory) {
-        const prefix = `${change.path}/`;
-        for (const key of [...byPath.keys()]) {
-          if (key.startsWith(prefix)) byPath.delete(key);
-        }
+      const prefix = `${change.path}/`;
+      for (const key of [...byPath.keys()]) {
+        if (key.startsWith(prefix)) byPath.delete(key);
       }
       continue;
     }

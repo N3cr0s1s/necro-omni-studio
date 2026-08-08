@@ -34,6 +34,8 @@ export const IPC = {
   writeTextFile: 'project:write-text',
   /** Lists a project subtree. */
   listFolder: 'project:list',
+  /** The watcher's current state, for a renderer that subscribed after it started. */
+  watcherStatus: 'project:watcher-state',
   /** Where the sidecar is listening, and the token to reach it. */
   sidecarInfo: 'sidecar:info',
   /** Reveals a project-relative path in the OS file manager. */
@@ -48,7 +50,25 @@ export const IPC = {
   exportFrames: 'export:frames',
 } as const;
 
+/**
+ * Channels the main process pushes on, without being asked.
+ *
+ * Kept separate from `IPC` because they are a different *direction* across the boundary and carry a
+ * different risk. An invoke channel is a capability the renderer may use; a push channel is data the
+ * renderer must be prepared to receive at any moment. The preload subscribes to exactly these two
+ * and exposes typed callbacks — never `ipcRenderer.on`, which would let a renderer bug listen to
+ * every channel the main process ever sends on.
+ */
+export const IPC_EVENTS = {
+  /** A batch of project-relative filesystem changes. */
+  projectChanged: 'project:changed',
+  /** The watcher started, stopped, or failed. */
+  watcherStatus: 'project:watcher-status',
+} as const;
+
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
+
+import type { FileChange, WatcherStatus } from '@nos/media';
 
 export interface ProjectInfo {
   /** Absolute, and used only for display and for the recent list. */
@@ -125,6 +145,25 @@ export interface DesktopBridge {
   readTextFile(path: string): Promise<string | undefined>;
   writeTextFile(path: string, contents: string): Promise<void>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
+
+  /**
+   * Subscribes to project folder changes. Returns an unsubscribe function.
+   *
+   * A callback rather than a polled query, because the events the browser must react to — a
+   * generator finishing, a file dropped in from outside — arrive on the filesystem's schedule and
+   * not on one the renderer could guess.
+   */
+  onProjectChanged(listener: (changes: readonly FileChange[]) => void): () => void;
+  onWatcherStatus(listener: (status: WatcherStatus) => void): () => void;
+  /**
+   * The watcher's state right now.
+   *
+   * Asked for on subscribe rather than inferred from having received a push. The watcher starts
+   * while the project is being opened — before the renderer knows there is a project to subscribe
+   * for — so a renderer that only listened would sit on `not watching` over a folder that is in fact
+   * being watched, which is the same class of lie as the reverse.
+   */
+  watcherStatus(): Promise<WatcherStatus>;
   sidecarInfo(): Promise<SidecarInfo>;
   revealInFolder(path: string): Promise<void>;
 

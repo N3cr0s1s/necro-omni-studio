@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type DesktopBridge } from '../main/ipc-contract.js';
+import { IPC, IPC_EVENTS, type DesktopBridge } from '../main/ipc-contract.js';
 
 /**
  * The preload bridge.
@@ -13,6 +13,20 @@ import { IPC, type DesktopBridge } from '../main/ipc-contract.js';
  * contract so the two cannot drift.
  */
 
+/**
+ * Wraps one push channel as a typed subscription.
+ *
+ * The `event` argument is dropped deliberately: it carries a `sender` the renderer has no business
+ * holding, and forwarding the payload alone keeps the page's view of IPC to plain data.
+ */
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_event: unknown, payload: T): void => listener(payload);
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.off(channel, handler);
+  };
+}
+
 const bridge: DesktopBridge = {
   openProject: () => ipcRenderer.invoke(IPC.openProject),
   loadProject: (root) => ipcRenderer.invoke(IPC.loadProject, root),
@@ -23,6 +37,12 @@ const bridge: DesktopBridge = {
   readTextFile: (path) => ipcRenderer.invoke(IPC.readTextFile, path),
   writeTextFile: (path, contents) => ipcRenderer.invoke(IPC.writeTextFile, path, contents),
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),
+  // Each push channel gets its own named subscription. Exposing `ipcRenderer.on` instead would let
+  // any renderer bug listen to every channel the main process ever sends on, which is the same
+  // mistake as a generic `invoke` in the other direction.
+  watcherStatus: () => ipcRenderer.invoke(IPC.watcherStatus),
+  onProjectChanged: (listener) => subscribe(IPC_EVENTS.projectChanged, listener),
+  onWatcherStatus: (listener) => subscribe(IPC_EVENTS.watcherStatus, listener),
   sidecarInfo: () => ipcRenderer.invoke(IPC.sidecarInfo),
   revealInFolder: (path) => ipcRenderer.invoke(IPC.revealInFolder, path),
   backendFetch: (path, init) => ipcRenderer.invoke(IPC.backendFetch, path, init),

@@ -161,6 +161,26 @@ describe('ordering', () => {
 });
 
 describe('applyChanges', () => {
+  it('prunes a removed folder even when the watcher could not say it was one', () => {
+    // The case a real watcher produces: a path vanishes, and there is nothing left to ask what it
+    // was. Requiring `isDirectory` here would leave the contents of every deleted folder in the tree.
+    const entries = applyChanges(
+      [file('generated/run-9/v0.mp4'), file('generated/run-9/v1.mp4'), file('media/keep.mp4')],
+      [{ kind: 'removed', path: assetPath('generated/run-9'), isDirectory: false }],
+    );
+
+    expect(entries.map((entry) => entry.path)).toEqual(['media/keep.mp4']);
+  });
+
+  it('does not prune a sibling whose name merely starts the same way', () => {
+    const entries = applyChanges(
+      [file('media/take.mp4'), file('media/take-2.mp4')],
+      [{ kind: 'removed', path: assetPath('media/take'), isDirectory: false }],
+    );
+
+    expect(entries.map((entry) => entry.path)).toEqual(['media/take.mp4', 'media/take-2.mp4']);
+  });
+
   it('adds a new entry', () => {
     const entries = applyChanges(
       [],
