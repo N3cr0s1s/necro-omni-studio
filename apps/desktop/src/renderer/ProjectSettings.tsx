@@ -7,8 +7,10 @@ import {
   frameRateEquals,
 } from '@nos/core';
 import { applyProjectSettings, retimeCost } from '@nos/editing';
-import { Button, Mono, SectionCaption } from '@nos/ui';
-import { token } from '@nos/ui';
+import { MonitorIcon, TriangleAlertIcon } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@nos/ui/components/ui/alert';
+import { Button } from '@nos/ui/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
 
 /**
  * The project's rate and resolution.
@@ -66,6 +68,17 @@ export function describeRetime(cost: ReturnType<typeof retimeCost>): {
   };
 }
 
+/**
+ * Which preset the current resolution *is*, or the empty string when it is none of them.
+ *
+ * A toggle group needs a value, and "1920×1080 typed in by hand" and "the 1080p preset" are the same
+ * project. Anything unrecognised leaves every button unpressed rather than lighting the nearest one.
+ */
+function currentPreset(resolution: { readonly width: number; readonly height: number }): string {
+  return PRESETS.find((preset) => preset.width === resolution.width && preset.height === resolution.height)
+    ?.label ?? '';
+}
+
 export function ProjectSettings({ document, onChange, onReject }: ProjectSettingsProps): ReactNode {
   const [pendingRate, setPendingRate] = useState<FrameRate | undefined>(undefined);
 
@@ -86,81 +99,87 @@ export function ProjectSettings({ document, onChange, onReject }: ProjectSetting
   const described = cost === undefined ? undefined : describeRetime(cost);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-      <SectionCaption>Project</SectionCaption>
+    <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex items-center gap-2">
+        <MonitorIcon className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Project</span>
+      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ font: token.textLabel, color: token.textSoft }}>size</span>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textBright}>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">size</span>
+        <span className="ml-auto font-mono text-xs">
           {document.resolution.width}×{document.resolution.height}
-        </Mono>
+        </span>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <ToggleGroup
+        aria-label="Resolution"
+        value={[currentPreset(document.resolution)]}
+        onValueChange={(next) => {
+          const chosen = PRESETS.find((preset) => preset.label === next.at(-1));
+          if (chosen !== undefined) apply(document.frameRate, chosen.width, chosen.height, 'set resolution');
+        }}
+        className="flex-wrap justify-start"
+      >
         {PRESETS.map((preset) => (
-          <Button
-            key={preset.label}
-            tone={
-              preset.width === document.resolution.width && preset.height === document.resolution.height
-                ? 'active'
-                : 'default'
-            }
-            onClick={() => apply(document.frameRate, preset.width, preset.height, 'set resolution')}
-            title={`${preset.width}×${preset.height}`}
-          >
+          <ToggleGroupItem key={preset.label} value={preset.label} title={`${preset.width}×${preset.height}`}>
             {preset.label}
-          </Button>
+          </ToggleGroupItem>
         ))}
+      </ToggleGroup>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">rate</span>
+        <span className="ml-auto font-mono text-xs">{formatFrameRate(document.frameRate)}</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ font: token.textLabel, color: token.textSoft }}>rate</span>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textBright}>{formatFrameRate(document.frameRate)}</Mono>
-      </div>
-
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <ToggleGroup
+        aria-label="Frame rate"
+        value={[formatFrameRate(document.frameRate)]}
+        // Armed rather than applied. A rate change rebases every time in the document and cannot be
+        // undone without loss, so it gets the one confirmation step in this application.
+        onValueChange={(next) => {
+          const chosen = RATES.find((rate) => formatFrameRate(rate) === next.at(-1));
+          setPendingRate(chosen !== undefined && !frameRateEquals(chosen, document.frameRate) ? chosen : undefined);
+        }}
+        className="flex-wrap justify-start"
+      >
         {RATES.map((rate) => (
-          <Button
+          <ToggleGroupItem
             key={formatFrameRate(rate)}
-            tone={frameRateEquals(rate, document.frameRate) ? 'active' : 'default'}
-            // Armed rather than applied. A rate change rebases every time in the document and cannot
-            // be undone without loss, so it gets the one confirmation step in this application.
-            onClick={() => setPendingRate(frameRateEquals(rate, document.frameRate) ? undefined : rate)}
+            value={formatFrameRate(rate)}
             title={`Change the project rate to ${formatFrameRate(rate)}`}
           >
             {formatFrameRate(rate)}
-          </Button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       {pendingRate !== undefined && described !== undefined && (
-        <div
+        <Alert
           role="alertdialog"
           aria-label="Confirm the frame rate change"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 8,
-            borderRadius: token.radiusControl,
-            background: described.lossy ? 'rgba(255, 176, 32, 0.10)' : token.surface1,
-          }}
+          variant={described.lossy ? 'destructive' : 'default'}
         >
-          <Mono tone={described.lossy ? token.warn : token.textDim}>{described.text}</Mono>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Button
-              tone="primary"
-              onClick={() =>
-                apply(pendingRate, document.resolution.width, document.resolution.height, 'set frame rate')
-              }
-            >
-              Change to {formatFrameRate(pendingRate)}
-            </Button>
-            <Button onClick={() => setPendingRate(undefined)}>Cancel</Button>
-          </div>
-        </div>
+          {described.lossy && <TriangleAlertIcon />}
+          <AlertTitle>Change to {formatFrameRate(pendingRate)}?</AlertTitle>
+          <AlertDescription className="flex flex-col items-start gap-2">
+            <span className="font-mono text-xs">{described.text}</span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() =>
+                  apply(pendingRate, document.resolution.width, document.resolution.height, 'set frame rate')
+                }
+              >
+                Change to {formatFrameRate(pendingRate)}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setPendingRate(undefined)}>
+                Cancel
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );

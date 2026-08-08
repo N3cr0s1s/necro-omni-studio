@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react';
+import { DatabaseIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { provenanceRows } from '@nos/generators';
-import { AssetDetail, Button, Mono } from '@nos/ui';
-import { token } from '@nos/ui';
+import { AssetDetail } from '@nos/ui';
+import { Button } from '@nos/ui/components/ui/button';
+import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { cn } from '@nos/ui/lib/utils';
 import type { AssetDetail as AssetDetailValue } from './use-asset-detail.js';
 import { type CacheStats, formatCacheSize } from './use-cache-stats.js';
 
@@ -32,51 +36,38 @@ function Provenance({ asset }: { readonly asset: AssetDetailValue }): ReactNode 
   if (record === undefined) return null;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: token.space2,
-        paddingTop: token.space3,
-        borderTop: `1px solid ${token.borderSubtle}`,
-        // Bounded and scrollable: a manifest may declare twenty parameters, and a panel that grew
-        // with the generator would push the cache line — which is always relevant — off the screen.
-        maxHeight: 168,
-        overflowY: 'auto',
-      }}
-    >
-      {provenanceRows(record).map((row) => (
-        <div
-          key={`${row.label}:${row.value}`}
-          style={{
-            display: 'flex',
-            gap: token.space2,
-            alignItems: row.long === true ? 'flex-start' : 'baseline',
-            flexDirection: row.long === true ? 'column' : 'row',
-          }}
-        >
-          <Mono tone={token.textFaint}>{row.label}</Mono>
-          <Mono
-            tone={row.long === true ? token.generatedText : token.textDim}
-            style={
-              row.long === true
-                ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }
-                : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-            }
-          >
-            {row.value}
-          </Mono>
+    <>
+      <Separator />
+      {/* Bounded and scrollable: a manifest may declare twenty parameters, and a panel that grew with
+          the generator would push the cache line — which is always relevant — off the screen. */}
+      <ScrollArea className="max-h-42">
+        <div className="flex flex-col gap-2 font-mono text-xs">
+          {provenanceRows(record).map((row) => (
+            <div
+              key={`${row.label}:${row.value}`}
+              className={cn('flex gap-2', row.long === true ? 'flex-col items-start' : 'items-baseline')}
+            >
+              <span className="text-muted-foreground">{row.label}</span>
+              <span
+                className={cn(
+                  row.long === true ? 'break-words whitespace-pre-wrap text-chart-4' : 'truncate',
+                )}
+              >
+                {row.value}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      </ScrollArea>
+    </>
   );
 }
 
 export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
+    <div className="flex flex-col gap-3">
       {asset === undefined ? (
-        <Mono tone={token.textGhost}>select a file to see what it is</Mono>
+        <p className="font-mono text-xs text-muted-foreground">select a file to see what it is</p>
       ) : (
         <AssetDetail
           name={asset.name}
@@ -90,28 +81,29 @@ export function BrowserDetail({ asset, cache }: BrowserDetailProps): ReactNode {
 
       {asset?.provenance !== undefined && <Provenance asset={asset} />}
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: token.space3,
-          borderTop: `1px solid ${token.borderSubtle}`,
-          paddingTop: token.space3,
-        }}
-      >
-        <Mono tone={token.textFaint}>cache</Mono>
-        <Mono tone={token.textDim}>
+      <Separator />
+      <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+        <DatabaseIcon className="size-3.5" />
+        <span>
           {formatCacheSize(cache.sizeBytes)} · {cache.fileCount} {cache.fileCount === 1 ? 'file' : 'files'}
-        </Mono>
-        <div style={{ flex: 1 }} />
-        {cache.error !== undefined && <Mono tone={token.danger}>{cache.error}</Mono>}
+        </span>
+        {cache.error !== undefined && (
+          <span className="ml-auto flex items-center gap-1 text-destructive">
+            <TriangleAlertIcon className="size-3.5" />
+            {cache.error}
+          </span>
+        )}
         <Button
+          variant="ghost"
+          size="xs"
+          className={cn(cache.error === undefined && 'ml-auto')}
           onClick={() => void cache.clear()}
           disabled={cache.clearing || cache.fileCount === 0}
           // The reassurance belongs on the control, where the hesitation is. Everything under
           // `cache/` is regenerable — that is what makes the folder disposable and `generated/` not.
           title="Delete every derived proxy, filmstrip and waveform. They are rebuilt on demand."
         >
+          <Trash2Icon />
           {cache.clearing ? 'clearing…' : 'Clear'}
         </Button>
       </div>

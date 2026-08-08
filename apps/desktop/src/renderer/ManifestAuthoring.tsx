@@ -12,8 +12,12 @@ import {
   promote,
 } from '@nos/generators';
 import { collectLiterals } from '@nos/backend-comfyui';
-import { Button, ManifestInspector, Mono, SectionCaption } from '@nos/ui';
-import { token } from '@nos/ui';
+import { FileJsonIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { ManifestInspector } from '@nos/ui';
+import { Button } from '@nos/ui/components/ui/button';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { Spinner } from '@nos/ui/components/ui/spinner';
 import type { DesktopBridge } from '../main/ipc-contract.js';
 import { GENERATORS_FOLDER } from './use-generator-library.js';
 
@@ -95,61 +99,46 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
       role="dialog"
       aria-modal="true"
       aria-label="Author a manifest"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        background: token.bgApp,
-      }}
+      // A full-window surface rather than a Dialog: this is a *screen*, and the registry's dialog is
+      // sized and scrolled for a form you dismiss rather than one you work in for ten minutes.
+      className="fixed inset-0 z-20 flex flex-col bg-background"
     >
-      <header
-        style={{
-          height: 44,
-          flex: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: `0 ${token.space5}`,
-          borderBottom: `1px solid ${token.border}`,
-        }}
-      >
-        <SectionCaption>Author a manifest</SectionCaption>
+      <header className="flex h-11 flex-none items-center gap-3 px-4">
+        <FileJsonIcon className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Author a manifest
+        </span>
 
-        <select
-          aria-label="Graph"
-          value={graph ?? ''}
-          onChange={(event) => choose(event.target.value)}
-          style={{
-            height: token.controlHeight,
-            background: token.surface1,
-            border: `1px solid ${token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: token.textBright,
-            font: `400 11.5px ${token.fontUi}`,
-          }}
-        >
-          <option value="">choose a graph…</option>
+        <NativeSelect aria-label="Graph" value={graph ?? ''} onChange={(event) => choose(event.target.value)}>
+          <NativeSelectOption value="">choose a graph…</NativeSelectOption>
           {[...graphs.keys()].map((name) => (
-            <option key={name} value={name}>
+            <NativeSelectOption key={name} value={name}>
               {name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
 
         {graphs.size === 0 && (
-          <Mono tone={token.warn}>
+          <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+            <TriangleAlertIcon className="size-3.5" />
             {`put a ComfyUI export in the project's ${GENERATORS_FOLDER}/ folder to start`}
-          </Mono>
+          </p>
         )}
-        {error !== undefined && <Mono tone={token.danger}>{error}</Mono>}
+        {error !== undefined && (
+          <p className="flex items-center gap-1.5 font-mono text-xs text-destructive">
+            <TriangleAlertIcon className="size-3.5" />
+            {error}
+          </p>
+        )}
 
-        <div style={{ flex: 1 }} />
-        <Button onClick={onClose}>Close</Button>
+        <Button variant="ghost" size="sm" onClick={onClose} className="ml-auto">
+          <XIcon />
+          Close
+        </Button>
       </header>
+      <Separator />
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="min-h-0 flex-1">
         <ManifestInspector
           draft={draft}
           literals={literals}
@@ -162,7 +151,12 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
         />
       </div>
 
-      {saving && <Mono tone={token.textFaint}>writing…</Mono>}
+      {saving && (
+        <p className="flex items-center gap-2 px-4 py-1 font-mono text-xs text-muted-foreground">
+          <Spinner className="size-3.5" />
+          writing…
+        </p>
+      )}
     </div>
   );
 }
