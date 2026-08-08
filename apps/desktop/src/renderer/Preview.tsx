@@ -7,12 +7,11 @@ import {
   createGlCompositor,
   createProgramCache,
   createRenderTargetPool,
-  buildRenderPlan,
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
-import { textCacheKeyFor, textClipsOf } from './text-plan.js';
+import { prepareFrame } from './frame-render.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { MaskSource } from './mask-source.js';
 
@@ -129,31 +128,18 @@ export function Preview({
     canvas.width = doc.resolution.width;
     canvas.height = doc.resolution.height;
 
-    // Text is registered from the document, because the plan deliberately carries only a cache key —
-    // the compositor knows nothing about fonts and must not have to.
-    const plan = buildRenderPlan({
+    void prepareFrame(media, {
       document: doc,
       frame,
       effects,
-      textCacheKey: textCacheKeyFor(doc.resolution),
+      ...(masks !== undefined ? { masks } : {}),
+    }).then(({ plan, textProblems: problems }) => {
+      setTextProblems(problems);
+      const current = compositorRef.current;
+      if (current === undefined) return;
+      setPlanned(plan.items.length);
+      setStats(current.render(plan, null));
     });
-    // Masks are registered for *this frame*, before the render that reads them. Like text, the plan
-    // carries only an id — the compositor never learns what a mask is — so the frame the id resolves
-    // to has to be stated here, where the playhead is known.
-    media.registerMasks(masks === undefined ? [] : masks.at(frame));
-
-    void media
-      .registerText(textClipsOf(doc), doc.resolution)
-      .then((problems) => {
-        setTextProblems(problems);
-        return media.prepare(plan.items);
-      })
-      .then(() => {
-        const current = compositorRef.current;
-        if (current === undefined) return;
-        setPlanned(plan.items.length);
-        setStats(current.render(plan, null));
-      });
   }, [doc, frame, effects, media, masks]);
 
   // The picture's own rectangle, which `object-fit: contain` decides and nothing can read back off

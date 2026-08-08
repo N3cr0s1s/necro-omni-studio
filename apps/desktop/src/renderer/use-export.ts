@@ -10,7 +10,6 @@ import {
   validateExportSettings,
 } from '@nos/export';
 import {
-  buildRenderPlan,
   createBuiltinPrograms,
   createGlCompositor,
   createProgramCache,
@@ -18,6 +17,8 @@ import {
 } from '@nos/compositor';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { createMediaTextures } from './media-textures.js';
+import { prepareFrame } from './frame-render.js';
+import type { MaskSource } from './mask-source.js';
 import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
 
 /**
@@ -85,12 +86,19 @@ export function describeTiming(timing: ExportTiming): string {
 export interface ExportRunOptions {
   readonly document: TimelineDocument;
   readonly sidecar: SidecarInfo | undefined;
+  /**
+   * Where a bound mask's frame comes from, so an export masks what the preview masked.
+   *
+   * Optional because an export of a project with no masks needs none — but absent when there *are*
+   * masks is exactly the divergence the WYSIWYG guarantee forbids, so the shell always passes it.
+   */
+  readonly masks?: MaskSource | undefined;
 }
 
 /** Bytes of frame data per request. Sixteen megabytes is two 1080p frames, or eight at 720p. */
 export const FRAME_BATCH_BYTES = 16 * 1024 * 1024;
 
-export function useExportRun({ document, sidecar }: ExportRunOptions): ExportRun {
+export function useExportRun({ document, sidecar, masks }: ExportRunOptions): ExportRun {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -123,7 +131,7 @@ export function useExportRun({ document, sidecar }: ExportRunOptions): ExportRun
       setError(undefined);
 
       setTiming(undefined);
-      void run(documentRef, settings, sidecar, cancelled, setProgress, setTiming)
+      void run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks)
         .catch((failure: unknown) => {
           setError(failure instanceof Error ? failure.message : String(failure));
         })
@@ -142,6 +150,7 @@ async function run(
   cancelled: { current: boolean },
   report: (progress: ExportProgress) => void,
   reportTiming: (timing: ExportTiming) => void,
+  masks: MaskSource | undefined,
 ): Promise<void> {
   const { width, height } = settings.resolution;
   const total = frameCountFor(settings.range);
@@ -244,11 +253,20 @@ async function run(
     for (const frame of exportFrames(settings.range)) {
       if (cancelled.current) break;
 
-      const plan = buildRenderPlan({ document: documentRef.current, frame, effects });
-
-      // Waited, unlike the preview: a skipped layer here is a missing shot in a delivered file.
+      // The same preparation the preview runs, which is what the spec's WYSIWYG guarantee actually
+      // rests on: one compositor is necessary and was not sufficient — this path used to build its own
+      // plan without a text cache key and never rasterize a title, so every one was silently absent
+      // from the delivered file.
+      //
+      // Waited, unlike the preview: a skipped layer here is a missing shot rather than a blink.
       const decodeStart = performance.now();
-      await media.prepare(plan.items, { wait: true });
+      const { plan } = await prepareFrame(media, {
+        document: documentRef.current,
+        frame,
+        effects,
+        ...(masks !== undefined ? { masks } : {}),
+        wait: true,
+      });
       spent.decodeMs += performance.now() - decodeStart;
 
       const renderStart = performance.now();

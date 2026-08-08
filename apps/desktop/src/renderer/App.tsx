@@ -439,7 +439,6 @@ export function App(): ReactNode {
     [document.frameRate, store, tree],
   );
 
-  const exportRun = useExportRun({ document, sidecar });
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
   const [authoring, setAuthoring] = useState(false);
 
@@ -552,6 +551,10 @@ export function App(): ReactNode {
     () => sessionMaskSource(masks.session, clipStartOf(document, selectedClip)),
     [document, masks.session, selectedClip],
   );
+
+  // After the mask source, which it needs: an export that could not resolve a bound mask would render
+  // it unmasked, and differ from the preview the user approved.
+  const exportRun = useExportRun({ document, sidecar, masks: maskSource });
 
   /** What an effect on the selected clip may be bound to. */
   const maskChoices: readonly MaskChoice[] = useMemo(() => {
