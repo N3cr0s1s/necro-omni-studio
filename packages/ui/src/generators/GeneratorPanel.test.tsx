@@ -65,7 +65,8 @@ describe('manifest-driven rendering', () => {
     expect(screen.getByLabelText('Description')).toBeDefined();
     expect(screen.getByLabelText('Category')).toBeDefined();
     expect(screen.getByLabelText('Length')).toBeDefined();
-    expect(screen.getByLabelText('Enhance')).toBeDefined();
+    // By role: Base UI's switch is a button with a hidden input beside it, so both carry the label.
+    expect(screen.getByRole('switch', { name: 'Enhance' })).toBeDefined();
   });
 
   it('picks the control from the declared type', () => {
@@ -146,7 +147,7 @@ describe('a parameter that names a file', () => {
   it('says the project has none rather than offering an empty list', () => {
     renderWithImage({ assetChoices: [] });
     expect(screen.queryByLabelText('First frame')).toBeNull();
-    expect(screen.getByText(/no first frame available in this project/)).toBeDefined();
+    expect(screen.getByDisplayValue(/no first frame available in this project/)).toBeDefined();
   });
 
   it('keeps a value the project no longer holds, marked as missing', () => {
@@ -284,8 +285,8 @@ describe('capability descriptors', () => {
 describe('presets', () => {
   it('offers every declared preset', () => {
     renderPanel();
-    expect(screen.getByRole('radio', { name: 'Music' })).toBeDefined();
-    expect(screen.getByRole('radio', { name: 'SFX' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Music' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'SFX' })).toBeDefined();
   });
 
   it('hides parameters the preset pins, so it reads as its own tool', () => {
@@ -300,7 +301,7 @@ describe('presets', () => {
     const user = userEvent.setup();
     const onChangePreset = vi.fn();
     renderPanel({ onChangePreset });
-    await user.click(screen.getByRole('radio', { name: 'SFX' }));
+    await user.click(screen.getByRole('button', { name: 'SFX' }));
     expect(onChangePreset).toHaveBeenCalledWith('sfx');
   });
 
@@ -308,7 +309,7 @@ describe('presets', () => {
     const user = userEvent.setup();
     const onChangePreset = vi.fn();
     renderPanel({ preset: presetId('sfx'), onChangePreset });
-    await user.click(screen.getByRole('radio', { name: 'SFX' }));
+    await user.click(screen.getByRole('button', { name: 'SFX' }));
     expect(onChangePreset).toHaveBeenCalledWith(undefined);
   });
 
@@ -374,20 +375,20 @@ describe('variants', () => {
 describe('seed control', () => {
   it('shows random until the seed is locked', () => {
     renderPanel();
-    expect(screen.getByText('random')).toBeDefined();
+    expect(screen.getByDisplayValue('random')).toBeDefined();
   });
 
   it('reports a lock toggle', async () => {
     const user = userEvent.setup();
     const onToggleSeedLock = vi.fn();
     renderPanel({ onToggleSeedLock });
-    await user.click(screen.getByRole('button', { name: 'lock' }));
+    await user.click(screen.getByRole('button', { name: 'Lock the seed' }));
     expect(onToggleSeedLock).toHaveBeenCalled();
   });
 
   it('explains what locking does', () => {
     renderPanel();
-    expect(screen.getByRole('button', { name: 'lock' }).getAttribute('title')).toContain('identical');
+    expect(screen.getByRole('button', { name: 'Lock the seed' }).getAttribute('title')).toContain('identical');
   });
 });
 

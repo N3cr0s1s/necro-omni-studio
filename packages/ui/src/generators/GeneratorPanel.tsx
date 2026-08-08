@@ -17,8 +17,25 @@ import {
   supportsVariants,
   visibleParams,
 } from '@nos/generators';
-import { Badge, Button, Mono, SectionCaption, ValueField } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import {
+  ArrowRightIcon,
+  CameraIcon,
+  CircleAlertIcon,
+  LockIcon,
+  LockOpenIcon,
+  SparklesIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
+import { Slider } from '@nos/ui/components/ui/slider';
+import { Switch } from '@nos/ui/components/ui/switch';
+import { Textarea } from '@nos/ui/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * The generator parameter panel.
@@ -150,37 +167,32 @@ export function GeneratorPanel({
   return (
     <section
       aria-label={`${manifest.name} parameters`}
-      style={{
+      className={cn(
         // Fills its column rather than dictating it: the panel is mounted inside a resizable inspector,
         // and a fixed width there overflows by exactly the padding.
-        width: '100%',
-        maxWidth: token.inspectorWidth,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: token.space5,
-        padding: token.space6,
-        background: token.bgPanel,
-        borderLeft: `1px solid ${token.border}`,
+        'flex w-full flex-col gap-5 overflow-hidden p-4',
         // A greyed panel must still be readable: the spec's point is that the user can see what is wrong,
         // not merely that something is.
-        opacity: runnable ? 1 : 0.75,
-        overflow: 'hidden',
-      }}
+        !runnable && 'opacity-75',
+      )}
     >
-      <header style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-          <SectionCaption>Generate</SectionCaption>
-          <div style={{ flex: 1 }} />
+      <header className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <SparklesIcon className="size-3.5 text-chart-4" />
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Generate</span>
           <StatusBadge record={record} />
         </div>
 
-        <span style={{ font: `600 13px ${token.fontUi}`, color: token.textPrimary }}>{manifest.name}</span>
+        <span className="text-sm font-semibold">{manifest.name}</span>
 
         <CapabilityBadges manifest={manifest} />
 
         {!runnable && (
           // The spec's rule: an unrunnable generator stays visible with a concrete reason.
-          <Mono tone={record.status === 'unbound' ? token.warn : token.danger}>{describeRecord(record)}</Mono>
+          <p className="flex items-start gap-1.5 font-mono text-xs text-destructive">
+            <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            {describeRecord(record)}
+          </p>
         )}
       </header>
 
@@ -192,7 +204,7 @@ export function GeneratorPanel({
         />
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: token.space4, overflow: 'auto' }}>
+      <div className="flex flex-col gap-4 overflow-auto">
         {shown.map((param) => (
           <ParamControl
             key={param.key}
@@ -222,15 +234,20 @@ export function GeneratorPanel({
           button that is merely grey teaches nothing, and this one used to be lit while the graph it
           would submit had an empty image slot. */}
       <Button
-        tone="primary"
         onClick={onRun}
         disabled={reason !== undefined}
         {...(reason !== undefined ? { title: `Cannot run: ${reason}` } : {})}
       >
+        <SparklesIcon />
         Generate {plan.totalVariants > 1 ? `${plan.totalVariants} variants` : ''}
       </Button>
 
-      {reason !== undefined && runnable && <Mono tone={token.warn}>{reason}</Mono>}
+      {reason !== undefined && runnable && (
+        <p className="flex items-start gap-1.5 font-mono text-xs text-destructive">
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+          {reason}
+        </p>
+      )}
     </section>
   );
 }
@@ -238,12 +255,24 @@ export function GeneratorPanel({
 function StatusBadge({ record }: { readonly record: RegistryRecord }): ReactNode {
   switch (record.status) {
     case 'available':
-      return <Badge tone="ok">ready</Badge>;
+      return (
+        <Badge variant="secondary" className="ml-auto text-chart-2">
+          ready
+        </Badge>
+      );
     case 'unbound':
       // Distinct from unavailable: nothing is broken, the graph simply is not connected.
-      return <Badge tone="warn">graph not connected</Badge>;
+      return (
+        <Badge variant="outline" className="ml-auto">
+          graph not connected
+        </Badge>
+      );
     default:
-      return <Badge tone="danger">unavailable</Badge>;
+      return (
+        <Badge variant="destructive" className="ml-auto">
+          unavailable
+        </Badge>
+      );
   }
 }
 
@@ -255,15 +284,19 @@ function StatusBadge({ record }: { readonly record: RegistryRecord }): ReactNode
  */
 function CapabilityBadges({ manifest }: { readonly manifest: GeneratorManifest }): ReactNode {
   return (
-    <div style={{ display: 'flex', gap: token.space2, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div className="flex flex-wrap items-center gap-2">
       {manifest.consumes.map((descriptor) => (
-        <Badge key={`${descriptor.type}-${descriptor.role ?? ''}`} tone="neutral">
+        <Badge key={`${descriptor.type}-${descriptor.role ?? ''}`} variant="outline">
           {descriptor.role === undefined ? descriptor.type : `${descriptor.type} · ${descriptor.role}`}
         </Badge>
       ))}
-      {manifest.consumes.length > 0 && <Mono tone={token.textGhost}>→</Mono>}
-      <Badge tone="generated">{manifest.produces}</Badge>
-      <Badge tone={manifest.duration === 'discovered' ? 'warn' : 'neutral'}>
+      {manifest.consumes.length > 0 && (
+        <ArrowRightIcon aria-hidden="true" className="size-3 text-muted-foreground" />
+      )}
+      <Badge variant="secondary" className="text-chart-4">
+        {manifest.produces}
+      </Badge>
+      <Badge variant={manifest.duration === 'discovered' ? 'outline' : 'secondary'}>
         {manifest.duration === 'discovered' ? 'length discovered' : 'length declared'}
       </Badge>
     </div>
@@ -280,38 +313,22 @@ function PresetChooser({
   readonly onSelect?: (preset: PresetId | undefined) => void;
 }): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <SectionCaption>Preset</SectionCaption>
-      <div
-        role="radiogroup"
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Preset</span>
+      <ToggleGroup
         aria-label="Preset"
-        style={{ display: 'flex', gap: token.space1, flexWrap: 'wrap' }}
+        value={selected === undefined ? [] : [selected]}
+        // Clicking the chosen preset clears it, which is why the whole set is read rather than the last
+        // entry: "no preset" is a legitimate state and the manifest's own defaults apply in it.
+        onValueChange={(next) => onSelect?.(next.at(-1) as PresetId | undefined)}
+        className="flex-wrap justify-start"
       >
-        {manifest.presets.map((entry) => {
-          const active = selected === entry.id;
-          return (
-            <button
-              key={entry.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onSelect?.(active ? undefined : entry.id)}
-              style={{
-                height: token.controlHeightSm,
-                padding: `0 ${token.space3}`,
-                borderRadius: token.radiusControl,
-                background: active ? '#1c2333' : token.surface2,
-                border: `1px solid ${active ? '#2f4a72' : token.borderControl}`,
-                color: active ? '#9dc2ff' : token.textMuted,
-                font: `500 11px ${token.fontUi}`,
-                cursor: 'pointer',
-              }}
-            >
-              {entry.name}
-            </button>
-          );
-        })}
-      </div>
+        {manifest.presets.map((entry) => (
+          <ToggleGroupItem key={entry.id} value={entry.id}>
+            {entry.name}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
     </div>
   );
 }
@@ -358,51 +375,41 @@ function ParamControl({
   const id = `param-${param.key}`;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <label htmlFor={id} style={{ font: token.textLabel, color: token.textSoft }}>
+    <Field className="gap-2">
+      <FieldLabel htmlFor={id} className="text-xs">
         {label}
         {param.required === true && (
-          <span aria-hidden="true" style={{ color: token.danger }}>
+          <span aria-hidden="true" className="text-destructive">
             {' *'}
           </span>
         )}
-      </label>
+      </FieldLabel>
 
       {param.type === 'text' && (
-        <textarea
+        <Textarea
           id={id}
           disabled={disabled}
           rows={param.multiline === true ? 3 : 1}
           value={String(value ?? '')}
           onChange={(event) => onChange?.(param.key, event.target.value)}
-          style={{
-            background: token.surface1,
-            border: `1px solid ${token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: token.textBright,
-            font: `400 11.5px ${token.fontUi}`,
-            padding: token.space3,
-            resize: 'vertical',
-          }}
         />
       )}
 
       {(param.type === 'int' || param.type === 'float') && (
-        <div style={{ display: 'flex', gap: token.space2, alignItems: 'center' }}>
+        <div className="flex items-center gap-2">
           {param.min !== undefined && param.max !== undefined && (
-            <input
-              type="range"
+            <Slider
               aria-label={`${label} slider`}
               disabled={disabled}
               min={param.min}
               max={param.max}
               step={param.step ?? (param.type === 'int' ? 1 : 0.01)}
               value={Number(value ?? param.default ?? param.min)}
-              onChange={(event) => onChange?.(param.key, Number(event.target.value))}
-              style={{ flex: 1 }}
+              onValueChange={(next) => onChange?.(param.key, Array.isArray(next) ? (next[0] ?? 0) : next)}
+              className="flex-1"
             />
           )}
-          <input
+          <Input
             id={id}
             type="number"
             disabled={disabled}
@@ -413,78 +420,55 @@ function ParamControl({
             // generator will run with 0 when it will in fact run with 50.
             value={Number(value ?? param.default ?? 0)}
             onChange={(event) => onChange?.(param.key, Number(event.target.value))}
-            style={{
-              width: 76,
-              height: token.controlHeight,
-              background: token.surface1,
-              border: `1px solid ${token.borderControl}`,
-              borderRadius: token.radiusControl,
-              color: token.textBright,
-              font: token.textValue,
-              padding: `0 ${token.space3}`,
-            }}
+            className="w-19 font-mono tabular-nums"
           />
         </div>
       )}
 
       {param.type === 'bool' && (
-        <button
+        <Switch
           id={id}
-          type="button"
-          role="switch"
-          aria-checked={value === true}
           disabled={disabled}
-          onClick={() => onChange?.(param.key, value !== true)}
-          style={{
-            alignSelf: 'flex-start',
-            height: token.controlHeight,
-            padding: `0 ${token.space4}`,
-            borderRadius: token.radiusControl,
-            background: value === true ? '#1c2333' : token.surface2,
-            border: `1px solid ${value === true ? '#2f4a72' : token.borderControl}`,
-            color: value === true ? '#9dc2ff' : token.textMuted,
-            font: `500 11px ${token.fontUi}`,
-            cursor: 'pointer',
-          }}
-        >
-          {value === true ? 'on' : 'off'}
-        </button>
+          checked={value === true}
+          onCheckedChange={(next) => onChange?.(param.key, next)}
+          className="self-start"
+        />
       )}
 
       {param.type === 'enum' && (
-        <select
+        <NativeSelect
           id={id}
+          className="w-full"
           disabled={disabled}
           value={String(value ?? '')}
           onChange={(event) => onChange?.(param.key, event.target.value)}
-          style={{
-            height: token.controlHeight,
-            background: token.surface1,
-            border: `1px solid ${token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: token.textBright,
-            font: `400 11.5px ${token.fontUi}`,
-            padding: `0 ${token.space2}`,
-          }}
         >
           {enumOptionsFor(param, capabilityOptions).map((option) => (
-            <option key={option} value={option}>
+            <NativeSelectOption key={option} value={option}>
               {option}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       )}
 
       {param.type === 'seed' && (
-        <div style={{ display: 'flex', gap: token.space2, alignItems: 'center' }}>
-          <ValueField style={{ flex: 1 }}>{seedLocked === true ? String(value ?? 0) : 'random'}</ValueField>
+        <div className="flex items-center gap-2">
+          <Input
+            id={id}
+            readOnly
+            value={seedLocked === true ? String(value ?? 0) : 'random'}
+            className="flex-1 font-mono tabular-nums"
+          />
           <Button
-            tone={seedLocked === true ? 'active' : 'default'}
+            variant={seedLocked === true ? 'secondary' : 'outline'}
+            size="icon"
             disabled={disabled}
             onClick={onToggleSeedLock}
+            aria-pressed={seedLocked === true}
+            aria-label={seedLocked === true ? 'Seed locked' : 'Lock the seed'}
             title="Locking the seed fixes the result, so every run is identical"
           >
-            {seedLocked === true ? 'locked' : 'lock'}
+            {seedLocked === true ? <LockIcon /> : <LockOpenIcon />}
           </Button>
         </div>
       )}
@@ -502,7 +486,7 @@ function ParamControl({
           {...(onChange !== undefined ? { onChange: (next) => onChange(param.key, next) } : {})}
         />
       )}
-    </div>
+    </Field>
   );
 }
 
@@ -553,41 +537,39 @@ function AssetField({
   const grabbable = frameGrab !== undefined && frameGrab.describe !== undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
+    <div className="flex flex-col gap-2">
       {choices.length === 0 && value === '' ? (
-        <ValueField>{`no ${label.toLowerCase()} available in this project`}</ValueField>
+        <Input readOnly value={`no ${label.toLowerCase()} available in this project`} />
       ) : (
-        <select
+        <NativeSelect
           id={id}
           aria-label={label}
           disabled={disabled}
           value={value}
+          // `aria-invalid` is what paints a required slot the run is waiting on: the registry's own
+          // invalid state, rather than a red border decided here.
+          aria-invalid={missing}
           onChange={(event) => onChange?.(event.target.value)}
-          style={{
-            height: token.controlHeight,
-            background: token.surface1,
-            border: `1px solid ${missing ? token.danger : token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: value === '' ? token.textGhost : token.textBright,
-            font: `400 11.5px ${token.fontUi}`,
-            padding: `0 ${token.space2}`,
-            maxWidth: '100%',
-          }}
+          className="w-full max-w-full"
         >
-          <option value="">not set</option>
-          {!known && value !== '' && <option value={value}>{`${value} — missing`}</option>}
+          <NativeSelectOption value="">not set</NativeSelectOption>
+          {!known && value !== '' && (
+            <NativeSelectOption value={value}>{`${value} — missing`}</NativeSelectOption>
+          )}
           {choices.map((choice) => (
-            <option key={choice.path} value={choice.path}>
+            <NativeSelectOption key={choice.path} value={choice.path}>
               {choice.label}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       )}
 
       {frameGrab !== undefined && (
         // Shown disabled rather than hidden when there is nothing under the playhead: a control that
         // comes and goes as the playhead moves is harder to learn than one that says why it cannot act.
         <Button
+          variant="outline"
+          size="sm"
           disabled={disabled || !grabbable || frameGrab.busy === true}
           onClick={() => frameGrab.grab(paramKey)}
           title={
@@ -595,8 +577,8 @@ function AssetField({
               ? `Grab ${frameGrab.describe} into the project and use it here`
               : 'Move the playhead over a video clip to grab a frame'
           }
-          style={{ justifyContent: 'center' }}
         >
+          <CameraIcon />
           {frameGrab.busy === true ? 'Grabbing…' : 'Use current frame'}
         </Button>
       )}
@@ -645,14 +627,13 @@ function VariantControl({
   const canVary = supportsVariants(manifest) && plan.constraint?.kind !== 'seed-locked';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Variants</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textFaint}>{plan.mode}</Mono>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Variants</span>
+        <span className="ml-auto font-mono text-xs text-muted-foreground">{plan.mode}</span>
       </div>
 
-      <input
+      <Input
         type="number"
         aria-label="Variant count"
         min={1}
@@ -660,20 +641,15 @@ function VariantControl({
         disabled={disabled || !canVary}
         value={requested ?? plan.totalVariants}
         onChange={(event) => onChange?.(Number(event.target.value))}
-        style={{
-          width: 76,
-          height: token.controlHeight,
-          background: token.surface1,
-          border: `1px solid ${token.borderControl}`,
-          borderRadius: token.radiusControl,
-          color: token.textBright,
-          font: token.textValue,
-          padding: `0 ${token.space3}`,
-          opacity: canVary ? 1 : 0.5,
-        }}
+        className="w-19 font-mono tabular-nums"
       />
 
-      {plan.constraint !== undefined && <Mono tone={token.warn}>{describeConstraint(plan.constraint)}</Mono>}
+      {plan.constraint !== undefined && (
+        <p className="flex items-start gap-1.5 font-mono text-xs text-muted-foreground">
+          <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+          {describeConstraint(plan.constraint)}
+        </p>
+      )}
     </div>
   );
 }
