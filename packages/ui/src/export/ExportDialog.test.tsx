@@ -279,3 +279,45 @@ describe('when it finishes', () => {
     expect(screen.queryByText('Reveal')).toBeNull();
   });
 });
+
+describe('the review copy', () => {
+  it('is offered, and off', () => {
+    // The badge warning about this setting has existed since the field was declared; nothing could
+    // turn it on, so the one deliverable it exists for could not be produced.
+    render(<ExportDialog open settings={settings()} />);
+    const toggle = screen.getByRole('switch', { name: 'Review copy' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('says what a full export renders at until it is asked for', () => {
+    render(<ExportDialog open settings={settings()} />);
+    expect(screen.getByText('full resolution')).toBeDefined();
+  });
+
+  it('shows the size it would deliver instead', () => {
+    // The size comes from the same rule the renderer uses, so the dialog cannot promise one size and
+    // the file arrive at another.
+    render(<ExportDialog open settings={settings({ useProxyResolution: true })} />);
+    expect(screen.getByText('960×540')).toBeDefined();
+  });
+
+  it('reports the change rather than keeping it', () => {
+    const onChange = vi.fn();
+    render(<ExportDialog open settings={settings()} onChange={onChange} />);
+
+    void userEvent.click(screen.getByRole('switch', { name: 'Review copy' }));
+
+    return vi.waitFor(() => {
+      expect(onChange.mock.calls.at(-1)?.[0]?.useProxyResolution).toBe(true);
+    });
+  });
+
+  it('cannot be changed while an export is running', () => {
+    // Base UI reports this as `aria-disabled`, not the `disabled` attribute — which is what a screen
+    // reader reads and what the pointer handler checks.
+    // `running` is derived from the progress phase, not passed — the dialog has one source of truth
+    // for whether an export is in flight.
+    render(<ExportDialog open settings={settings()} progress={progress()} />);
+    expect(screen.getByRole('switch', { name: 'Review copy' }).getAttribute('aria-disabled')).toBe('true');
+  });
+});

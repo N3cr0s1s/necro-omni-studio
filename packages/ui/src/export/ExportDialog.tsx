@@ -15,9 +15,11 @@ import {
   exportDurationSeconds,
   formatEstimate,
   formatRemaining,
+  reviewResolution,
   validateExportSettings,
 } from '@nos/export';
 import { Badge } from '@nos/ui/components/ui/badge';
+import { Switch } from '@nos/ui/components/ui/switch';
 import { Button } from '@nos/ui/components/ui/button';
 import {
   Dialog,
@@ -173,6 +175,29 @@ export function ExportDialog({
               label={(speed: EncoderSpeed) => speed}
               onSelect={(speed) => update({ speed })}
             />
+          </Field>
+
+          <Field orientation="horizontal">
+            <FieldLabel className="w-18 shrink-0" htmlFor="export-review">
+              Review copy
+            </FieldLabel>
+            {/*
+             * A switch, and never on by default. The badge below has warned about this setting since
+             * it was declared, but nothing could turn it on — so the one deliverable it exists for, a
+             * fast copy for someone to comment on, could not be produced at all.
+             */}
+            <Switch
+              id="export-review"
+              aria-label="Review copy"
+              disabled={running}
+              checked={settings.useProxyResolution}
+              onCheckedChange={(useProxyResolution: boolean) => update({ useProxyResolution })}
+            />
+            <span className="font-mono text-xs text-muted-foreground">
+              {settings.useProxyResolution
+                ? `${reviewResolution(settings.resolution).width}×${reviewResolution(settings.resolution).height}`
+                : 'full resolution'}
+            </span>
           </Field>
 
           <Field orientation="horizontal">

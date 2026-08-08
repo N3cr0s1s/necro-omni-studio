@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { type TimelineDocument, formatFrameRate, renderRange } from '@nos/core';
+import { type AssetPath, type TimelineDocument, formatFrameRate, renderRange } from '@nos/core';
 import {
   type ExportProgress,
   type ExportSettings,
@@ -7,6 +7,7 @@ import {
   crfFor,
   exportFrames,
   frameCountFor,
+  exportResolution,
   validateExportSettings,
 } from '@nos/export';
 import {
@@ -109,6 +110,14 @@ export interface ExportRunOptions {
    */
   readonly effects: EffectRegistry;
   /**
+   * Maps an asset to its editing proxy, for a review copy.
+   *
+   * Only consulted when the export asks for proxy resolution. A final export must read the originals —
+   * one that quietly delivered proxies would be a serious failure, which is why this is a separate
+   * decision from whether proxies exist at all.
+   */
+  readonly resolveAsset?: ((asset: AssetPath) => AssetPath) | undefined;
+  /**
    * Where a bound mask's frame comes from, so an export masks what the preview masked.
    *
    * Optional because an export of a project with no masks needs none — but absent when there *are*
@@ -133,7 +142,14 @@ function nextJobSequence(): string {
   return `${Date.now().toString(36)}_${jobSequence}`;
 }
 
-export function useExportRun({ document, sidecar, masks, gpu, effects }: ExportRunOptions): ExportRun {
+export function useExportRun({
+  document,
+  sidecar,
+  masks,
+  gpu,
+  effects,
+  resolveAsset,
+}: ExportRunOptions): ExportRun {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -180,14 +196,14 @@ export function useExportRun({ document, sidecar, masks, gpu, effects }: ExportR
         message: 'waiting for the GPU',
       });
       void withGpu(gpu, 'export', settings.outputPath, () =>
-        run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks, effects),
+        run(documentRef, settings, sidecar, cancelled, setProgress, setTiming, masks, effects, resolveAsset),
       )
         .catch((failure: unknown) => {
           setError(failure instanceof Error ? failure.message : String(failure));
         })
         .finally(() => setRunning(false));
     },
-    [gpu, running, sidecar, masks, effects],
+    [gpu, running, sidecar, masks, effects, resolveAsset],
   );
 
   return { running, progress, error, timing, start, cancel };
@@ -202,8 +218,17 @@ async function run(
   reportTiming: (timing: ExportTiming) => void,
   masks: MaskSource | undefined,
   effects: EffectRegistry,
+  resolveAsset: ((asset: AssetPath) => AssetPath) | undefined,
 ): Promise<void> {
-  const { width, height } = settings.resolution;
+  /*
+   * A review copy renders smaller and reads the editing proxies.
+   *
+   * Both halves matter and neither is optional: rendering 4K frames only to scale them down at the
+   * encoder saves nothing, and reading originals means decoding full-resolution video for a file
+   * nobody will grade. The size rule lives in `@nos/export` so the dialog's estimate and this cannot
+   * disagree about what a review copy is.
+   */
+  const { width, height } = exportResolution(settings.resolution, settings.useProxyResolution);
   const total = frameCountFor(settings.range);
 
   const canvas = document.createElement('canvas');
@@ -215,7 +240,10 @@ async function run(
   gl.getExtension('EXT_color_buffer_float');
   gl.getExtension('OES_texture_float_linear');
 
-  const media = createMediaTextures(sidecar);
+  const media = createMediaTextures(
+    sidecar,
+    settings.useProxyResolution && resolveAsset !== undefined ? { resolveAsset } : {},
+  );
   const pool = createRenderTargetPool(gl);
   const compositor = createGlCompositor({
     gl,

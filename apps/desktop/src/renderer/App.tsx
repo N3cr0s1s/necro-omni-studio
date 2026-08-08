@@ -899,6 +899,7 @@ export function App(): ReactNode {
     masks: maskSource,
     gpu: runtime.gpu,
     effects: effects.registry,
+    resolveAsset: proxies.resolve,
   });
 
   /** What an effect on the selected clip may be bound to. */
