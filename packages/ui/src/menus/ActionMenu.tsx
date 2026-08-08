@@ -43,6 +43,24 @@ export interface ActionMenuItem {
   readonly danger?: boolean;
 }
 
+/**
+ * Everything a panel needs in order to have a right-click menu.
+ *
+ * One object rather than a pair of props, and generic in what the menu is *about*, because the two are
+ * useless apart: items built for a target and a choice reported without one cannot be matched up
+ * afterwards. It also removes the round-trip the previous design needed — the owner stored which clip
+ * had been right-clicked, then read that state back when the action fired, which is a stale read
+ * waiting to happen.
+ *
+ * `T` is the panel's own idea of what was clicked: a path and a flag for the browser, a clip and a
+ * track for the timeline. Neither this file nor `ActionMenu` looks inside it.
+ */
+export interface MenuBinding<T> {
+  /** Called per render of the thing that owns the menu. An empty list means no menu on that thing. */
+  readonly items: (target: T) => readonly ActionMenuItem[];
+  readonly onChoose: (target: T, action: string) => void;
+}
+
 export interface ActionMenuProps {
   /** Built by the caller from whatever was clicked. An empty list means no menu at all. */
   readonly items: readonly ActionMenuItem[];

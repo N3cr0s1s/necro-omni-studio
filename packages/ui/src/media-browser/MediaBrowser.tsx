@@ -1,11 +1,14 @@
+import { type KeyboardEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
 import {
-  type CSSProperties,
-  type KeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useMemo,
-  useState,
-} from 'react';
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CircleCheckIcon,
+  CircleDashedIcon,
+  FolderTreeIcon,
+  RadioIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
 import type { AssetPath } from '@nos/core';
 import {
   type DirectoryNode,
@@ -15,8 +18,13 @@ import {
   formatBytes,
   isTimelineAsset,
 } from '@nos/media';
-import { Badge, Mono, PanelHeader, StatusDot } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { Input } from '@nos/ui/components/ui/input';
+import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
+import { cn } from '@nos/ui/lib/utils';
 import { AssetIcon } from './AssetIcon.js';
 
 /**
@@ -33,6 +41,12 @@ import { AssetIcon } from './AssetIcon.js';
  * - Watcher state is shown. A silently dead watcher is worse than none: the user would trust a stale
  *   tree, and the spec's whole premise is that the folder is the truth.
  */
+
+/** What a right-click in the browser was about. `path` is empty for the space below the rows. */
+export interface BrowserMenuTarget {
+  readonly path: string;
+  readonly isDirectory: boolean;
+}
 
 export interface MediaBrowserProps {
   readonly tree: DirectoryNode;
@@ -55,7 +69,7 @@ export interface MediaBrowserProps {
    * folder, rename a file, delete one or move anything. What each action *means* is the caller's —
    * this reports the gesture and renders the result.
    */
-  readonly onContextMenu?: (path: string, isDirectory: boolean, x: number, y: number) => void;
+  readonly menu?: MenuBinding<BrowserMenuTarget>;
   /** Path whose inline name field should be open, for a rename asked for from the menu. */
   readonly renamingPath?: string;
   readonly onRename?: (path: string, name: string) => void;
@@ -97,7 +111,7 @@ export function MediaBrowser({
   onDragStart,
   detail,
   onRescan,
-  onContextMenu,
+  menu,
   renamingPath,
   onRename,
   onMove,
@@ -118,78 +132,56 @@ export function MediaBrowser({
   // project grows past what the DOM handles comfortably.
   const rows = useMemo(() => flattenVisible(tree, expanded), [tree, expanded]);
 
-  return (
-    <div
-      style={{
-        width: token.browserWidth,
-        flex: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-        background: token.bgPanel,
-        borderRight: `1px solid ${token.border}`,
-      }}
-    >
-      <PanelHeader
-        caption="Project folder"
-        trailing={<WatcherIndicator status={watcher} onRescan={onRescan} />}
-      />
+  // The menu for the empty space below the rows. This is what makes "New folder" reachable in a
+  // project that has none — which is exactly when it is wanted.
+  const background: BrowserMenuTarget = { path: '', isDirectory: false };
 
-      <div
-        role="tree"
-        aria-label="Project folder"
-        onContextMenu={(event) => {
-          if (onContextMenu === undefined) return;
-          // The empty area below the rows only; a row reports itself. This is what makes "New folder"
-          // reachable in a project that has none — which is exactly when it is wanted.
-          if (event.target !== event.currentTarget) return;
-          event.preventDefault();
-          onContextMenu('', false, event.clientX, event.clientY);
-        }}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          padding: `${token.space2} 0`,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-        }}
-      >
-        {rows.length === 0 ? (
-          <div style={{ padding: token.space5 }}>
-            <Mono tone={token.textGhost}>This project folder is empty</Mono>
-          </div>
-        ) : (
-          rows.map((row) => (
-            <TreeRow
-              key={row.node.path}
-              row={row}
-              expanded={row.node.kind === 'directory' && expanded.has(row.node.path)}
-              selected={selected === row.node.path}
-              onToggle={toggle}
-              {...(onSelect !== undefined ? { onSelect } : {})}
-              {...(onActivate !== undefined ? { onActivate } : {})}
-              {...(onDragStart !== undefined ? { onDragStart } : {})}
-              {...(onContextMenu !== undefined ? { onContextMenu } : {})}
-              {...(onRename !== undefined ? { onRename } : {})}
-              {...(onMove !== undefined ? { onMove } : {})}
-              renaming={renamingPath === row.node.path}
-            />
-          ))
-        )}
+  return (
+    <div className="flex w-70 min-h-0 flex-none flex-col border-r">
+      <div className="flex h-9 flex-none items-center gap-3 px-4">
+        <FolderTreeIcon className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Project folder
+        </span>
+        <WatcherIndicator status={watcher} onRescan={onRescan} />
       </div>
+      <Separator />
+
+      <ActionMenu
+        items={menu === undefined ? [] : menu.items(background)}
+        onChoose={(action) => menu?.onChoose(background, action)}
+      >
+        <ScrollArea className="min-h-0 flex-1">
+          <div role="tree" aria-label="Project folder" className="flex flex-col gap-px py-1">
+            {rows.length === 0 ? (
+              <p className="p-4 font-mono text-xs text-muted-foreground">This project folder is empty</p>
+            ) : (
+              rows.map((row) => (
+                <TreeRow
+                  key={row.node.path}
+                  row={row}
+                  expanded={row.node.kind === 'directory' && expanded.has(row.node.path)}
+                  selected={selected === row.node.path}
+                  onToggle={toggle}
+                  {...(onSelect !== undefined ? { onSelect } : {})}
+                  {...(onActivate !== undefined ? { onActivate } : {})}
+                  {...(onDragStart !== undefined ? { onDragStart } : {})}
+                  {...(menu !== undefined ? { menu } : {})}
+                  {...(onRename !== undefined ? { onRename } : {})}
+                  {...(onMove !== undefined ? { onMove } : {})}
+                  renaming={renamingPath === row.node.path}
+                />
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </ActionMenu>
 
       {detail !== undefined && (
-        <div
-          style={{
-            flex: 'none',
-            borderTop: `1px solid ${token.borderSubtle}`,
-            padding: `${token.space5} ${token.space5}`,
-          }}
-        >
-          {detail}
-        </div>
+        <>
+          <Separator />
+          <div className="flex-none p-4">{detail}</div>
+        </>
       )}
     </div>
   );
@@ -205,35 +197,35 @@ function WatcherIndicator({
 }): ReactNode {
   if (status.error !== undefined) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={onRescan}
         title={status.error.detail}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: token.space2,
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          cursor: onRescan === undefined ? 'default' : 'pointer',
-        }}
+        aria-label="Watcher failed — rescan"
+        className="ml-auto text-destructive"
       >
-        <StatusDot color={token.danger} size={6} label="Watcher failed" />
-        <Mono tone={token.danger}>rescan</Mono>
-      </button>
+        <TriangleAlertIcon />
+        <RefreshCwIcon />
+        <span className="font-mono">rescan</span>
+      </Button>
     );
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-      <StatusDot
-        color={status.watching ? token.ok : token.textGhost}
-        size={6}
-        label={status.watching ? 'Watching for changes' : 'Not watching'}
-      />
-      <Mono tone={token.textFaint}>{status.watching ? 'watching' : 'idle'}</Mono>
-    </div>
+    <span
+      className={cn(
+        'ml-auto flex items-center gap-1.5 font-mono text-xs',
+        status.watching ? 'text-muted-foreground' : 'text-muted-foreground/60',
+      )}
+      // Named rather than left to a coloured dot: a dead watcher means the tree is quietly stale, and
+      // that is the one thing about this panel worth announcing.
+      role="img"
+      aria-label={status.watching ? 'Watching for changes' : 'Not watching'}
+    >
+      <RadioIcon className="size-3.5" />
+      {status.watching ? 'watching' : 'idle'}
+    </span>
   );
 }
 
@@ -273,7 +265,7 @@ function TreeRow({
   onSelect,
   onActivate,
   onDragStart,
-  onContextMenu,
+  menu,
   renaming = false,
   onRename,
   onMove,
@@ -285,7 +277,7 @@ function TreeRow({
   readonly onSelect?: (path: AssetPath) => void;
   readonly onActivate?: (path: AssetPath) => void;
   readonly onDragStart?: (path: AssetPath) => void;
-  readonly onContextMenu?: (path: string, isDirectory: boolean, x: number, y: number) => void;
+  readonly menu?: MenuBinding<BrowserMenuTarget>;
   /** Open the inline name field for this row, for a rename asked for from the menu. */
   readonly renaming?: boolean;
   readonly onRename?: (path: string, name: string) => void;
@@ -299,6 +291,7 @@ function TreeRow({
   // why the browser's own drag type exists separately from the timeline's.
   const draggable = !isDirectory && isTimelineAsset(node.path);
   const movable = onMove !== undefined && !isReservedPath(node.path);
+  const target: BrowserMenuTarget = { path: node.path, isDirectory };
 
   const activate = (): void => {
     if (isDirectory) {
@@ -323,123 +316,98 @@ function TreeRow({
     }
   };
 
-  const rowStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: token.space3,
-    // Roomier than it was, on a direct report that the browser was hard to read — "everything is
-    // tiny, I have to squint". This is the panel a user scans hundreds of times an hour, and it was
-    // the densest thing in the window; a row that takes three more pixels costs one row of scroll
-    // and buys legibility on every one of them.
-    padding: `7px ${token.space5}`,
-    paddingLeft: `calc(${token.space5} + ${depth * INDENT_PX}px)`,
-    font: selected || isDirectory ? `600 13px ${token.fontUi}` : `400 13px ${token.fontUi}`,
-    color: selected ? token.textBright : isDirectory ? token.textBright : token.textMuted,
-    // A left border rather than a full outline for selection: it does not shift the row's contents,
-    // so the list does not jitter as selection moves.
-    borderLeft: selected ? `2px solid ${token.accent}` : '2px solid transparent',
-    background: dropping ? 'rgba(76, 154, 255, 0.16)' : selected ? token.surfaceSelected : 'transparent',
-    outline: dropping ? `1px solid ${token.accent}` : 'none',
-    cursor: 'default',
-    userSelect: 'none',
-  };
+  const Chevron = isDirectory ? (expanded ? ChevronDownIcon : ChevronRightIcon) : undefined;
 
   return (
-    <div
-      role="treeitem"
-      aria-level={depth + 1}
-      aria-selected={selected}
-      aria-expanded={isDirectory ? expanded : undefined}
-      tabIndex={0}
-      draggable={draggable || movable}
-      onContextMenu={(event) => {
-        if (onContextMenu === undefined) return;
-        event.preventDefault();
-        // Selecting first, like the timeline's menu: acting on something other than what was clicked
-        // is the one behaviour a context menu must never have.
-        if (!isDirectory) onSelect?.(node.path as AssetPath);
-        onContextMenu(node.path, isDirectory, event.clientX, event.clientY);
-      }}
-      onClick={() => {
-        if (isDirectory) onToggle(node.path);
-        else onSelect?.(node.path as AssetPath);
-      }}
-      onDoubleClick={activate}
-      onKeyDown={handleKeyDown}
-      onDragStart={(event) => {
-        // The asset travels on the drag itself rather than in application state, so a drop knows what
-        // it received without the two sides having to agree on a shared variable that a cancelled
-        // drag would leave stale.
-        // The path travels on the drag itself rather than in application state, so a drop knows what
-        // it received without the two sides having to agree on a variable a cancelled drag would
-        // leave stale. Both types are set: the timeline reads one, a folder row the other, and which
-        // one a drop honours is the drop target's business rather than the source's.
-        if (draggable) event.dataTransfer.setData(ASSET_DRAG_TYPE, node.path);
-        if (movable) event.dataTransfer.setData(MOVE_DRAG_TYPE, node.path);
-        event.dataTransfer.effectAllowed = draggable ? 'copyMove' : 'move';
-        onDragStart?.(node.path as AssetPath);
-      }}
-      onDragOver={(event) => {
-        // Folders only. A file is not a container, and an inviting highlight on one would promise
-        // something that cannot happen.
-        if (!isDirectory || onMove === undefined) return;
-        if (!event.dataTransfer.types.includes(MOVE_DRAG_TYPE)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        setDropping(true);
-      }}
-      onDragLeave={() => setDropping(false)}
-      onDrop={(event) => {
-        setDropping(false);
-        if (!isDirectory || onMove === undefined) return;
-        const source = event.dataTransfer.getData(MOVE_DRAG_TYPE);
-        if (source === '') return;
-        event.preventDefault();
-        onMove(source, node.path);
-      }}
-      style={rowStyle}
+    <ActionMenu
+      items={menu === undefined ? [] : menu.items(target)}
+      onChoose={(action) => menu?.onChoose(target, action)}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 10,
-          flex: 'none',
-          textAlign: 'center',
-          color: isDirectory ? token.textSoft : token.textFaint,
-          font: `400 11px ${token.fontUi}`,
+      <div
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-selected={selected}
+        aria-expanded={isDirectory ? expanded : undefined}
+        tabIndex={0}
+        draggable={draggable || movable}
+        onContextMenu={() => {
+          // Selecting first, like the timeline's menu: acting on something other than what was clicked
+          // is the one behaviour a context menu must never have. Opening the menu itself is Base UI's,
+          // and this handler runs alongside it rather than instead of it.
+          if (!isDirectory) onSelect?.(node.path as AssetPath);
         }}
+        onClick={() => {
+          if (isDirectory) onToggle(node.path);
+          else onSelect?.(node.path as AssetPath);
+        }}
+        onDoubleClick={activate}
+        onKeyDown={handleKeyDown}
+        onDragStart={(event) => {
+          // The path travels on the drag itself rather than in application state, so a drop knows what
+          // it received without the two sides having to agree on a variable a cancelled drag would
+          // leave stale. Both types are set: the timeline reads one, a folder row the other, and which
+          // one a drop honours is the drop target's business rather than the source's.
+          if (draggable) event.dataTransfer.setData(ASSET_DRAG_TYPE, node.path);
+          if (movable) event.dataTransfer.setData(MOVE_DRAG_TYPE, node.path);
+          event.dataTransfer.effectAllowed = draggable ? 'copyMove' : 'move';
+          onDragStart?.(node.path as AssetPath);
+        }}
+        onDragOver={(event) => {
+          // Folders only. A file is not a container, and an inviting highlight on one would promise
+          // something that cannot happen.
+          if (!isDirectory || onMove === undefined) return;
+          if (!event.dataTransfer.types.includes(MOVE_DRAG_TYPE)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          setDropping(true);
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={(event) => {
+          setDropping(false);
+          if (!isDirectory || onMove === undefined) return;
+          const source = event.dataTransfer.getData(MOVE_DRAG_TYPE);
+          if (source === '') return;
+          event.preventDefault();
+          onMove(source, node.path);
+        }}
+        className={cn(
+          // Roomier than it was, on a direct report that the browser was hard to read — "everything is
+          // tiny, I have to squint". This is the panel a user scans hundreds of times an hour, and a row
+          // that takes three more pixels costs one row of scroll and buys legibility on every one of them.
+          'flex cursor-default items-center gap-2 py-1.5 pr-4 text-sm select-none',
+          // A left border rather than a full outline for selection: it does not shift the row's
+          // contents, so the list does not jitter as selection moves.
+          'border-l-2 border-transparent',
+          (selected || isDirectory) && 'font-semibold',
+          !selected && !isDirectory && 'text-muted-foreground',
+          selected && 'border-l-primary bg-accent',
+          dropping && 'bg-primary/15 ring-1 ring-primary',
+        )}
+        style={{ paddingLeft: 16 + depth * INDENT_PX }}
       >
-        {isDirectory ? (expanded ? '▾' : '▸') : '·'}
-      </span>
-
-      {/* A glyph as well as the colour: a coloured square said there were four kinds of thing
-          without saying which was which, and nothing in the window taught the palette. */}
-      <AssetIcon
-        sizePx={15}
-        isDirectory={isDirectory}
-        name={node.name}
-        open={expanded}
-        {...(isDirectory ? {} : { assetType: (node as FileNode).assetType })}
-      />
-
-      {renaming && onRename !== undefined ? (
-        <RowNameField name={node.name} onCommit={(name) => onRename(node.path, name)} />
-      ) : (
-        <span
-          style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {node.name}
+        <span aria-hidden="true" className="w-2.5 flex-none text-muted-foreground">
+          {Chevron !== undefined && <Chevron className="size-2.5" />}
         </span>
-      )}
 
-      <div style={{ flex: 1 }} />
+        {/* A glyph as well as the colour: a coloured square said there were four kinds of thing
+            without saying which was which, and nothing in the window taught the palette. */}
+        <AssetIcon
+          className="size-4"
+          isDirectory={isDirectory}
+          name={node.name}
+          open={expanded}
+          {...(isDirectory ? {} : { assetType: (node as FileNode).assetType })}
+        />
 
-      <RowMeta node={node} />
-    </div>
+        {renaming && onRename !== undefined ? (
+          <RowNameField name={node.name} onCommit={(name) => onRename(node.path, name)} />
+        ) : (
+          <span className="truncate">{node.name}</span>
+        )}
+
+        <RowMeta node={node} />
+      </div>
+    </ActionMenu>
   );
 }
 
@@ -461,7 +429,7 @@ function RowNameField({
   const [draft, setDraft] = useState(name);
 
   return (
-    <input
+    <Input
       autoFocus
       aria-label={`Rename ${name}`}
       value={draft}
@@ -478,16 +446,7 @@ function RowNameField({
         else return;
         event.preventDefault();
       }}
-      style={{
-        flex: 1,
-        minWidth: 0,
-        background: token.surface1,
-        border: `1px solid ${token.accent}`,
-        borderRadius: token.radiusInset,
-        color: token.textBright,
-        font: `400 13px ${token.fontUi}`,
-        padding: '1px 4px',
-      }}
+      className="h-6 min-w-0 flex-1 px-1 py-0"
     />
   );
 }
@@ -506,18 +465,20 @@ function RowMeta({ node }: { readonly node: TreeNode }): ReactNode {
 
   if (node.name === 'cache') {
     return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-        {node.sizeBytes > 0 && <Mono tone={token.textGhost}>{formatBytes(node.sizeBytes)}</Mono>}
-        <Mono tone={token.textGhost}>derived</Mono>
+      <span className="ml-auto flex items-center gap-2 font-mono text-xs text-muted-foreground">
+        {node.sizeBytes > 0 && <span>{formatBytes(node.sizeBytes)}</span>}
+        <span>derived</span>
       </span>
     );
   }
 
   if (node.name === 'generated') {
-    return <Mono tone={token.textFaint}>{formatBytes(node.sizeBytes)}</Mono>;
+    return <span className="ml-auto font-mono text-xs text-muted-foreground">{formatBytes(node.sizeBytes)}</span>;
   }
 
-  return node.fileCount > 0 ? <Mono tone={token.textGhost}>{node.fileCount}</Mono> : null;
+  return node.fileCount > 0 ? (
+    <span className="ml-auto font-mono text-xs text-muted-foreground">{node.fileCount}</span>
+  ) : null;
 }
 
 /**
@@ -546,28 +507,22 @@ export function AssetDetail({
   isGenerated = false,
 }: AssetDetailProps): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-        <span
-          style={{
-            font: `500 11.5px ${token.fontUi}`,
-            color: isGenerated ? token.generatedText : token.textBright,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {name}
-        </span>
-        {isGenerated && <Badge tone="generated">generated</Badge>}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className={cn('truncate text-sm font-medium', isGenerated && 'text-chart-4')}>{name}</span>
+        {isGenerated && (
+          <Badge variant="secondary" className="text-chart-4">
+            generated
+          </Badge>
+        )}
       </div>
 
-      {summary !== undefined && <Mono tone={token.textDim}>{summary}</Mono>}
+      {summary !== undefined && <p className="font-mono text-xs text-muted-foreground">{summary}</p>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3, flexWrap: 'wrap' }}>
+      <div className="flex flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
         <DerivedState label="proxy" ready={hasProxy} />
         <DerivedState label="filmstrip" ready={hasFilmstrip} />
-        {hash !== undefined && <Mono tone={token.textGhost}>hash {hash.slice(0, 6)}…</Mono>}
+        {hash !== undefined && <span>hash {hash.slice(0, 6)}…</span>}
       </div>
     </div>
   );
@@ -581,9 +536,11 @@ function DerivedState({
   readonly ready: boolean | undefined;
 }): ReactNode {
   if (ready === undefined) return null;
+  const Icon = ready ? CircleCheckIcon : CircleDashedIcon;
   return (
-    <Mono tone={ready ? token.ok : token.textGhost}>
-      {label} {ready ? '✓' : '…'}
-    </Mono>
+    <span className={cn('flex items-center gap-1', ready && 'text-chart-2')}>
+      <Icon className="size-3" />
+      {label}
+    </span>
   );
 }

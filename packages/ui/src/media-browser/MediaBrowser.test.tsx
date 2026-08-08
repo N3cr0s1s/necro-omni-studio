@@ -79,7 +79,7 @@ describe('tree rendering', () => {
     renderBrowser();
     const cache = screen
       .getAllByRole('treeitem')
-      .find((item) => item.textContent?.startsWith('▸') && item.textContent?.includes('cache'));
+      .find((item) => item.getAttribute('aria-expanded') === 'false' && item.textContent?.includes('cache'));
     expect(cache?.textContent).toContain('derived');
   });
 
@@ -260,6 +260,11 @@ describe('watcher status', () => {
   });
 });
 
+/** The classes on the artifact row named `label`, which is where its readiness is expressed. */
+function readinessOf(label: string): string {
+  return screen.getByText(label).className;
+}
+
 describe('AssetDetail', () => {
   it('reports derived artifact readiness', () => {
     render(
@@ -271,14 +276,16 @@ describe('AssetDetail', () => {
         hasFilmstrip
       />,
     );
-    expect(screen.getByText(/proxy ✓/)).toBeDefined();
-    expect(screen.getByText(/filmstrip ✓/)).toBeDefined();
+    // Ready is an icon beside the word now, not a tick inside it: the two are separate elements, so
+    // the readiness is asserted on the row rather than on a run of text.
+    expect(readinessOf('proxy')).toContain('text-chart-2');
+    expect(readinessOf('filmstrip')).toContain('text-chart-2');
     expect(screen.getByText(/hash 9f3c1a/)).toBeDefined();
   });
 
   it('shows a pending artifact as work not yet done, not as an error', () => {
     render(<AssetDetail name="a.mp4" hasProxy={false} />);
-    expect(screen.getByText(/proxy …/)).toBeDefined();
+    expect(readinessOf('proxy')).not.toContain('text-chart-2');
   });
 
   it('omits an artifact row entirely when readiness is unknown', () => {
