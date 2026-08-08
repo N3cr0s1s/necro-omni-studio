@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
@@ -171,11 +171,71 @@ async function stopSidecar(): Promise<void> {
   child.kill('SIGTERM');
 }
 
+/**
+ * Where the last-opened project is remembered.
+ *
+ * `userData`, not the renderer. It was `localStorage` on a `file://` origin, which Chromium does not
+ * guarantee to persist — observably it survived some restarts on this machine and not others — so an
+ * editor whose stated reason for remembering is "you should not have to navigate a folder picker to
+ * use it" sent the user to a folder picker at random.
+ */
+function sessionFile(): string {
+  return join(app.getPath('userData'), 'session.json');
+}
+
+async function rememberProject(root: string): Promise<void> {
+  try {
+    await mkdir(app.getPath('userData'), { recursive: true });
+    await writeFile(sessionFile(), `${JSON.stringify({ lastProject: root }, null, 2)}\n`, 'utf8');
+  } catch {
+    // Failing to remember is not a reason to fail to open. The next launch shows the picker, which is
+    // the behaviour this replaces rather than something worse.
+  }
+}
+
+async function lastProject(): Promise<string | undefined> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(sessionFile(), 'utf8'));
+    const last = (parsed as { lastProject?: unknown }).lastProject;
+    return typeof last === 'string' && last !== '' ? last : undefined;
+  } catch {
+    // No file on a first run, and a corrupt one is the same answer: there is nothing to reopen.
+    return undefined;
+  }
+}
+
 async function openFolder(root: string): Promise<ProjectInfo> {
   await ensureLayout(root);
   session.root = root;
-  session.info = await startSidecar(root);
   startWatching(root);
+
+  // Remembered here rather than by the caller, so every path that opens a project — the picker, the
+  // restore on launch — records it, and none of them can forget.
+  void rememberProject(root);
+
+  /*
+    The sidecar starts in the background, and this is the whole point of the change.
+
+    It used to be awaited here, and `waitForSidecar` allows fifteen seconds — so on any machine where
+    Python is slow, or ffmpeg is missing, or the dependencies are simply not installed, choosing a
+    folder did *nothing visible* for fifteen seconds and then opened. The editor showed "no project
+    open" the entire time. Every launch on such a machine looked broken.
+
+    Nothing about opening a project needs it. The document is on disk, and cutting, trimming, undo and
+    the whole timeline work without a sidecar; what needs one is a proxy, a waveform and an export,
+    and each of those already reports its own absence. The renderer shows the state as a badge and now
+    hears about it when it settles.
+  */
+  // Reported as *starting* rather than as failed: "unavailable" is a verdict, and for the first few
+  // seconds there is no verdict yet. The badge says so, and says why when there is a reason.
+  session.info = unavailable('the sidecar is starting');
+  void startSidecar(root).then((info) => {
+    // Discarded if another project was opened while this was starting: the answer describes a root
+    // that is no longer the session's, and adopting it would report a sidecar for the wrong folder.
+    if (session.root !== root) return;
+    session.info = info;
+    broadcast(IPC_EVENTS.sidecarStatus, info);
+  });
 
   const document = await readProjectFile(root);
   return { root, name: basename(root), ...(document !== undefined ? { document } : {}) };
@@ -421,6 +481,8 @@ function registerHandlers(): void {
       return { ok: false, detail: describeFileError(error, requireString(path)) };
     }
   });
+
+  ipcMain.handle(IPC.lastProject, async (): Promise<string | undefined> => lastProject());
 
   ipcMain.handle(IPC.revealInFolder, async (_event, path: unknown): Promise<void> => {
     shell.showItemInFolder(resolveInProject(requireProject(), requireString(path)));

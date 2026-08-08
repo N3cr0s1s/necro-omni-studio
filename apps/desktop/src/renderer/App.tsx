@@ -135,7 +135,6 @@ import { useProjectTree } from './use-project-tree.js';
 const TRACKS = { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') };
 
 /** Where the last opened project is remembered. One key: this is a preference, not a document. */
-const LAST_PROJECT_KEY = 'nos.lastProject';
 
 function emptyProject(name: string): TimelineDocument {
   return createDocument({
@@ -269,7 +268,6 @@ export function App(): ReactNode {
     async (opened: ProjectInfo, api: DesktopBridge) => {
       setProject(opened);
       setSidecar(await api.sidecarInfo());
-      globalThis.localStorage?.setItem(LAST_PROJECT_KEY, opened.root);
 
       if (opened.document === undefined) {
         // A folder with no `project.json` is a *new* project, not a broken one.
@@ -290,15 +288,31 @@ export function App(): ReactNode {
     [store],
   );
 
+  /**
+   * The sidecar settling, after the project has already opened.
+   *
+   * Opening no longer waits for it — starting it takes up to fifteen seconds, and a project is fully
+   * editable without one — so the state that was read once at adoption has to be *heard about* when it
+   * changes, or the badge would say "starting" for the rest of the session.
+   */
+  useEffect(() => bridge()?.onSidecarStatus(setSidecar), []);
+
   // Reopens the last project on launch. An editor that forgets what you were working on every time it
   // starts is one the user has to navigate a folder picker to use at all.
   useEffect(() => {
     const api = bridge();
-    const last = globalThis.localStorage?.getItem(LAST_PROJECT_KEY);
-    if (api === undefined || last === null || last === undefined || last === '') return;
+    if (api === undefined) return;
 
-    void api.loadProject(last).then((opened) => {
-      if (opened !== undefined) void adopt(opened, api);
+    // Asked of the shell rather than read from `localStorage`, which on a `file://` origin Chromium
+    // does not guarantee to persist — so this used to work on some launches and not others, which is
+    // the one behaviour a "reopen what I was working on" feature must not have.
+    void api.lastProject().then((last) => {
+      if (last === undefined || last === '') return;
+      // A folder that has been moved, renamed or unplugged simply does not open. Reporting it would
+      // greet the user with an error about a decision they made weeks ago.
+      return api.loadProject(last).then((opened) => {
+        if (opened !== undefined) void adopt(opened, api);
+      });
     });
   }, [adopt]);
 

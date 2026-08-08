@@ -59,3 +59,29 @@ describe('opening a link from a note', () => {
     }
   });
 });
+
+/**
+ * The events the shell pushes.
+ *
+ * The sidecar's is the newest and the reason is worth keeping: opening a project used to await
+ * `startSidecar`, which allows fifteen seconds — so on a machine where Python is slow or the
+ * dependencies are missing, choosing a folder did nothing visible for fifteen seconds and the editor
+ * showed "no project open" the whole time. Nothing about opening a project needs a sidecar, so it
+ * starts in the background and says so when it settles.
+ */
+describe('pushed events', () => {
+  it('names a sidecar channel distinct from the request one', () => {
+    // Distinct because they are different things: one is asked, the other arrives. Sharing a name
+    // would make a subscription and a handler collide on the same channel.
+    expect(IPC_EVENTS.sidecarStatus).not.toBe(IPC.sidecarInfo);
+  });
+
+  it('keeps every event channel distinct from every request channel', () => {
+    // Widened deliberately: the point of the check is that the two *string* sets do not overlap, and
+    // a `Set<IpcChannel>` would only accept the very values it is meant to prove absent.
+    const requests: ReadonlySet<string> = new Set<string>(Object.values(IPC));
+    for (const event of Object.values(IPC_EVENTS)) {
+      expect(requests.has(event)).toBe(false);
+    }
+  });
+});

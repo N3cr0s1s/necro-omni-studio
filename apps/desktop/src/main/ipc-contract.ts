@@ -46,6 +46,8 @@ export const IPC = {
   watcherStatus: 'project:watcher-state',
   /** Where the sidecar is listening, and the token to reach it. */
   sidecarInfo: 'sidecar:info',
+  /** The project this application last had open, remembered across launches. */
+  lastProject: 'project:last',
   /** Reveals a project-relative path in the OS file manager. */
   revealInFolder: 'shell:reveal',
   /** Opens a web link in the user's browser, never in this window. */
@@ -76,6 +78,13 @@ export const IPC_EVENTS = {
   projectChanged: 'project:changed',
   /** The watcher started, stopped, or failed. */
   watcherStatus: 'project:watcher-status',
+  /**
+   * The sidecar became available, or failed to.
+   *
+   * An event rather than only a request, because starting it takes seconds and opening a project must
+   * not wait for it: the project is usable — cut, trim, undo — long before anything needs a proxy.
+   */
+  sidecarStatus: 'sidecar:status',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -212,6 +221,8 @@ export interface DesktopBridge {
    */
   onProjectChanged(listener: (changes: readonly FileChange[]) => void): () => void;
   onWatcherStatus(listener: (status: WatcherStatus) => void): () => void;
+  /** Reports the sidecar settling, which happens after a project has already opened. */
+  onSidecarStatus(listener: (info: SidecarInfo) => void): () => void;
   /**
    * The watcher's state right now.
    *
@@ -222,6 +233,18 @@ export interface DesktopBridge {
    */
   watcherStatus(): Promise<WatcherStatus>;
   sidecarInfo(): Promise<SidecarInfo>;
+  /**
+   * The folder this application last had open, or `undefined` on a first run.
+   *
+   * Remembered by the *main* process rather than by the renderer. It was `localStorage` on a `file://`
+   * origin, which Chromium does not guarantee to persist — observably, it survived some restarts here
+   * and not others — so an editor whose whole point is that it reopens what you were working on
+   * forgot it at random and sent the user back to a folder picker.
+   *
+   * The path is returned unverified: whether the folder still exists is answered by trying to open it,
+   * which is the same answer the picker gives, in one place.
+   */
+  lastProject(): Promise<string | undefined>;
   revealInFolder(path: string): Promise<void>;
   /**
    * Opens a link in the user's browser.
