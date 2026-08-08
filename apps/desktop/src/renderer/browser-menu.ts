@@ -1,4 +1,4 @@
-import { ExternalLinkIcon, FolderPlusIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { ExternalLinkIcon, FolderPlusIcon, PencilIcon, SparklesIcon, Trash2Icon } from 'lucide-react';
 import { PROJECT_FOLDERS } from '@nos/core';
 import type { ActionMenuItem } from '@nos/ui';
 
@@ -15,7 +15,7 @@ import type { ActionMenuItem } from '@nos/ui';
  * matters here — that a reserved folder is never offered for deletion.
  */
 
-export const BROWSER_MENU_ACTIONS = ['new-folder', 'rename', 'reveal', 'delete'] as const;
+export const BROWSER_MENU_ACTIONS = ['new-folder', 'rename', 'reveal', 'prune-takes', 'delete'] as const;
 
 export type BrowserMenuAction = (typeof BROWSER_MENU_ACTIONS)[number];
 
@@ -66,6 +66,22 @@ export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuIt
       label: 'Show in file manager',
       icon: ExternalLinkIcon,
       disabled: path === undefined,
+    },
+    {
+      /*
+       * Offered on `generated/` only, because that is the only folder whose contents are disposable
+       * by construction: the spec leaves unaccepted variants on disk so a rejected one can be
+       * reconsidered, and nothing ever removes them. A day of generating leaves sixty files of which
+       * the sequence uses two.
+       *
+       * Not `danger`, unlike the delete below it: what it removes goes to the trash, it never touches
+       * a take the document references, and it says how many and how much before doing anything.
+       */
+      id: 'prune-takes',
+      label: 'Remove unused takes…',
+      icon: SparklesIcon,
+      disabled: path !== PROJECT_FOLDERS.generated,
+      separated: true,
     },
     {
       id: 'delete',

@@ -10,6 +10,7 @@ import {
   type TrackId,
   type TrackKind,
   FRAME_RATES,
+  PROJECT_FOLDERS,
   createDocument,
   createDocumentStore,
   clipId,
@@ -24,7 +25,7 @@ import {
   sequenceId,
   trackId,
 } from '@nos/core';
-import { buildTree } from '@nos/media';
+import { buildTree, formatBytes } from '@nos/media';
 import {
   addTrack,
   clipsInRegion,
@@ -32,6 +33,8 @@ import {
   combineSelection,
   firstTrackOfKind,
   type InsertPlacement,
+  type UnusedTakes,
+  findUnusedTakes,
   insertGenerated,
   linkablePair,
   linkClips,
@@ -53,7 +56,9 @@ import {
   type GeneratorManifest,
   type RecalledRun,
   type SelectionOutcome,
+  isProvenanceRecord,
   placeholderLength,
+  provenancePath,
   recallRun,
 } from '@nos/generators';
 import {
@@ -67,6 +72,7 @@ import {
   SkipBackIcon,
   KeyboardIcon,
   SkipForwardIcon,
+  Trash2Icon,
   UploadIcon,
 } from 'lucide-react';
 import { Badge } from '@nos/ui/components/ui/badge';
@@ -81,6 +87,7 @@ import {
 } from '@nos/ui/components/ui/dialog';
 import { Input } from '@nos/ui/components/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@nos/ui/components/ui/resizable';
+import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { cn } from '@nos/ui/lib/utils';
 import {
@@ -730,6 +737,50 @@ export function App(): ReactNode {
     [confirmation, library.registry],
   );
 
+  /**
+   * Generated takes nothing is using, once the user has been told what they are.
+   *
+   * Held rather than acted on, because this is the one action in the browser that touches many files
+   * at once. It goes to the trash like every other removal here — so it is recoverable — but a user
+   * who is offered "remove unused takes" and gets no count deserves to be suspicious of it.
+   */
+  const [prune, setPrune] = useState<UnusedTakes | undefined>(undefined);
+
+  const proposePrune = useCallback(async () => {
+    /*
+     * Eligibility is decided here, not in `findUnusedTakes`: only the shell can read a folder, and the
+     * rule is deliberately narrow. A file counts as a take only if it sits directly under `generated/`
+     * **and** has a provenance record beside it — which is to say only if a generator in this
+     * application wrote it. Anything a user dropped into that folder by hand is left alone.
+     *
+     * Read from the folder rather than from the browser's tree, which is what the first attempt did
+     * and why it found nothing: the tree hides `.nos.json` deliberately — showing it would double the
+     * length of `generated/` with rows nobody can act on — so the very evidence this rule needs is
+     * exactly what the tree drops.
+     */
+    const entries = await bridge()?.listFolder(PROJECT_FOLDERS.generated);
+    if (entries === undefined) return;
+
+    const records = new Set(entries.filter((entry) => isProvenanceRecord(entry.path)).map((e) => e.path));
+    const candidates = entries
+      .filter((entry) => entry.kind === 'file' && !isProvenanceRecord(entry.path))
+      .filter((entry) => records.has(provenancePath(entry.path)))
+      // A size the listing did not report counts as zero rather than dropping the take: the file is
+      // still unused and still worth removing, and the total simply understates what is reclaimed.
+      .map((entry) => ({ path: entry.path as AssetPath, sizeBytes: entry.sizeBytes ?? 0 }));
+
+    const found = findUnusedTakes(document, candidates);
+    if (found.unused.length === 0) {
+      confirmation.say(
+        candidates.length === 0
+          ? 'there are no generated takes to remove'
+          : `every one of the ${candidates.length} takes is in use`,
+      );
+      return;
+    }
+    setPrune(found);
+  }, [confirmation, document]);
+
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   /*
@@ -791,6 +842,23 @@ export function App(): ReactNode {
   useProvenanceWriter(runtime.snapshot, library.registry, bridge);
 
   const files = useProjectFiles(bridge);
+
+  const runPrune = useCallback(async () => {
+    const found = prune;
+    setPrune(undefined);
+    if (found === undefined) return;
+
+    let removed = 0;
+    for (const take of found.unused) {
+      // The record goes with its take. Leaving it would make the folder look like it still holds a
+      // file that is no longer there, and the next prune would count it as a take with no asset.
+      if (await files.trash(take.path)) removed += 1;
+      await files.trash(provenancePath(take.path));
+    }
+
+    tree.refresh();
+    confirmation.say(`moved ${removed} unused take${removed === 1 ? '' : 's'} to the trash`);
+  }, [confirmation, files, prune, tree]);
 
   // Held here because the points are placed on the preview and the run is started in the inspector,
   // and those are siblings — a session owned by either could not be drawn by the other.
@@ -858,6 +926,9 @@ export function App(): ReactNode {
           break;
         case 'reveal':
           void bridge()?.revealInFolder(target.path);
+          break;
+        case 'prune-takes':
+          void proposePrune();
           break;
         case 'delete':
           void files.trash(target.path).then((done) => {
@@ -1208,6 +1279,46 @@ export function App(): ReactNode {
       />
 
       <ShortcutSheet groups={SHORTCUT_GROUPS} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+
+      <Dialog open={prune !== undefined} onOpenChange={(open) => !open && setPrune(undefined)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove unused takes</DialogTitle>
+            <DialogDescription>
+              {/* The count, the size and what is being kept. A bulk removal that does not say how much
+                  it is about to take is one a user has to test on a project they do not care about. */}
+              {prune === undefined
+                ? ''
+                : `${prune.unused.length} generated take${prune.unused.length === 1 ? '' : 's'} ` +
+                  `${prune.unused.length === 1 ? 'is' : 'are'} not used anywhere in this sequence, ` +
+                  `and ${formatBytes(prune.bytes)} would be reclaimed. ` +
+                  `${prune.usedCount} in use ${prune.usedCount === 1 ? 'is' : 'are'} kept.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Named, not just counted. A list is the difference between a user agreeing to this once and
+              a user agreeing to it every time. */}
+          <ScrollArea className="max-h-52 rounded-md border">
+            <ul className="flex flex-col p-2 font-mono text-xs">
+              {prune?.unused.map((take) => (
+                <li key={take.path} className="truncate py-0.5 text-muted-foreground">
+                  {take.path}
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPrune(undefined)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void runPrune()}>
+              <Trash2Icon />
+              Move to trash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {newFolderIn !== undefined && (
         <NewFolderPrompt
