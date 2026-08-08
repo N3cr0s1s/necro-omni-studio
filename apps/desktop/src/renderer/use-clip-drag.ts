@@ -4,7 +4,6 @@ import {
   type FrameIndex,
   type Result,
   type TimelineDocument,
-  type TrackId,
   frameIndex,
   locateClip,
 } from '@nos/core';
@@ -13,8 +12,11 @@ import {
   type SnapCandidate,
   DEFAULT_SNAP_PIXELS,
   collectSnapCandidates,
+  eligibleTracksFor,
+  limitedStart,
   moveClip,
-  moveClips,
+  moveClipsBy,
+  trackForOffset,
   slipClip,
   snapSpanTranslation,
   snapThresholdFrames,
@@ -53,6 +55,13 @@ export interface DragState {
   readonly clip: ClipId;
   readonly kind: DragKind;
   readonly originX: number;
+  /**
+   * Where the drag started vertically, so a clip can change track.
+   *
+   * Absent before this: only the horizontal axis was read, so a clip could not be moved between
+   * tracks at all — the report was that video and audio alike were stuck on the row they began on.
+   */
+  readonly originY: number;
   readonly document: TimelineDocument;
 }
 
@@ -102,7 +111,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 
   const begin = useCallback(
     (kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>) => {
-      setDrag({ clip, kind, originX: event.clientX, document });
+      setDrag({ clip, kind, originX: event.clientX, originY: event.clientY, document });
       setPreview(undefined);
       setRejection(undefined);
       setSnappedTo(undefined);
@@ -118,7 +127,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
       if (state === undefined) return;
 
       const deltaFrames = Math.round(pxToFrames(latest.current.viewport, event.clientX - state.originX));
-      const result = applyDrag(state, deltaFrames, {
+      const result = applyDrag(state, deltaFrames, event.clientY - state.originY, {
         snapEnabled: latest.current.snapEnabled,
         viewport: latest.current.viewport,
         playhead: latest.current.playhead,
@@ -188,6 +197,7 @@ interface DragOutcome {
 function applyDrag(
   state: DragState,
   deltaFrames: number,
+  deltaY: number,
   context: {
     snapEnabled: boolean;
     viewport: TimelineViewport;
@@ -231,16 +241,45 @@ function applyDrag(
       )
     : { frame: target };
 
+  // The row the pointer is over, among those that can hold this clip.
+  const destination = trackForOffset(state.document.sequence.tracks, clip, track.id, deltaY) ?? {
+    track: track.id,
+    changed: false,
+    deltaRows: 0,
+  };
+
   if (group.length > 1) {
     // Translated as a set, so the clips keep their spacing and a run of adjacent ones can move at
     // all — applied one at a time, each would collide with the neighbour that has not moved yet.
-    const moved = moveClips(state.document, group, snap.frame - clip.span.start);
+    //
+    // The row delta travels with it, applied within each clip's own kind. An imported video and its
+    // audio are linked, so grabbing either drags both — and a group pinned to its tracks meant the
+    // *common* case could never change row, which is what "I cannot move clips between tracks,
+    // neither audio nor video" actually was.
+    const moved = moveClipsBy(
+      state.document,
+      group,
+      snap.frame - clip.span.start,
+      destination.deltaRows,
+      (member) => eligibleTracksFor(state.document.sequence.tracks, member),
+    );
     return moved.ok
       ? { ok: true, value: { document: moved.value.document, snappedTo: snap.snappedTo } }
       : moved;
   }
+  const targetTrack = state.document.sequence.tracks.find((candidate) => candidate.id === destination.track);
+  if (targetTrack === undefined) {
+    return { ok: false, error: { kind: 'track-not-found', track: destination.track } };
+  }
 
-  const moved = moveClip(state.document, state.clip, track.id as TrackId, snap.frame);
+  // Clamped rather than refused. A move that overlapped anything used to fail the whole gesture, so
+  // the clip snapped back to where it started — "there is room and I cannot use it". It now travels
+  // as far as it legitimately can, and the obstacle is on screen the whole time.
+  const reachable = limitedStart(targetTrack, [state.clip], clip.span, snap.frame, {
+    changingTrack: destination.changed,
+  });
+
+  const moved = moveClip(state.document, state.clip, destination.track, reachable);
   return moved.ok ? { ok: true, value: { document: moved.value, snappedTo: snap.snappedTo } } : moved;
 }
 

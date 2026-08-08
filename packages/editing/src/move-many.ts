@@ -4,6 +4,7 @@ import {
   type Result,
   type TimelineDocument,
   type Track,
+  type TrackId,
   err,
   frameIndex,
   ok,
@@ -99,6 +100,96 @@ export function moveClips(
   return ok({
     document: { ...document, sequence: { ...document.sequence, tracks } },
     deltaFrames: delta,
+  });
+}
+
+/**
+ * Translates a set of clips *and* shifts each by a number of rows.
+ *
+ * The case that made vertical movement useless even once it existed: an imported video and its audio
+ * are linked, so grabbing either one drags both — and a two-clip drag was deliberately kept on its
+ * tracks, because "which row should each of a mixed selection land on" has no single answer.
+ *
+ * It does have one, and this is it: **the same row delta, applied within each clip's own kind**. A
+ * video moves down one video track and its audio down one audio track; neither can land on a row that
+ * cannot hold it, so the pair stays a pair and nothing has to be guessed. A selection spanning kinds
+ * keeps its shape for the same reason.
+ *
+ * All or nothing, like `moveClips`: a partial move breaks exactly the alignment the user preserved by
+ * moving them together. Rows that do not exist clamp rather than refuse — running out of tracks
+ * should stop the vertical part of a drag, not cancel it.
+ */
+export function moveClipsBy(
+  document: TimelineDocument,
+  ids: readonly ClipId[],
+  deltaFrames: number,
+  deltaRows: number,
+  eligibleTracks: (clip: Clip) => readonly TrackId[],
+): Result<MoveManyResult, EditError> {
+  if (deltaRows === 0) return moveClips(document, ids, deltaFrames);
+
+  const moving = new Set<string>(ids as readonly string[]);
+  if (moving.size === 0) return ok({ document, deltaFrames: 0 });
+
+  // Time first, on the existing tracks, so the horizontal part keeps the behaviour it already had —
+  // including the clamp at frame zero and the all-or-nothing collision rule.
+  const shifted = moveClips(document, ids, deltaFrames);
+  if (!shifted.ok) return shifted;
+
+  interface Pending {
+    readonly clip: Clip;
+    readonly from: TrackId;
+    readonly to: TrackId;
+  }
+
+  const pending: Pending[] = [];
+  for (const track of shifted.value.document.sequence.tracks) {
+    for (const clip of trackClips(track)) {
+      if (!moving.has(clip.id)) continue;
+      const eligible = eligibleTracks(clip);
+      const at = eligible.indexOf(track.id);
+      if (at < 0) continue;
+      const index = Math.min(eligible.length - 1, Math.max(0, at + deltaRows));
+      const to = eligible[index];
+      if (to !== undefined && to !== track.id) pending.push({ clip, from: track.id, to });
+    }
+  }
+
+  if (pending.length === 0) return shifted;
+
+  // Removed from every source before being added to any destination, so a swap between two rows is
+  // possible and a clip never collides with the version of itself it is replacing.
+  let tracks = shifted.value.document.sequence.tracks.map((track) => {
+    const leaving = pending.filter((move) => move.from === track.id);
+    if (leaving.length === 0) return track;
+    const unlocked = assertUnlocked(track);
+    if (!unlocked.ok) return track;
+    return withClips(
+      track,
+      trackClips(track).filter((clip) => !leaving.some((move) => move.clip.id === clip.id)),
+    );
+  });
+
+  for (const move of pending) {
+    const index = tracks.findIndex((track) => track.id === move.to);
+    const target = tracks[index];
+    if (target === undefined) return err({ kind: 'track-not-found', track: move.to });
+
+    const unlocked = assertUnlocked(target);
+    if (!unlocked.ok) return unlocked;
+
+    const combined = [...trackClips(target), move.clip].sort((a, b) => a.span.start - b.span.start);
+    const blocker = firstOverlap(combined, new Set<string>([move.clip.id]));
+    if (blocker !== undefined) {
+      return err({ kind: 'collision', track: move.to, withClip: blocker });
+    }
+
+    tracks = tracks.map((track, at) => (at === index ? withClips(track, combined) : track));
+  }
+
+  return ok({
+    document: { ...shifted.value.document, sequence: { ...shifted.value.document.sequence, tracks } },
+    deltaFrames: shifted.value.deltaFrames,
   });
 }
 

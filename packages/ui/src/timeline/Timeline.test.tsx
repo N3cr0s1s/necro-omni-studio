@@ -475,6 +475,16 @@ describe('many tracks', () => {
   });
 });
 
+/*
+ * The drop indicator's *plumbing* is not tested here, deliberately.
+ *
+ * jsdom has no `DragEvent`, so a synthetic `dragover` carries no `dataTransfer` and the handler
+ * returns before it can compute anything — a test driving it would assert that nothing happened and
+ * pass for the wrong reason, which is worse than no test. The decision it plumbs is
+ * `assetDropTarget`, exercised directly above: which track a point falls on, which frame, and the
+ * refusal below the last track. What is left in the component is one call and one piece of state.
+ */
+
 describe('the context menu', () => {
   it('reports the lane a right-click on empty track area was on', async () => {
     // Without it a menu opened over a lane could only offer clip actions — which is what the report

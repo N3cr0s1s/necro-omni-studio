@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2150 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2200 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2325,3 +2325,42 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Not verifiable end to end here: `sam2` and `torch` are absent from the sidecar
   environment, so the propagation itself has never run. Everything up to the
   request is exercised; the run is not.
+
+- 2026-08-08: Issues #18 and #19.
+
+  **#18** was reported as MiniMax's resolution being unsettable, and the cause was
+  not MiniMax. ComfyUI declares an enum input two ways — options in place of the
+  type, or a named `COMBO` with the options in the metadata — and only the older
+  was understood, so against a current ComfyUI *every live dropdown in the
+  application was empty*. Both are accepted now. The image-to-video manifest also
+  had no resolution parameters at all; both now expose the `ResolutionSelector`
+  their graphs already contained, and the aspect ratio defaults to the project's
+  own shape through a declared `default_from`, matched on the logarithm of the
+  ratio so tall and wide are equally near. The user asked for 0.2 megapixels
+  mid-way; that is the default.
+
+  **#19** was three faults in dragging, and the second was the serious one.
+
+  *Nothing could change track.* The drag read `clientX` only, so the vertical axis
+  did nothing at all. Worse, once it did work, the *common* case still could not:
+  an imported video and its audio are linked, so grabbing either drags both, and a
+  group move was deliberately pinned to its tracks. The row delta now travels with
+  the group and is applied within each clip's own kind — a video moves down one
+  video row, its audio down one audio row, and the pair stays a pair.
+
+  *A blocked move was refused outright*, so the whole gesture failed and the clip
+  snapped back: "there is room and I cannot use it". It now travels as far as it
+  legitimately can. A drag along one track keeps a direction — dragged left, a clip
+  must not land to the right of what blocked it — but a drag onto a *different*
+  track has no direction, and restricting it there was what made dropping onto an
+  occupied row fail. Verified live: pushed right 500 px, then dragged 3000 px left
+  through the blocking clip, landing flush against it with no rejection.
+
+  *A drop was a guess.* The lane now tints and a line marks the frame while the
+  asset is still in the air, computed from the same function the drop uses so the
+  two cannot disagree.
+
+  The indicator's plumbing has no jsdom test and says so: there is no `DragEvent`
+  there, so a synthetic `dragover` carries no `dataTransfer` and a test would pass
+  for the wrong reason. `assetDropTarget` is tested directly; the rest was checked
+  in the running app with a real `DataTransfer`.

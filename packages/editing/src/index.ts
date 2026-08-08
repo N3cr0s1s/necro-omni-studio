@@ -8,6 +8,7 @@ export * from './errors.js';
 export * from './snap.js';
 export * from './mutate.js';
 export * from './clip-ops.js';
+export * from './drag-target.js';
 export * from './frame-grab.js';
 export * from './insert-generated.js';
 export * from './transition-ops.js';

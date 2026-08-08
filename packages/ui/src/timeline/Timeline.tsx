@@ -214,6 +214,11 @@ export function Timeline(props: TimelineProps): ReactNode {
     [props, viewport.framesPerPixel],
   );
 
+  // Where a dragged asset would land, so letting go is not a guess.
+  const [dropTarget, setDropTarget] = useState<
+    { readonly track: TrackId; readonly frame: FrameIndex } | undefined
+  >(undefined);
+
   const anySoloed = document.sequence.tracks.some((track) => track.solo);
   const marquee = useMarquee({
     viewport,
@@ -286,6 +291,7 @@ export function Timeline(props: TimelineProps): ReactNode {
           </div>
 
           <div
+            data-lane-surface=""
             style={{ position: 'relative' }}
             onPointerDown={marquee.begin}
             onContextMenu={(event) => {
@@ -303,9 +309,27 @@ export function Timeline(props: TimelineProps): ReactNode {
               // is what turns the cursor from "no" into "copy" while the pointer is over a track.
               event.preventDefault();
               event.dataTransfer.dropEffect = 'copy';
+
+              // Where it *would* land, computed from the same function the drop uses so the two
+              // cannot disagree. Without this a drop was a guess: the user let go and found out,
+              // which is what "not deterministic" meant.
+              const bounds = event.currentTarget.getBoundingClientRect();
+              setDropTarget(
+                assetDropTarget(document.sequence.tracks, viewport, {
+                  x: event.clientX - bounds.left,
+                  y: event.clientY - bounds.top,
+                }),
+              );
+            }}
+            onDragLeave={(event) => {
+              // Only when the pointer leaves the lane area itself. `dragleave` fires for every child
+              // it crosses, and clearing on those would make the indicator flicker as it moves.
+              if (event.target !== event.currentTarget) return;
+              setDropTarget(undefined);
             }}
             onDrop={(event) => {
               const asset = event.dataTransfer.getData(ASSET_DRAG_TYPE);
+              setDropTarget(undefined);
               if (props.onDropAsset === undefined || asset === '') return;
               event.preventDefault();
 
@@ -340,6 +364,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                 <TrackLane
                   track={track}
                   viewport={viewport}
+                  {...(dropTarget?.track === track.id ? { dropAt: dropTarget.frame } : {})}
                   selectedClips={props.selectedClips}
                   {...(props.strips !== undefined ? { strips: props.strips } : {})}
                   {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
@@ -1189,9 +1214,12 @@ function TrackLane({
   onContextMenu,
   onTrimStart,
   onTrimEnd,
+  dropAt,
 }: {
   readonly track: Track;
   readonly viewport: TimelineViewport;
+  /** Frame a dragged asset would land on, when this is the track it would land on. */
+  readonly dropAt?: FrameIndex;
   readonly selectedClips: ReadonlySet<string>;
   readonly strips?: ReadonlyMap<string, ClipStrip>;
   readonly expandedClip?: ClipId;
@@ -1233,6 +1261,8 @@ function TrackLane({
         boxSizing: 'border-box',
       }}
     >
+      {dropAt !== undefined && <DropIndicator viewport={viewport} frame={dropAt} height={track.height} />}
+
       {visible.map((clip) => (
         <ClipBody
           key={clip.id}
@@ -1257,6 +1287,52 @@ function TrackLane({
           {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Where a dragged asset will land.
+ *
+ * A line at the frame with the row lit behind it, which is the whole of what was missing: a drop used
+ * to be a guess — you let go and found out where it went, on which track. Two signals rather than one
+ * because the two questions are different: the line answers *when*, the tint answers *where*.
+ *
+ * `pointerEvents: none` throughout. An element under the pointer during a drag intercepts the
+ * `dragleave` and `drop` events the lane is listening for, so an indicator that could be dropped onto
+ * would cancel the drop it exists to describe.
+ */
+function DropIndicator({
+  viewport,
+  frame,
+  height,
+}: {
+  readonly viewport: TimelineViewport;
+  readonly frame: FrameIndex;
+  readonly height: number;
+}): ReactNode {
+  // The viewport's own conversion, which already accounts for the scroll — computing it here would
+  // be a second definition of where a frame is, and the two would drift the moment either changed.
+  const left = frameToPx(viewport, frame);
+
+  return (
+    <div
+      aria-hidden="true"
+      data-drop-indicator=""
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}
+    >
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(76, 154, 255, 0.10)' }} />
+      <div
+        style={{
+          position: 'absolute',
+          left,
+          top: 0,
+          width: 2,
+          height,
+          background: token.accent,
+          boxShadow: `0 0 6px ${token.accent}`,
+        }}
+      />
     </div>
   );
 }
