@@ -311,7 +311,8 @@ empty queue and an idle GPU. The socket adapter woke only on a `message`, so a b
 parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
 its source dies**, or the job waits forever and reports nothing.
 
-Three fields found this way and closed since: `marker.label` and `marker.color` — drawn by the ruler,
+Four fields found this way and closed since: `Transition.params` — the compositor read it and the
+built-in wipe declares a `softness`, so every wipe sat at the manifest default — `marker.label` and `marker.color` — drawn by the ruler,
 round-tripped by `project.json`, settable by nothing, with every marker defaulting to a label saying the
 timecode the ruler already states beside it — `clip.label` — the engine could rename a clip and the user
 could not, so three kept variants of one generator shared a single name — and `track.collapsed`, which
@@ -831,7 +832,10 @@ so it can gate a release:
   nothing else on the panel. `TransportBar` draws it from the same primitives.
 - The shadcn `Slider` spreads its props onto its **root**, and the control needing an
   accessible name is the range input inside the thumb. Wrap it in a `Label` with an
-  sr-only string; an `aria-label` on the root reaches nothing.
+  sr-only string; an `aria-label` or an `id` on the root reaches nothing. This was wrong
+  in three separate places before it was noticed — the transport, all five transform
+  channels, and every effect parameter — because nothing asserted a name until a test
+  tried to find a slider by one. Assert the name, not the presence.
 
 - Every colour, size and font resolves through a token in
   `packages/ui/src/tokens/`. A literal hex in a component is a bug: the mockups
