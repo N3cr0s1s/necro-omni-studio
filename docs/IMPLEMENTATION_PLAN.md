@@ -263,10 +263,17 @@ engine (verified: the file is fetched and decoded, playback advances at exactly
 30 fps), and an accepted variant lands on the timeline as a clip carrying its
 provenance (verified: generate → keep → a third clip appears, marked generated).
 
-The application is feature-complete against the spec. Remaining work is depth
-rather than gaps: keyframe editing in the shell, the effect stack UI wired to
-clips, export driven from the dialog, and WebCodecs decoding for smooth playback
-of long clips.
+**Export and the effect stack are wired.** Exporting from the dialog produces a
+playable file through the same compositor the preview uses (verified: H.264
+1920×1080, 120 frames, exactly 4.000000 s, correct pixels), and selecting a clip
+gives the manifest-driven effect stack with live parameters (verified: adding
+Film Grain renders one pass with visible grain).
+
+The application is feature-complete against the spec, and every subsystem is
+reachable from the shell. Remaining work is depth: keyframe editing in the
+shell (the lane component exists and is tested), and WebCodecs decoding — the
+export currently runs at about 1.4 fps because every frame costs a `<video>`
+seek.
 
 ### Editing rules (keep these)
 
@@ -1179,3 +1186,30 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   **batched** submit carrying three seeds: one submit is one candidate while it
   runs, so the count had to come from what was *requested*, not from what is in
   flight.
+
+- 2026-08-08: Export and the effect stack — the last two subsystems that were
+  built and tested but unreachable from the shell.
+
+  The export runs the **same compositor** on the **same decoded frames** as the
+  preview, into an offscreen 8-bit target whose pixels stream to the sidecar's
+  ffmpeg. The decoder is now shared for exactly the reason the compositor always
+  was: two of them would eventually disagree about which frame a source time lands
+  on, and the delivered file would differ from what the user approved. They differ
+  in one respect only — the preview never waits for a seek and the export always
+  does, because a skipped layer is a momentary blank on screen and a missing shot
+  in a deliverable.
+
+  Two details that are not obvious and would each have cost an afternoon. Frames
+  are batched to a byte budget rather than sent individually: a 1080p RGBA frame is
+  8 MB, and per-frame requests spend the export in overhead while awaiting each
+  batch gives backpressure for free. And the readback target is RGBA8 rather than
+  the pool's RGBA16F, because `readPixels(UNSIGNED_BYTE)` from a half-float
+  attachment is not universally supported — the pool's format is right for
+  intermediate passes and wrong for the one buffer that leaves the GPU.
+
+  The clip inspector renders from the effect manifest, like everything else here.
+  The picker lists broken effects with their compiler message rather than hiding
+  them, because an effect missing from the list is indistinguishable from one that
+  was never installed. Verified end to end: exporting produces a 4.000000-second
+  H.264 file with the composited pixels upright, and adding Film Grain shows its
+  declared controls and renders visibly.
