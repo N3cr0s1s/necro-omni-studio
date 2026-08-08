@@ -332,3 +332,69 @@ describe('declaring what the generator consumes', () => {
     expect(screen.getByText(/voice_reference: no parameter of that key/)).toBeDefined();
   });
 });
+
+describe('the fields that decide how a parameter behaves', () => {
+  const withFps = (): ManifestDraft => {
+    const promoted = promote(usable(), literals[1]!);
+    const param = promoted.params[0]!;
+    return editParam(promoted, param.id, { key: 'fps', type: 'int' });
+  };
+
+  it('says a parameter binds nowhere else, so the mechanism is discoverable', () => {
+    renderInspector({ draft: withFps() });
+    expect(screen.getAllByText('binds nowhere else').length).toBeGreaterThan(0);
+  });
+
+  it('adds a secondary binding, which is what a length expression depends on', () => {
+    // The spec's own `also` example: `fps` is a literal *and* part of an expression, and binding only
+    // the first leaves the expression stale and delivers a clip of the wrong duration.
+    const onEditParam = vi.fn();
+    renderInspector({ draft: withFps(), onEditParam });
+
+    void userEvent.click(screen.getByRole('button', { name: 'Also bind' }));
+
+    return vi.waitFor(() => {
+      const [, changes] = onEditParam.mock.calls.at(-1) ?? [];
+      expect(changes?.also).toEqual([{ pointer: '', template: '' }]);
+    });
+  });
+
+  it('removes the field entirely when the last binding goes, rather than leaving an empty list', () => {
+    const onEditParam = vi.fn();
+    const base = withFps();
+    const draft = editParam(base, base.params[0]!.id, {
+      also: [{ pointer: '/1/inputs/expression', template: 'a * {fps}' }],
+    });
+    renderInspector({ draft, onEditParam });
+
+    void userEvent.click(screen.getByRole('button', { name: 'Remove binding 1' }));
+
+    return vi.waitFor(() => {
+      const [, changes] = onEditParam.mock.calls.at(-1) ?? [];
+      // Removed, not an empty array: an empty `also` in the file is a field every reader has to skip.
+      expect(changes).toHaveProperty('also', undefined);
+    });
+  });
+
+  it('offers the numeric parameters as the one carrying a declared length', () => {
+    renderInspector({ draft: withFps() });
+    const select = screen.getByLabelText('Length from');
+    expect(within(select).getByRole('option', { name: 'fps' })).toBeDefined();
+  });
+
+  it('says what happens when no length parameter is named', () => {
+    // Naming nothing is legitimate — a key convention covers the common names — but silence would
+    // leave a manifest whose length parameter is called something else sizing from the fallback.
+    renderInspector({ draft: withFps() });
+    expect(
+      within(screen.getByLabelText('Length from')).getByRole('option', { name: 'by key convention' }),
+    ).toBeDefined();
+  });
+
+  it('does not offer a length parameter for a discovered manifest', () => {
+    // There is nothing to name: only the output reveals the length, and the control would suggest
+    // otherwise.
+    renderInspector({ draft: { ...withFps(), duration: 'discovered' } });
+    expect(screen.queryByLabelText('Length from')).toBeNull();
+  });
+});

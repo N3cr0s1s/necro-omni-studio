@@ -2,6 +2,7 @@ import type { AssetType, GeneratorId, PresetId } from '@nos/core';
 import { generatorId } from '@nos/core';
 import type { GraphLiteral } from '../contracts/introspection.js';
 import type {
+  AlsoBinding,
   DurationMode,
   GeneratorManifest,
   GeneratorParam,
@@ -9,6 +10,7 @@ import type {
   OutputDescriptor,
   SurfaceId,
 } from '../contracts/manifest.js';
+import type { DurationSource } from '../staging/placeholder.js';
 
 /**
  * The manifest draft.
@@ -43,6 +45,17 @@ export interface DraftParam {
   readonly required?: boolean;
   readonly multiline?: boolean;
   readonly transport?: string;
+  /**
+   * Secondary patch targets, the spec's `also` mechanism.
+   *
+   * Carried through the draft rather than only through the manifest because the inspector *round
+   * trips*: opening an authored manifest and saving it back used to drop these, and the project's own
+   * MiniMax manifests bind `fps` both as a literal and inside a length expression. Losing the second
+   * one leaves the expression stale and delivers a clip of the wrong duration, with nothing said.
+   */
+  readonly also?: readonly AlsoBinding[];
+  /** What a default is derived from when the manifest cannot know it, e.g. the project's shape. */
+  readonly defaultFrom?: string;
 }
 
 export interface ManifestDraft {
@@ -54,6 +67,14 @@ export interface ManifestDraft {
   readonly consumes: GeneratorManifest['consumes'];
   readonly surfaces: readonly SurfaceId[];
   readonly duration: DurationMode;
+  /**
+   * Which parameter carries a `declared` length, and in what unit.
+   *
+   * Explicit rather than inferred: without it `durationSource` falls back to a key convention, so a
+   * manifest whose length parameter is called anything else sizes every placeholder from the fallback
+   * — the user asks for ten seconds and gets the default, with nothing on screen to explain it.
+   */
+  readonly durationFrom?: DurationSource;
   readonly defaultVariants: number;
   readonly batch?: { readonly bind: string; readonly max: number };
   readonly requires: readonly string[];
@@ -299,6 +320,7 @@ export function draftManifestJson(draft: ManifestDraft): Readonly<Record<string,
     consumes: draft.consumes,
     surfaces: draft.surfaces,
     duration: draft.duration,
+    ...(draft.durationFrom !== undefined ? { durationFrom: draft.durationFrom } : {}),
     defaultVariants: draft.defaultVariants,
     ...(draft.batch !== undefined ? { batch: draft.batch } : {}),
     requires: draft.requires,
@@ -338,6 +360,8 @@ function toParam(param: DraftParam): GeneratorParam {
     ...(param.required !== undefined ? { required: param.required } : {}),
     ...(param.multiline !== undefined ? { multiline: param.multiline } : {}),
     ...(param.transport !== undefined ? { transport: param.transport } : {}),
+    ...(param.also !== undefined ? { also: param.also } : {}),
+    ...(param.defaultFrom !== undefined ? { defaultFrom: param.defaultFrom } : {}),
   };
 }
 
@@ -352,6 +376,7 @@ export function fromManifest(manifest: GeneratorManifest): ManifestDraft {
     consumes: manifest.consumes,
     surfaces: manifest.surfaces,
     duration: manifest.duration,
+    ...(manifest.durationFrom !== undefined ? { durationFrom: manifest.durationFrom } : {}),
     defaultVariants: manifest.defaultVariants,
     ...(manifest.batch !== undefined ? { batch: manifest.batch } : {}),
     requires: manifest.requires,
@@ -372,6 +397,8 @@ export function fromManifest(manifest: GeneratorManifest): ManifestDraft {
       ...(param.required !== undefined ? { required: param.required } : {}),
       ...(param.multiline !== undefined ? { multiline: param.multiline } : {}),
       ...(param.transport !== undefined ? { transport: param.transport } : {}),
+      ...(param.also !== undefined ? { also: param.also } : {}),
+      ...(param.defaultFrom !== undefined ? { defaultFrom: param.defaultFrom } : {}),
     })),
     presets: manifest.presets,
   };

@@ -326,6 +326,7 @@ describe('round tripping an authored manifest', () => {
     consumes: [{ type: 'image', role: 'first_frame', required: true }],
     surfaces: ['frame_context_menu'],
     duration: 'declared',
+    durationFrom: { param: 'duration_s', unit: 'seconds' },
     defaultVariants: 1,
     requires: ['MiniMaxNode'],
     outputs: [{ key: 'video', type: 'video', node: '92' }],
@@ -338,6 +339,28 @@ describe('round tripping an authored manifest', () => {
         transport: 'upload_image',
       },
       { key: 'duration_s', type: 'float', min: 0.5, max: 30, default: 15, bind: '/105:111/inputs/value' },
+      {
+        key: 'fps',
+        type: 'int',
+        default: 25,
+        bind: '/105:110/inputs/value',
+        // The spec's own `also` example, copied from the project's real MiniMax manifests: `fps` is
+        // both a literal and part of a length expression, and a round trip that kept only the first
+        // left the expression stale and delivered a clip of the wrong duration.
+        also: [
+          {
+            pointer: '/105:107/inputs/expression',
+            template: 'max(5, round(a * {fps}))',
+          },
+        ],
+      },
+      {
+        key: 'width',
+        type: 'int',
+        default: 1280,
+        bind: '/105:20/inputs/width',
+        defaultFrom: 'project_width',
+      },
       { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
     ],
     presets: [],
@@ -347,6 +370,29 @@ describe('round tripping an authored manifest', () => {
     // An inspector that lost `transport` or a range on every open would quietly break manifests people
     // already rely on.
     expect(toManifest(fromManifest(authored))).toEqual(authored);
+  });
+
+  it('keeps the secondary bindings, which are what a length expression depends on', () => {
+    // Named separately from the equality check above because this is the field that was actually being
+    // dropped, and a failure here should say what broke rather than diffing a whole manifest.
+    const fps = toManifest(fromManifest(authored)).params.find((param) => param.key === 'fps');
+    expect(fps?.also).toEqual([
+      { pointer: '/105:107/inputs/expression', template: 'max(5, round(a * {fps}))' },
+    ]);
+  });
+
+  it('keeps which parameter carries the declared length', () => {
+    // Without it `durationSource` falls back to a key convention, so a length parameter named anything
+    // else sizes every placeholder from the fallback.
+    expect(toManifest(fromManifest(authored)).durationFrom).toEqual({
+      param: 'duration_s',
+      unit: 'seconds',
+    });
+  });
+
+  it('keeps a default that is derived rather than fixed', () => {
+    const width = toManifest(fromManifest(authored)).params.find((param) => param.key === 'width');
+    expect(width?.defaultFrom).toBe('project_width');
   });
 
   it('recovers an unbound manifest as an editable draft', () => {

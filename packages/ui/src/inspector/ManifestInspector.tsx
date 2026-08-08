@@ -1,6 +1,7 @@
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import { FileJsonIcon, PlusIcon, SaveIcon, SearchIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import {
+  type AlsoBinding,
   type DraftIssue,
   type DraftParam,
   type DraftParamChanges,
@@ -396,6 +397,69 @@ function Identity({
           </NativeSelect>
         )}
       </Labelled>
+      {/* Only for a declared length: on a discovered one there is no parameter to name, and offering
+          the control would suggest the length could be pinned when only the output reveals it. */}
+      {draft.duration === 'declared' && (
+        <Labelled label="Length from">
+          {(id) => (
+            <NativeSelect
+              id={id}
+              className="w-full"
+              value={draft.durationFrom?.param ?? ''}
+              onChange={(event) => {
+                if (event.target.value === '') {
+                  // Removed rather than set to `undefined`: an optional field that is present and
+                  // undefined is a different thing from an absent one, and the manifest writer
+                  // distinguishes them.
+                  const { durationFrom: _cleared, ...rest } = draft;
+                  onChange?.(rest);
+                  return;
+                }
+                set({
+                  durationFrom: {
+                    param: event.target.value,
+                    unit: draft.durationFrom?.unit ?? 'seconds',
+                  },
+                });
+              }}
+            >
+              {/* Naming nothing is legitimate — a key-convention fallback covers the common names —
+                  but it has to say what it falls back to, or a manifest whose length parameter is
+                  called something else sizes every placeholder from the default. */}
+              <NativeSelectOption value="">by key convention</NativeSelectOption>
+              {draft.params
+                .filter((param) => param.type === 'int' || param.type === 'float')
+                .map((param) => (
+                  <NativeSelectOption key={param.id} value={param.key}>
+                    {param.key}
+                  </NativeSelectOption>
+                ))}
+            </NativeSelect>
+          )}
+        </Labelled>
+      )}
+      {draft.duration === 'declared' && draft.durationFrom !== undefined && (
+        <Labelled label="Length unit">
+          {(id) => (
+            <NativeSelect
+              id={id}
+              className="w-full"
+              value={draft.durationFrom?.unit ?? 'seconds'}
+              onChange={(event) =>
+                set({
+                  durationFrom: {
+                    param: draft.durationFrom?.param ?? '',
+                    unit: event.target.value as 'seconds' | 'frames',
+                  },
+                })
+              }
+            >
+              <NativeSelectOption value="seconds">seconds</NativeSelectOption>
+              <NativeSelectOption value="frames">frames</NativeSelectOption>
+            </NativeSelect>
+          )}
+        </Labelled>
+      )}
       <Labelled label="Default variants">
         {(id) => (
           <Input
@@ -464,69 +528,166 @@ function ParamRow({
   const numeric = param.type === 'int' || param.type === 'float';
 
   return (
-    <div
-      className={cn(
-        'grid items-end gap-3 rounded-md border bg-muted/50 p-3',
-        numeric ? 'grid-cols-[1.2fr_1fr_0.7fr_0.7fr]' : 'grid-cols-[1.2fr_1fr]',
-      )}
-    >
-      <Labelled label={`Key · ${param.pointer === '' ? 'not bound' : param.pointer}`}>
-        {(id) => (
-          <Input
-            id={id}
-            value={param.key}
-            onChange={(event) => onEdit?.(param.id, { key: event.target.value })}
-          />
+    <div className="flex flex-col gap-3 rounded-md border bg-muted/50 p-3">
+      <div
+        className={cn(
+          'grid items-end gap-3',
+          numeric ? 'grid-cols-[1.2fr_1fr_0.7fr_0.7fr]' : 'grid-cols-[1.2fr_1fr]',
         )}
-      </Labelled>
-      <Labelled label="Type">
-        {(id) => (
-          <NativeSelect
-            id={id}
-            className="w-full"
-            value={param.type}
-            onChange={(event) => onEdit?.(param.id, { type: event.target.value as GeneratorParamType })}
+      >
+        <Labelled label={`Key · ${param.pointer === '' ? 'not bound' : param.pointer}`}>
+          {(id) => (
+            <Input
+              id={id}
+              value={param.key}
+              onChange={(event) => onEdit?.(param.id, { key: event.target.value })}
+            />
+          )}
+        </Labelled>
+        <Labelled label="Type">
+          {(id) => (
+            <NativeSelect
+              id={id}
+              className="w-full"
+              value={param.type}
+              onChange={(event) => onEdit?.(param.id, { type: event.target.value as GeneratorParamType })}
+            >
+              {PARAM_TYPES.map((type) => (
+                <NativeSelectOption key={type} value={type}>
+                  {type}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </Labelled>
+        {numeric && (
+          <>
+            <Labelled label="Min">
+              {(id) => (
+                <Input
+                  id={id}
+                  type="number"
+                  value={param.min ?? ''}
+                  onChange={(event) =>
+                    onEdit?.(param.id, {
+                      min: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
+                  }
+                />
+              )}
+            </Labelled>
+            <Labelled label="Max">
+              {(id) => (
+                <Input
+                  id={id}
+                  type="number"
+                  value={param.max ?? ''}
+                  onChange={(event) =>
+                    onEdit?.(param.id, {
+                      max: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
+                  }
+                />
+              )}
+            </Labelled>
+          </>
+        )}
+      </div>
+      <AlsoBindings param={param} {...(onEdit !== undefined ? { onEdit } : {})} />
+    </div>
+  );
+}
+
+/**
+ * Where else this parameter's value has to be written.
+ *
+ * The spec's `also` mechanism, and its own example is `fps`: it appears as a literal *and* inside a
+ * length expression, so a manifest binding only the first leaves the expression stale and delivers a
+ * clip of the wrong duration. Both of the project's MiniMax manifests do exactly this.
+ *
+ * The inspector had no control for it and — worse — dropped it on the way in, so opening one of those
+ * manifests and saving it deleted the expression binding silently. The control exists so the field can
+ * be authored; carrying it through the draft is what stops it being destroyed.
+ */
+function AlsoBindings({
+  param,
+  onEdit,
+}: {
+  readonly param: DraftParam;
+  readonly onEdit?: (id: string, changes: DraftParamChanges) => void;
+}): ReactNode {
+  const bindings = param.also ?? [];
+
+  const write = (next: readonly AlsoBinding[]): void =>
+    onEdit?.(param.id, { also: next.length === 0 ? undefined : next });
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">
+          {bindings.length === 0 ? 'binds nowhere else' : `also binds to ${bindings.length}`}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={() => write([...bindings, { pointer: '', template: '' }])}
+        >
+          <PlusIcon />
+          Also bind
+        </Button>
+      </div>
+
+      {bindings.map((binding, index) => (
+        <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+          <Labelled label="Pointer">
+            {(id) => (
+              <Input
+                id={id}
+                value={binding.pointer}
+                onChange={(event) =>
+                  write(
+                    bindings.map((entry, at) =>
+                      at === index ? { ...entry, pointer: event.target.value } : entry,
+                    ),
+                  )
+                }
+              />
+            )}
+          </Labelled>
+          {/* A template is optional: without one the value is written straight through, which is the
+              common case. With one, `{key}` is substituted — that is what keeps an expression that
+              mentions the parameter in step with it. */}
+          <Labelled label="Template">
+            {(id) => (
+              <Input
+                id={id}
+                value={binding.template ?? ''}
+                placeholder={`e.g. round(a * {${param.key}})`}
+                onChange={(event) =>
+                  write(
+                    bindings.map((entry, at) =>
+                      at === index
+                        ? event.target.value === ''
+                          ? { pointer: entry.pointer }
+                          : { ...entry, template: event.target.value }
+                        : entry,
+                    ),
+                  )
+                }
+              />
+            )}
+          </Labelled>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Remove binding ${index + 1}`}
+            onClick={() => write(bindings.filter((_entry, at) => at !== index))}
           >
-            {PARAM_TYPES.map((type) => (
-              <NativeSelectOption key={type} value={type}>
-                {type}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        )}
-      </Labelled>
-      {numeric && (
-        <>
-          <Labelled label="Min">
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                value={param.min ?? ''}
-                onChange={(event) =>
-                  onEdit?.(param.id, {
-                    min: event.target.value === '' ? undefined : Number(event.target.value),
-                  })
-                }
-              />
-            )}
-          </Labelled>
-          <Labelled label="Max">
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                value={param.max ?? ''}
-                onChange={(event) =>
-                  onEdit?.(param.id, {
-                    max: event.target.value === '' ? undefined : Number(event.target.value),
-                  })
-                }
-              />
-            )}
-          </Labelled>
-        </>
-      )}
+            <Trash2Icon />
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
