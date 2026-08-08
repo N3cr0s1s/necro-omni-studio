@@ -783,6 +783,20 @@ so it can gate a release:
 
 ### UI rules (keep these)
 
+- A shortcut is declared **once**, in `apps/desktop/src/renderer/shortcuts.ts`, and every
+  surface that shows one reads it from there. Menus used to repeat the chords, so a
+  rebinding had two places to change and the menu was the one that kept printing the
+  old one.
+- Every catalogue entry must be read off the handler that implements it. A reference
+  sheet is believed: one listing a chord nothing listens for is worse than no sheet,
+  because the user presses it, nothing happens, and they stop trusting the rest.
+- `conflictingShortcuts` guards the property worth guarding — two actions on one chord
+  means one silently stops working, decided by listener order, and it surfaces months
+  later as "that shortcut does nothing".
+- A gesture is a shortcut. `Alt`-drag is the only way to reach the spec's *csúsztatás*
+  and has no on-screen affordance, so a reference that listed only key chords would
+  omit the single binding nobody can discover.
+
 - A message that says something **worked** and one that says it did not want different
   lifetimes. A failure persists until resolved or dismissed; a confirmation answers an
   action and clears itself, or it becomes furniture under an error icon. Saying the same
