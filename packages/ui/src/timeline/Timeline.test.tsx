@@ -265,8 +265,10 @@ describe('toolbar', () => {
   });
 
   it('shows ripple as unpressed when disabled', () => {
+    // Stated rather than merely absent: "off" is a real state of a mode that changes what Delete does,
+    // and a control that reports nothing when off tells a screen reader nothing about it.
     renderTimeline({ rippleEnabled: false });
-    expect(screen.getByRole('button', { name: 'Ripple' }).getAttribute('aria-pressed')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ripple' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('reports toggles', async () => {
@@ -369,7 +371,7 @@ describe('the snap indicator', () => {
     renderTimeline({ snapIndicator: { frame: frameIndex(400), kind: 'playhead' } });
     const line = document.querySelector('[data-snap-line]') as HTMLElement;
 
-    expect(line.style.borderLeft).toContain('dashed');
+    expect(line.className).toContain('border-dashed');
   });
 });
 
@@ -443,9 +445,9 @@ describe('many tracks', () => {
     // area was a fixed height with overflow hidden, so the rest were invisible and unreachable.
     renderTimeline();
     const lane = document.querySelector('[data-track-id]') as HTMLElement;
-    const scroller = lane.closest('[style*="overflow-y"]') as HTMLElement | null;
+    const scroller = lane.closest('[class*="overflow-y-auto"]') as HTMLElement | null;
 
-    expect(scroller?.style.overflowY).toBe('auto');
+    expect(scroller).not.toBeNull();
     // The headers scroll with the lanes rather than beside them: two scrollers kept in sync by hand
     // drift the moment either is scrolled by anything but a wheel.
     expect(scroller?.contains(document.querySelector('[data-track-header]'))).toBe(true);
@@ -539,35 +541,65 @@ describe('which edges are cuts', () => {
 });
 
 describe('the context menu', () => {
-  it('reports the lane a right-click on empty track area was on', async () => {
+  /**
+   * A binding whose only item is `do-it`, so a test can open the menu, choose it, and read back which
+   * target the choice was reported against. That target is the whole contract: everything else about
+   * the menu — where it appears, how it closes — belongs to `ActionMenu` and to Base UI.
+   */
+  function binding() {
+    const onChoose = vi.fn();
+    return { menu: { items: () => [{ id: 'do-it', label: 'Do it' }], onChoose }, onChoose };
+  }
+
+  const choose = async () => {
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Do it' }));
+  };
+
+  it('is about the lane when the right-click was on empty track area', async () => {
     // Without it a menu opened over a lane could only offer clip actions — which is what the report
     // "I cannot create a track" was actually about.
-    const onContextMenu = vi.fn();
-    renderTimeline({ onContextMenu });
+    const { menu, onChoose } = binding();
+    renderTimeline({ menu });
 
-    const lane = document.querySelector('[data-track-id="v1"]') as HTMLElement;
-    fireEvent.contextMenu(lane, { clientX: 10, clientY: 20 });
+    fireEvent.contextMenu(document.querySelector('[data-track-id="v1"]') as HTMLElement);
+    await choose();
 
-    expect(onContextMenu).toHaveBeenCalledWith({ track: 'v1' }, 10, 20);
+    expect(onChoose).toHaveBeenCalledWith({ track: 'v1' }, 'do-it');
   });
 
-  it('reports the clip and its lane when the click was on a clip', async () => {
-    const onContextMenu = vi.fn();
-    renderTimeline({ onContextMenu });
+  it('is about the clip and its lane when the click was on a clip', async () => {
+    const { menu, onChoose } = binding();
+    renderTimeline({ menu });
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }), { clientX: 5, clientY: 6 });
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }));
+    await choose();
 
-    expect(onContextMenu).toHaveBeenCalledWith({ clip: 'a', track: 'v1' }, 5, 6);
+    expect(onChoose).toHaveBeenCalledWith({ clip: 'a', track: 'v1' }, 'do-it');
   });
 
-  it('does not report the lane for a click that landed on a clip', () => {
-    // Both firing would open a menu about the lane for a click plainly on a clip.
-    const onContextMenu = vi.fn();
-    renderTimeline({ onContextMenu });
+  it('is about nothing at all below the last track', async () => {
+    // A distinct case rather than an omission: it is what makes "add a track" reachable in a sequence
+    // whose tracks the pointer is nowhere near.
+    const { menu, onChoose } = binding();
+    renderTimeline({ menu });
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }), { clientX: 5, clientY: 6 });
+    fireEvent.contextMenu(document.querySelector('[data-lane-surface]') as HTMLElement);
+    await choose();
 
-    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    expect(onChoose).toHaveBeenCalledWith({}, 'do-it');
+  });
+
+  it('opens exactly one menu for a click on a clip', async () => {
+    // A clip sits inside a lane which sits inside the surface, and all three offer a menu. Only the
+    // innermost may answer, or a click plainly on a clip would report the lane behind it.
+    const { menu, onChoose } = binding();
+    renderTimeline({ menu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }));
+    expect(screen.getAllByRole('menuitem', { name: 'Do it' })).toHaveLength(1);
+
+    await choose();
+    expect(onChoose).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -834,7 +866,7 @@ describe('strips', () => {
       strips: new Map([['a', { url: 'file:strip.jpg', widths: 5, offset: 2 }]]),
     });
     const layer = document.querySelector('[data-clip-id="a"] [data-strip-kind]');
-    expect((layer as HTMLElement | null)?.style.overflow).toBe('hidden');
+    expect((layer as HTMLElement | null)?.className).toContain('overflow-hidden');
   });
 
   it('gives a waveform the whole clip and a filmstrip a band', () => {
@@ -846,7 +878,9 @@ describe('strips', () => {
 
     const layer = document.querySelector('[data-clip-id="a"] [data-strip-kind]') as HTMLElement;
     expect(layer.dataset['stripKind']).toBe('filmstrip');
-    expect(layer.style.height).toBe('34px');
+    // A band, not the whole clip: `h-8` against the audio case's `h-full`.
+    expect(layer.className).toContain('h-8');
+    expect(layer.className).not.toContain('h-full');
   });
 
   it('keeps the label above the strip', () => {

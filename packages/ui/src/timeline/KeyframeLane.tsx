@@ -7,8 +7,8 @@ import {
   evaluateAt,
   frameIndex,
 } from '@nos/core';
-import { Mono } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { cn } from '@nos/ui/lib/utils';
 import { type TimelineViewport, frameToPx } from './viewport.js';
 
 /**
@@ -178,26 +178,16 @@ export function KeyframeLane({
           frameIndex(Math.max(0, Math.round(viewport.scrollFrame + offsetPx * viewport.framesPerPixel))),
         );
       }}
-      style={{
-        height: heightPx,
-        position: 'relative',
-        // Darker than a clip lane so the nesting reads without an indent, which would waste width.
-        background: '#0e1013',
-        borderBottom: `1px solid ${token.surface1}`,
-        boxSizing: 'border-box',
-      }}
+      // Recessed relative to a clip lane so the nesting reads without an indent, which would waste
+      // width. `muted` is the role for exactly that — a surface that is behind the content.
+      className="relative border-b bg-muted/40"
+      style={{ height: heightPx }}
     >
       {/* Baseline the markers sit on. */}
       <div
         aria-hidden="true"
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: Math.round(heightPx / 2) - 1,
-          height: 1,
-          background: token.borderControl,
-        }}
+        className="absolute inset-x-0 h-px bg-border"
+        style={{ top: Math.round(heightPx / 2) - 1 }}
       />
 
       {keyframes.map((keyframe, index) => {
@@ -211,7 +201,7 @@ export function KeyframeLane({
         const showBadge = index < keyframes.length - 1;
 
         return (
-          <div key={keyframe.id} style={{ position: 'absolute', left: 0, top: 0 }}>
+          <div key={keyframe.id} className="absolute top-0 left-0">
             <div
               data-keyframe={keyframe.id}
               role="slider"
@@ -221,19 +211,17 @@ export function KeyframeLane({
               tabIndex={0}
               onPointerDown={handleDrag(keyframe)}
               onKeyDown={handleKeyDown(keyframe)}
+              className={cn(
+                // Rotated square: a diamond reads as a discrete marker where a circle reads as a handle,
+                // and it is the convention every editor uses for keyframes.
+                'absolute rotate-45 cursor-ew-resize touch-none bg-chart-2',
+                isSelected && 'ring-3 ring-chart-2/25',
+              )}
               style={{
-                position: 'absolute',
                 left: px - size / 2,
                 top: Math.round(heightPx / 2) - size / 2,
                 width: size,
                 height: size,
-                background: isSelected ? '#8ef0d8' : token.ok,
-                // Rotated square: a diamond reads as a discrete marker where a circle reads as a handle,
-                // and it is the convention every editor uses for keyframes.
-                transform: 'rotate(45deg)',
-                boxShadow: isSelected ? '0 0 0 3px rgba(56, 193, 164, 0.22)' : 'none',
-                cursor: 'ew-resize',
-                touchAction: 'none',
               }}
             />
 
@@ -245,25 +233,23 @@ export function KeyframeLane({
                   event.stopPropagation();
                   onCycleEasing?.(keyframe.id);
                 }}
+                className="absolute"
                 style={{
-                  position: 'absolute',
                   left: px + size / 2 + 4,
                   top: isSelected ? Math.round(heightPx / 2) - 10 : Math.round(heightPx / 2) - 8,
-                  height: isSelected ? 19 : 14,
-                  padding: `0 ${isSelected ? 7 : 5}px`,
-                  borderRadius: isSelected ? token.radiusControl : token.radiusInset,
-                  background: '#17322e',
-                  border: isSelected ? `1px solid ${'#2f5f56'}` : 'none',
-                  color: isSelected ? '#8ef0d8' : '#6fd8bf',
-                  font: `500 ${isSelected ? 10 : 8.5}px ${token.fontMono}`,
-                  lineHeight: `${isSelected ? 17 : 14}px`,
-                  whiteSpace: 'nowrap',
-                  cursor: 'pointer',
                 }}
               >
-                {isSelected
-                  ? `${keyframe.value.toFixed(2)} · ${keyframe.ease}`
-                  : EASING_LABELS[keyframe.ease]}
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    'cursor-pointer font-mono whitespace-nowrap text-chart-2',
+                    isSelected ? 'h-5 px-1.5 text-[10px]' : 'h-3.5 px-1 text-[8.5px]',
+                  )}
+                >
+                  {isSelected
+                    ? `${keyframe.value.toFixed(2)} · ${keyframe.ease}`
+                    : EASING_LABELS[keyframe.ease]}
+                </Badge>
               </button>
             )}
           </div>
@@ -273,16 +259,10 @@ export function KeyframeLane({
       {/* Value under the playhead, pinned right so it does not move as markers do. */}
       {currentValue !== undefined && (
         <div
-          style={{
-            position: 'absolute',
-            right: token.space5,
-            top: Math.round(heightPx / 2) - 7,
-            pointerEvents: 'none',
-          }}
+          className="pointer-events-none absolute right-4 font-mono text-[10px] font-medium text-muted-foreground"
+          style={{ top: Math.round(heightPx / 2) - 7 }}
         >
-          <Mono tone={token.textSoft} style={{ font: `500 10px ${token.fontMono}` }}>
-            {currentValue.toFixed(2)}
-          </Mono>
+          {currentValue.toFixed(2)}
         </div>
       )}
     </div>

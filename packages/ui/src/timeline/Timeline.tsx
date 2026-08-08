@@ -1,6 +1,5 @@
 import {
   Fragment,
-  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
@@ -27,9 +26,28 @@ import {
   spanFromBounds,
   trackClips,
 } from '@nos/core';
+import {
+  ArrowRightLeftIcon,
+  AudioLinesIcon,
+  FilmIcon,
+  HeadphonesIcon,
+  LockIcon,
+  LogInIcon,
+  LogOutIcon,
+  MagnetIcon,
+  MaximizeIcon,
+  ScissorsIcon,
+  Trash2Icon,
+  TypeIcon,
+  VolumeXIcon,
+} from 'lucide-react';
+import { Button } from '@nos/ui/components/ui/button';
+import { Input } from '@nos/ui/components/ui/input';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { Toggle } from '@nos/ui/components/ui/toggle';
+import { cn } from '@nos/ui/lib/utils';
 import { ASSET_DRAG_TYPE } from '../media-browser/MediaBrowser.js';
-import { Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
 import { ClipBody } from './ClipBody.js';
 import type { ClipStrip } from './clip-strip.js';
 import {
@@ -82,13 +100,13 @@ export interface TimelineProps {
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
   /**
-   * A right-click on a clip, or on empty timeline when no clip is named.
+   * The right-click menu, for a clip, a lane, or the empty area below the last track.
    *
-   * Reported with viewport coordinates and the clip under the pointer; *what the menu offers* is the
-   * shell's business, because the answer depends on the selection, the clipboard and the history —
-   * none of which this component knows about.
+   * *What the menu offers* is the shell's business, because the answer depends on the selection, the
+   * clipboard and the history — none of which this component knows about. All this decides is which
+   * target a click was about.
    */
-  readonly onContextMenu?: (target: TimelineMenuTarget, x: number, y: number) => void;
+  readonly menu?: MenuBinding<TimelineMenuTarget>;
   /**
    * A rectangle dragged across empty timeline.
    *
@@ -165,6 +183,9 @@ export interface TimelineProps {
   readonly onRemoveRange?: () => void;
 }
 
+/** The empty area below the last track: a right-click there is about no clip and no lane. */
+const NO_TARGET: TimelineMenuTarget = {};
+
 export function Timeline(props: TimelineProps): ReactNode {
   const { document, viewport, playhead } = props;
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -227,18 +248,7 @@ export function Timeline(props: TimelineProps): ReactNode {
   });
 
   return (
-    <section
-      aria-label="Timeline"
-      style={{
-        height: token.timelineHeight,
-        flex: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-        background: token.bgTimeline,
-        borderTop: `1px solid ${token.border}`,
-      }}
-    >
+    <section aria-label="Timeline" className="flex h-98 min-h-0 flex-none flex-col border-t">
       <TimelineToolbar {...props} totalFrames={totalFrames} clipCount={clipCount(document)} />
 
       {/*
@@ -251,7 +261,7 @@ export function Timeline(props: TimelineProps): ReactNode {
         possibility instead of compensating for it — there is one width now, and nothing to keep in
         sync. Headers and lanes scroll as one element for the same reason vertically.
       */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <TrackHeaderColumn
           tracks={document.sequence.tracks}
           anySoloed={anySoloed}
@@ -268,16 +278,11 @@ export function Timeline(props: TimelineProps): ReactNode {
           ref={laneAreaRef}
           data-lane-column=""
           onWheel={handleWheel}
-          style={{
-            flex: 1,
-            position: 'relative',
-            minWidth: 0,
-            background: token.bgLanes,
-          }}
+          className="relative min-w-0 flex-1 bg-muted/30"
         >
           {/* Sticky, so it stays visible while the tracks scroll under it and still belongs to the
               column whose pixels it measures. */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 4 }}>
+          <div className="sticky top-0 z-4">
             <TimelineRuler
               ticks={ticks}
               viewport={viewport}
@@ -290,18 +295,20 @@ export function Timeline(props: TimelineProps): ReactNode {
             />
           </div>
 
+          {/*
+            The menu for the area below the last track. Nested inside it are one trigger per lane and
+            one per clip, and Base UI hands a right-click to the innermost — which is what makes
+            "a click on a clip is about the clip, not about the lane it sits on" structural rather than
+            a target check somebody has to remember to write.
+          */}
+          <ActionMenu
+            items={props.menu === undefined ? [] : props.menu.items(NO_TARGET)}
+            onChoose={(action) => props.menu?.onChoose(NO_TARGET, action)}
+          >
           <div
             data-lane-surface=""
-            style={{ position: 'relative' }}
+            className="relative"
             onPointerDown={marquee.begin}
-            onContextMenu={(event) => {
-              if (props.onContextMenu === undefined) return;
-              // Only the area below the last track: a lane reports itself, and a clip reports itself,
-              // so letting this fire too would open the menu for whatever sits behind the click.
-              if (event.target !== event.currentTarget) return;
-              event.preventDefault();
-              props.onContextMenu({}, event.clientX, event.clientY);
-            }}
             onDragOver={(event) => {
               if (props.onDropAsset === undefined) return;
               if (!event.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
@@ -346,16 +353,12 @@ export function Timeline(props: TimelineProps): ReactNode {
               <div
                 data-marquee="true"
                 aria-hidden="true"
+                className="pointer-events-none absolute z-2 border border-primary bg-primary/10"
                 style={{
-                  position: 'absolute',
                   left: marquee.rect.left,
                   top: marquee.rect.top,
                   width: marquee.rect.width,
                   height: marquee.rect.height,
-                  border: `1px solid ${token.accent}`,
-                  background: 'rgba(76, 154, 255, 0.12)',
-                  pointerEvents: 'none',
-                  zIndex: 2,
                 }}
               />
             )}
@@ -375,18 +378,19 @@ export function Timeline(props: TimelineProps): ReactNode {
                     ? { onClipPointerDown: props.onClipPointerDown }
                     : {})}
                   {...(props.onSelectClip !== undefined ? { onSelectClip: props.onSelectClip } : {})}
-                  {...(props.onContextMenu !== undefined ? { onContextMenu: props.onContextMenu } : {})}
+                  {...(props.menu !== undefined ? { menu: props.menu } : {})}
                   {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
                   {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
                 />
                 {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
-                  <div data-clip-lanes={props.expandedClip} style={{ position: 'relative' }}>
+                  <div data-clip-lanes={props.expandedClip} className="relative">
                     {props.lanes}
                   </div>
                 )}
               </Fragment>
             ))}
           </div>
+          </ActionMenu>
 
           {props.snapIndicator !== undefined && (
             <SnapLine px={frameToPx(viewport, props.snapIndicator.frame)} kind={props.snapIndicator.kind} />
@@ -418,28 +422,15 @@ function TimelineToolbar({
   const range = document.sequence.workRange;
 
   return (
-    <div
-      style={{
-        height: token.panelHeaderHeight,
-        flex: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: token.space2,
-        padding: `0 ${token.space5}`,
-        borderBottom: `1px solid ${token.borderSubtle}`,
-      }}
-    >
-      <Button
-        tone={snapEnabled ? 'active' : 'default'}
-        onClick={onToggleSnap}
-        style={{ height: token.controlHeightSm }}
-      >
-        {snapEnabled && <StatusDot color={token.accent} size={6} />}
+    <div className="flex h-8.5 flex-none items-center gap-2 border-b px-4">
+      <Toggle size="sm" pressed={snapEnabled} onPressedChange={() => onToggleSnap?.()} title="Snap (N)">
+        <MagnetIcon />
         Snap
-      </Button>
-      <Button
-        tone={rippleEnabled ? 'active' : 'default'}
-        onClick={onToggleRipple}
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={rippleEnabled}
+        onPressedChange={() => onToggleRipple?.()}
         // A mode, not a verb: it changes what Delete does, and saying so on the control is the
         // difference between a toggle a user trusts and one they experiment with.
         title={
@@ -447,22 +438,22 @@ function TimelineToolbar({
             ? 'Ripple on: deleting closes the gap, pulling the rest of the track back'
             : 'Ripple off: deleting leaves a gap, so everything downstream keeps its timing'
         }
-        aria-pressed={rippleEnabled}
-        style={{ height: token.controlHeightSm }}
       >
-        {rippleEnabled && <StatusDot color={token.accent} size={6} />}
+        <ArrowRightLeftIcon />
         Ripple
-      </Button>
+      </Toggle>
 
       {(onMarkIn ?? onMarkOut) !== undefined && (
         <>
-          <Divider />
+          <Separator orientation="vertical" className="h-4" />
           {/* Named for what they mark, not for the keys that trigger them: the shortcut is on the
               title, where it teaches without taking width from a toolbar the mockups keep dense. */}
-          <Button onClick={onMarkIn} title="Mark in (I)" style={{ height: token.controlHeightSm }}>
+          <Button variant="outline" size="sm" onClick={onMarkIn} title="Mark in (I)">
+            <LogInIcon />
             Mark in
           </Button>
-          <Button onClick={onMarkOut} title="Mark out (O)" style={{ height: token.controlHeightSm }}>
+          <Button variant="outline" size="sm" onClick={onMarkOut} title="Mark out (O)">
+            <LogOutIcon />
             Mark out
           </Button>
           {range !== undefined && (
@@ -470,23 +461,21 @@ function TimelineToolbar({
               {/* The range is stated, not just drawn. A four-pixel bar on the ruler is easy to miss,
                   and an export that silently covers part of the sequence is the failure that costs
                   the most to discover afterwards. */}
-              <Mono tone={token.accent}>
+              <span className="font-mono text-xs text-primary">
                 {range.start}–{endExclusive(range) - 1}
-              </Mono>
+              </span>
               {onRemoveRange !== undefined && (
                 <Button
+                  variant="outline"
+                  size="sm"
                   onClick={onRemoveRange}
                   title="Remove the marked range from every unlocked track and close the gaps"
-                  style={{ height: token.controlHeightSm }}
                 >
+                  <ScissorsIcon />
                   Cut range
                 </Button>
               )}
-              <Button
-                onClick={onClearRange}
-                title="Clear the in/out range (Alt+X)"
-                style={{ height: token.controlHeightSm }}
-              >
+              <Button variant="ghost" size="sm" onClick={onClearRange} title="Clear the in/out range (Alt+X)">
                 Clear
               </Button>
             </>
@@ -494,36 +483,42 @@ function TimelineToolbar({
         </>
       )}
 
-      <Divider />
+      <Separator orientation="vertical" className="h-4" />
 
-      <Mono tone={token.textDim}>zoom</Mono>
-      <Mono tone={token.textDim}>{formatZoom(viewport)}</Mono>
+      <span className="font-mono text-xs text-muted-foreground">zoom</span>
+      <span className="font-mono text-xs text-muted-foreground">{formatZoom(viewport)}</span>
       {onFit !== undefined && (
         <Button
+          variant="outline"
+          size="sm"
           onClick={onFit}
           title="Fit the sequence — or the marked range — to the window (F)"
-          style={{ height: token.controlHeightSm }}
         >
+          <MaximizeIcon />
           Fit
         </Button>
       )}
 
-      <div style={{ flex: 1 }} />
-
-      <Mono tone={token.textFaint}>{formatTimelineStatus(document.frameRate, totalFrames, clips)}</Mono>
+      <span className="ml-auto font-mono text-xs text-muted-foreground">
+        {formatTimelineStatus(document.frameRate, totalFrames, clips)}
+      </span>
       {/* One button per kind rather than a single `+ Track` that guesses. The spec allows N of each,
           and which kind the user wants is not derivable from anything on screen. */}
       {onAddTrack !== undefined &&
-        (['video', 'audio', 'text'] as const).map((kind) => (
-          <Button
-            key={kind}
-            onClick={() => onAddTrack(kind)}
-            title={`Add ${kind === 'audio' ? 'an' : 'a'} ${kind} track`}
-            style={{ height: token.controlHeightSm }}
-          >
-            + {TRACK_BUTTON_LABEL[kind]}
-          </Button>
-        ))}
+        (['video', 'audio', 'text'] as const).map((kind) => {
+          const Icon = TRACK_KIND_ICON[kind];
+          return (
+            <Button
+              key={kind}
+              variant="outline"
+              size="icon-sm"
+              onClick={() => onAddTrack(kind)}
+              title={`Add ${kind === 'audio' ? 'an' : 'a'} ${kind} track`}
+            >
+              <Icon />
+            </Button>
+          );
+        })}
     </div>
   );
 }
@@ -550,20 +545,9 @@ function TrackHeaderColumn({
   readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
 }): ReactNode {
   return (
-    <div
-      style={{
-        width: token.trackHeaderWidth,
-        flex: 'none',
-        background: token.bgPanel,
-        borderRight: `1px solid ${token.border}`,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <div className="flex w-37 flex-none flex-col border-r">
       {/* Spacer aligning the headers with the lanes, which sit below the ruler. */}
-      <div
-        style={{ height: token.rulerHeight, flex: 'none', borderBottom: `1px solid ${token.borderSubtle}` }}
-      />
+      <div className="h-6.5 flex-none border-b" />
 
       {tracks.map((track) => (
         <TrackHeader
@@ -619,21 +603,14 @@ function TrackHeader({
   return (
     <div
       data-track-header={track.id}
-      style={{
-        height: track.height,
-        flex: 'none',
-        borderBottom: `1px solid ${token.borderSubtle}`,
-        padding: `${token.space2} ${token.space4}`,
-        display: 'flex',
-        flexDirection: stacked ? 'column' : 'row',
-        alignItems: stacked ? 'stretch' : 'center',
-        justifyContent: 'center',
-        gap: stacked ? token.space2 : token.space3,
-        background: audible ? 'transparent' : token.trackActive,
-        boxSizing: 'border-box',
-        overflow: 'hidden',
-        position: 'relative',
-      }}
+      className={cn(
+        'relative flex flex-none justify-center overflow-hidden border-b px-3 py-1',
+        stacked ? 'flex-col items-stretch gap-2' : 'flex-row items-center gap-3',
+        // A muted row for a track that is not being heard: silence is a state, and one that is
+        // invisible gets blamed on the engine.
+        !audible && 'bg-muted/60',
+      )}
+      style={{ height: track.height }}
     >
       {onResize !== undefined && <ResizeHandle track={track} onResize={onResize} />}
       <EditableName
@@ -641,24 +618,24 @@ function TrackHeader({
         value={track.name}
         tone={trackLabelColor(track)}
         title={`${track.name} — double-click to rename`}
-        style={{ flex: stacked ? 'none' : 1 }}
+        className={stacked ? 'flex-none' : 'flex-1'}
         {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
       />
-      <div style={{ display: 'flex', gap: token.space1, flex: 'none' }}>
+      <div className="flex flex-none gap-0.5">
         <TrackToggle
-          label="M"
+          icon={VolumeXIcon}
           active={track.muted}
           title={`Mute ${track.name}`}
           onClick={() => onMute?.(track.id)}
         />
         <TrackToggle
-          label="S"
+          icon={HeadphonesIcon}
           active={track.solo}
           title={`Solo ${track.name}`}
           onClick={() => onSolo?.(track.id)}
         />
         <TrackToggle
-          label="L"
+          icon={LockIcon}
           active={track.locked}
           title={`Lock ${track.name}`}
           onClick={() => onLock?.(track.id)}
@@ -668,7 +645,7 @@ function TrackHeader({
             disabled one with a reason explains itself. */}
         {onRemove !== undefined && (
           <TrackToggle
-            label="×"
+            icon={Trash2Icon}
             active={false}
             disabled={track.locked}
             title={
@@ -792,27 +769,10 @@ function SnapLine({ px, kind }: { readonly px: number; readonly kind: string }):
     <div
       data-snap-line={kind}
       aria-hidden="true"
-      style={{
-        position: 'absolute',
-        left: px,
-        top: 0,
-        bottom: 0,
-        width: 0,
-        borderLeft: `1px dashed ${token.warn}`,
-        pointerEvents: 'none',
-        zIndex: 3,
-      }}
+      className="pointer-events-none absolute inset-y-0 z-3 w-0 border-l border-dashed border-chart-3"
+      style={{ left: px }}
     >
-      <span
-        style={{
-          position: 'absolute',
-          top: 2,
-          left: 4,
-          font: token.textMeta,
-          color: token.warn,
-          whiteSpace: 'nowrap',
-        }}
-      >
+      <span className="absolute top-0.5 left-1 font-mono text-[9px] whitespace-nowrap text-chart-3">
         {kind.replace(/-/g, ' ')}
       </span>
     </div>
@@ -917,17 +877,9 @@ function ResizeHandle({
         if (start !== undefined) onResize(track.id, start.height + (event.clientY - start.y), 'end');
         event.currentTarget.releasePointerCapture?.(event.pointerId);
       }}
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 5,
-        cursor: 'ns-resize',
-        // Invisible until pointed at: a permanent line on every header would read as a divider the
-        // user is meant to notice, when it is only there for the moment they reach for it.
-        background: 'transparent',
-      }}
+      // Invisible until pointed at: a permanent line on every header would read as a divider the
+      // user is meant to notice, when it is only there for the moment they reach for it.
+      className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize bg-transparent"
     />
   );
 }
@@ -944,14 +896,15 @@ function EditableName({
   value,
   tone,
   title,
-  style,
+  className,
   autoEdit = false,
   onCommit,
 }: {
   readonly value: string;
+  /** A theme role as a Tailwind class, so a track kind is recognisable without being recoloured. */
   readonly tone: string;
   readonly title: string;
-  readonly style?: CSSProperties;
+  readonly className?: string | undefined;
   /** Opens the field without a double-click, for a rename asked for somewhere else — a menu. */
   readonly autoEdit?: boolean;
   readonly onCommit?: (name: string) => void;
@@ -976,15 +929,7 @@ function EditableName({
           setDraft(value);
           setEditing(true);
         }}
-        style={{
-          font: `600 11px ${token.fontUi}`,
-          color: tone,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          minWidth: 0,
-          ...style,
-        }}
+        className={cn('min-w-0 truncate text-[11px] font-semibold', tone, className)}
       >
         {value}
       </span>
@@ -997,7 +942,7 @@ function EditableName({
   };
 
   return (
-    <input
+    <Input
       // Focused on appearing: the field exists only because the user just asked for it, and anything
       // else would need a second click before they could type.
       autoFocus
@@ -1011,32 +956,38 @@ function EditableName({
         else return;
         event.preventDefault();
       }}
-      style={{
-        font: `600 11px ${token.fontUi}`,
-        color: token.textBright,
-        background: token.surface1,
-        border: `1px solid ${token.accent}`,
-        borderRadius: token.radiusInset,
-        padding: '1px 3px',
-        minWidth: 0,
-        width: '100%',
-        ...style,
-      }}
+      className={cn('h-6 w-full min-w-0 px-1 py-0 text-[11px] font-semibold', className)}
     />
   );
 }
 
-/** Short enough for a dense toolbar, and the letters already on every track header. */
-const TRACK_BUTTON_LABEL: Readonly<Record<TrackKind, string>> = { video: 'V', audio: 'A', text: 'T' };
+/**
+ * The glyph for a track kind.
+ *
+ * These used to be the letters `V`, `A` and `T` on the add-track buttons, which is compact and means
+ * nothing until somebody explains it. The same three shapes now say it on the button and beside the
+ * clips of that kind.
+ */
+const TRACK_KIND_ICON: Readonly<Record<TrackKind, typeof FilmIcon>> = {
+  video: FilmIcon,
+  audio: AudioLinesIcon,
+  text: TypeIcon,
+};
 
+/**
+ * The role a track's name is written in — the same one its clips are drawn in.
+ *
+ * A class rather than a colour, so the header follows the theme; and the same `chart` roles
+ * `ClipBody` uses, so a row and the material on it are recognisably the same kind of thing.
+ */
 function trackLabelColor(track: Track): string {
   switch (track.kind) {
     case 'audio':
-      return token.okText;
+      return 'text-chart-2';
     case 'text':
-      return token.warnText;
+      return 'text-chart-5';
     default:
-      return token.textBright;
+      return 'text-chart-1';
   }
 }
 
@@ -1047,41 +998,30 @@ function trackLabelColor(track: Track): string {
  * invisible to a screen reader and hard to read for low-contrast vision.
  */
 function TrackToggle({
-  label,
+  icon: Icon,
   active,
   title,
   disabled = false,
   onClick,
 }: {
-  readonly label: string;
+  readonly icon: typeof FilmIcon;
   readonly active: boolean;
   readonly title: string;
   readonly disabled?: boolean;
   readonly onClick: () => void;
 }): ReactNode {
   return (
-    <button
-      type="button"
+    <Toggle
+      size="sm"
       title={title}
       aria-label={title}
-      aria-pressed={active}
+      pressed={active}
       disabled={disabled}
-      onClick={onClick}
-      style={{
-        width: 17,
-        height: 15,
-        borderRadius: token.radiusInset,
-        background: active ? '#1c2333' : token.surface2,
-        border: `1px solid ${active ? '#2f4a72' : token.borderControl}`,
-        color: active ? '#9dc2ff' : token.textSoft,
-        font: `400 8.5px ${token.fontUi}`,
-        lineHeight: '13px',
-        padding: 0,
-        cursor: 'pointer',
-      }}
+      onPressedChange={onClick}
+      className="size-4.5 min-w-0 p-0 [&_svg:not([class*='size-'])]:size-3"
     >
-      {label}
-    </button>
+      <Icon />
+    </Toggle>
   );
 }
 
@@ -1109,43 +1049,23 @@ function TimelineRuler({
       aria-valuemin={0}
       tabIndex={0}
       onPointerDown={onPointerDown}
-      style={{
-        height: token.rulerHeight,
-        position: 'relative',
-        borderBottom: `1px solid ${token.borderSubtle}`,
-        background: token.bgPanel,
-        cursor: 'text',
-        overflow: 'hidden',
-      }}
+      className="relative h-6.5 cursor-text overflow-hidden border-b bg-background"
     >
       {range !== undefined && (
         <div
           data-work-range="true"
           aria-hidden="true"
           title="In/out range"
-          style={{
-            position: 'absolute',
-            left: range.leftPx,
-            width: range.widthPx,
-            top: 0,
-            height: 4,
-            background: token.accent,
-            pointerEvents: 'none',
-          }}
+          className="pointer-events-none absolute top-0 h-1 bg-primary"
+          style={{ left: range.leftPx, width: range.widthPx }}
         />
       )}
       {ticks.map((tick) => (
         <div
           key={tick.frame}
           aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: tick.px,
-            bottom: 0,
-            width: 1,
-            height: tick.major ? 9 : 5,
-            background: tick.major ? '#454c58' : '#2f343d',
-          }}
+          className={cn('absolute bottom-0 w-px', tick.major ? 'h-2.5 bg-border' : 'h-1.5 bg-border/50')}
+          style={{ left: tick.px }}
         />
       ))}
       {ticks
@@ -1153,15 +1073,8 @@ function TimelineRuler({
         .map((tick) => (
           <div
             key={`label-${tick.frame}`}
-            style={{
-              position: 'absolute',
-              left: tick.px + 4,
-              top: 5,
-              font: token.textMeta,
-              color: token.textDim,
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-            }}
+            className="pointer-events-none absolute top-1 font-mono text-[9px] whitespace-nowrap text-muted-foreground"
+            style={{ left: tick.px + 4 }}
           >
             {tick.label}
           </div>
@@ -1179,17 +1092,13 @@ function TimelineRuler({
           aria-label={`Marker ${marker.label} at frame ${marker.frame}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onSeek?.(marker.frame)}
+          // The colour is the marker's own — a user who set one chose it deliberately, and overriding
+          // it with a theme role would throw away the only thing that tells two markers apart. Absent,
+          // it falls back to a role.
+          className={cn('absolute bottom-0 h-2.5 w-2 cursor-pointer rounded-t-sm', marker.color === undefined && 'bg-chart-3')}
           style={{
-            position: 'absolute',
             left: frameToPx(viewport, marker.frame) - 3,
-            bottom: 0,
-            width: 7,
-            height: 9,
-            padding: 0,
-            border: 'none',
-            borderRadius: '1px 1px 0 0',
-            background: marker.color ?? token.warn,
-            cursor: 'pointer',
+            ...(marker.color !== undefined ? { background: marker.color } : {}),
           }}
         />
       ))}
@@ -1211,7 +1120,7 @@ function TrackLane({
   onToggleExpandClip,
   onClipPointerDown,
   onSelectClip,
-  onContextMenu,
+  menu,
   onTrimStart,
   onTrimEnd,
   dropAt,
@@ -1226,7 +1135,7 @@ function TrackLane({
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
-  readonly onContextMenu?: (target: TimelineMenuTarget, x: number, y: number) => void;
+  readonly menu?: MenuBinding<TimelineMenuTarget>;
   /**
    * A rectangle dragged across empty timeline.
    *
@@ -1240,56 +1149,52 @@ function TrackLane({
   // Off-screen clips are skipped entirely. With the spec's 200-clip target this is not yet critical,
   // but it keeps the DOM proportional to what is visible rather than to project length.
   const visible = trackClips(track).filter((clip) => isSpanVisible(viewport, clip.span));
+  const target: TimelineMenuTarget = { track: track.id };
 
   return (
-    <div
-      data-track-id={track.id}
-      data-track-kind={track.kind}
-      onContextMenu={(event) => {
-        if (onContextMenu === undefined) return;
-        // The lane's own background only. A clip sitting on it reports itself, and both firing would
-        // open a menu about the lane for a click that was plainly on a clip.
-        if (event.target !== event.currentTarget) return;
-        event.preventDefault();
-        onContextMenu({ track: track.id }, event.clientX, event.clientY);
-      }}
-      style={{
-        height: track.height,
-        position: 'relative',
-        borderBottom: `1px solid ${token.borderSubtle}`,
-        background: track.kind === 'video' ? 'rgba(76, 154, 255, 0.02)' : 'transparent',
-        boxSizing: 'border-box',
-      }}
+    <ActionMenu
+      items={menu === undefined ? [] : menu.items(target)}
+      onChoose={(action) => menu?.onChoose(target, action)}
     >
-      {dropAt !== undefined && <DropIndicator viewport={viewport} frame={dropAt} height={track.height} />}
+      <div
+        data-track-id={track.id}
+        data-track-kind={track.kind}
+        className="relative border-b"
+        style={{ height: track.height }}
+      >
+        {dropAt !== undefined && <DropIndicator viewport={viewport} frame={dropAt} height={track.height} />}
 
-      {visible.map((clip) => (
-        <ClipBody
-          key={clip.id}
-          clip={clip}
-          rollableStart={flushBefore(track, clip)}
-          rollableEnd={flushAfter(track, clip)}
-          geometry={spanGeometry(viewport, clip.span)}
-          heightPx={track.height}
-          selected={selectedClips.has(clip.id)}
-          {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
-          expanded={expandedClip === clip.id}
-          {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
-          onPointerDown={(clipId, event) => {
-            onSelectClip?.(clipId, event.shiftKey || event.metaKey);
-            onClipPointerDown?.(clipId, event);
-          }}
-          {...(onContextMenu !== undefined
-            ? {
-                onContextMenu: (clip: ClipId, x: number, y: number) =>
-                  onContextMenu({ clip, track: track.id }, x, y),
-              }
-            : {})}
-          {...(onTrimStart !== undefined ? { onTrimStart } : {})}
-          {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
-        />
-      ))}
-    </div>
+        {visible.map((clip) => (
+          <ClipBody
+            key={clip.id}
+            clip={clip}
+            rollableStart={flushBefore(track, clip)}
+            rollableEnd={flushAfter(track, clip)}
+            geometry={spanGeometry(viewport, clip.span)}
+            heightPx={track.height}
+            selected={selectedClips.has(clip.id)}
+            {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
+            expanded={expandedClip === clip.id}
+            {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
+            onPointerDown={(clipId, event) => {
+              onSelectClip?.(clipId, event.shiftKey || event.metaKey);
+              onClipPointerDown?.(clipId, event);
+            }}
+            {...(menu !== undefined
+              ? {
+                  menu: {
+                    items: (clipId: ClipId) => menu.items({ clip: clipId, track: track.id }),
+                    onChoose: (clipId: ClipId, action: string) =>
+                      menu.onChoose({ clip: clipId, track: track.id }, action),
+                  },
+                }
+              : {})}
+            {...(onTrimStart !== undefined ? { onTrimStart } : {})}
+            {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
+          />
+        ))}
+      </div>
+    </ActionMenu>
   );
 }
 
@@ -1339,20 +1244,10 @@ function DropIndicator({
     <div
       aria-hidden="true"
       data-drop-indicator=""
-      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}
+      className="pointer-events-none absolute inset-0 z-3"
     >
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(76, 154, 255, 0.10)' }} />
-      <div
-        style={{
-          position: 'absolute',
-          left,
-          top: 0,
-          width: 2,
-          height,
-          background: token.accent,
-          boxShadow: `0 0 6px ${token.accent}`,
-        }}
-      />
+      <div className="absolute inset-0 bg-primary/10" />
+      <div className="absolute top-0 w-0.5 bg-primary shadow-[0_0_6px_var(--primary)]" style={{ left, height }} />
     </div>
   );
 }
@@ -1369,26 +1264,12 @@ function Playhead({ px }: { readonly px: number }): ReactNode {
   return (
     <div
       aria-hidden="true"
-      style={{
-        position: 'absolute',
-        left: px,
-        top: 0,
-        bottom: 0,
-        width: 1,
-        background: token.accent,
-        pointerEvents: 'none',
-      }}
+      className="pointer-events-none absolute inset-y-0 w-px bg-primary"
+      style={{ left: px }}
     >
       <div
-        style={{
-          position: 'absolute',
-          left: -6,
-          top: 0,
-          width: 13,
-          height: 13,
-          background: token.accent,
-          clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-        }}
+        className="absolute top-0 -left-1.5 size-3.5 bg-primary"
+        style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }}
       />
     </div>
   );

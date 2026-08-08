@@ -1,17 +1,21 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ChevronDownIcon, ChevronRightIcon, LinkIcon, SparklesIcon, SquareDashedIcon } from 'lucide-react';
 import { type Clip, type ClipId, hasAnimation, isGenerated, linkedPartner, passCount } from '@nos/core';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
+import { cn } from '@nos/ui/lib/utils';
 import type { ClipStrip } from './clip-strip.js';
 import { type SpanGeometry } from './viewport.js';
 
 /**
  * A clip drawn on a track.
  *
- * The visual language is the mockups': a video clip is a blue gradient with a filmstrip strip along
- * its bottom, audio is teal with a waveform, text is amber, and **anything a generator produced is
- * purple** regardless of its media type. That last rule is the one worth guarding — it is how a user
+ * The visual language is the mockups' rule expressed in the theme's own vocabulary: each media kind
+ * gets one of the categorical `chart` roles, and **anything a generator produced takes the generated
+ * role** regardless of its media type. That last rule is the one worth guarding — it is how a user
  * tells at a glance which material is synthetic, and it must hold on the timeline, in the browser and
- * in the inspector alike.
+ * in the inspector alike, which is why the role is the same one `assetGlyph` uses.
  */
 
 export interface ClipBodyProps {
@@ -38,45 +42,32 @@ export interface ClipBodyProps {
   readonly expanded?: boolean;
   /** Opens or closes the clip. Absent leaves the disclosure off entirely. */
   readonly onToggleExpand?: (clip: ClipId) => void;
-  /** A right-click on this clip, reported with viewport coordinates. */
-  readonly onContextMenu?: (clip: ClipId, x: number, y: number) => void;
+  /** The right-click menu for this clip. Absent leaves the clip without one. */
+  readonly menu?: MenuBinding<ClipId>;
 }
 
-/** Fill and border for a clip, by media kind and provenance. */
-function clipPalette(clip: Clip): { readonly fill: string; readonly border: string } {
-  const generated = isGenerated(clip);
+/**
+ * Fill and border for a clip, by media kind and provenance.
+ *
+ * Returned as complete Tailwind classes, never as colour values: these are theme roles, so they follow
+ * the palette and dark mode without this file knowing either exists. The opacities are what separate
+ * "a filled clip" from "a solid block" — the strip behind the label has to stay visible through it.
+ */
+function clipPalette(clip: Clip): string {
+  if (isGenerated(clip)) return 'bg-chart-4/25 border-chart-4/60';
 
   switch (clip.kind) {
     case 'video':
     case 'image':
-      return generated
-        ? { fill: 'var(--nos-clip-generated-fill)', border: 'var(--nos-clip-generated-border)' }
-        : { fill: 'var(--nos-clip-video-fill)', border: 'var(--nos-clip-video-border)' };
+      return 'bg-chart-1/25 border-chart-1/60';
     case 'audio':
-      return generated
-        ? {
-            fill: 'var(--nos-clip-audio-generated-fill)',
-            border: 'var(--nos-clip-generated-border)',
-          }
-        : { fill: 'var(--nos-clip-audio-fill)', border: 'var(--nos-clip-audio-border)' };
+      return 'bg-chart-2/25 border-chart-2/60';
     case 'text':
-      return { fill: 'var(--nos-clip-text-fill)', border: 'var(--nos-clip-text-border)' };
+      return 'bg-chart-5/25 border-chart-5/60';
     default: {
       const unreachable: never = clip;
       throw new Error(`Unhandled clip kind ${JSON.stringify(unreachable)}`);
     }
-  }
-}
-
-function labelColor(clip: Clip): string {
-  if (isGenerated(clip)) return token.generatedText;
-  switch (clip.kind) {
-    case 'audio':
-      return token.okText;
-    case 'text':
-      return token.warnText;
-    default:
-      return '#c6d3ee';
   }
 }
 
@@ -98,156 +89,116 @@ export function ClipBody({
   passWarningThreshold = 8,
   expanded = false,
   onToggleExpand,
-  onContextMenu,
+  menu,
 }: ClipBodyProps): ReactNode {
-  const palette = clipPalette(clip);
   const passes = passCount(clip);
   const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX;
-
-  const style: CSSProperties = {
-    position: 'absolute',
-    left: geometry.leftPx,
-    width: geometry.widthPx,
-    top: 6,
-    height: Math.max(0, heightPx - 12),
-    borderRadius: token.radiusControl,
-    background: selected ? 'var(--nos-clip-video-selected-fill)' : palette.fill,
-    border: selected ? `2px solid ${token.accent}` : `1px solid ${palette.border}`,
-    boxShadow: selected ? '0 0 0 1px rgba(76, 154, 255, 0.25)' : 'none',
-    overflow: 'hidden',
-    padding: '5px 7px',
-    boxSizing: 'border-box',
-    opacity: clip.enabled ? 1 : 0.4,
-    // No transition: this element moves under the pointer during a drag, and any easing would fight
-    // the gesture and blow the 16 ms interaction budget.
-    cursor: 'grab',
-    userSelect: 'none',
-  };
+  const Disclosure = expanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
-    <div
-      role="button"
-      aria-label={clipAccessibleLabel(clip)}
-      aria-pressed={selected}
-      tabIndex={0}
-      data-clip-id={clip.id}
-      data-generated={isGenerated(clip) ? 'true' : 'false'}
-      style={style}
-      onPointerDown={(event) => onPointerDown?.(clip.id, event)}
-      onContextMenu={(event) => {
-        if (onContextMenu === undefined) return;
-        event.preventDefault();
-        // Stopped, or the lane behind would open its own menu for the empty space under this clip.
-        event.stopPropagation();
-        onContextMenu(clip.id, event.clientX, event.clientY);
-      }}
+    <ActionMenu
+      items={menu === undefined ? [] : menu.items(clip.id)}
+      onChoose={(action) => menu?.onChoose(clip.id, action)}
     >
-      {/* First, so everything else paints over it: an audio strip fills the clip, and a waveform
-          drawn on top of the label would hide the one thing that names the clip. */}
-      {strip !== undefined && <StripLayer clip={clip} strip={strip} />}
-
       <div
+        role="button"
+        aria-label={clipAccessibleLabel(clip)}
+        aria-pressed={selected}
+        tabIndex={0}
+        data-clip-id={clip.id}
+        data-generated={isGenerated(clip) ? 'true' : 'false'}
+        className={cn(
+          // No transition: this element moves under the pointer during a drag, and any easing would
+          // fight the gesture and blow the 16 ms interaction budget.
+          'absolute cursor-grab overflow-hidden rounded-md border px-1.5 py-1 select-none',
+          selected ? 'border-2 border-primary bg-primary/25 ring-1 ring-primary/25' : clipPalette(clip),
+          !clip.enabled && 'opacity-40',
+        )}
         style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          gap: token.space2,
-          minWidth: 0,
+          left: geometry.leftPx,
+          width: geometry.widthPx,
+          top: 6,
+          height: Math.max(0, heightPx - 12),
         }}
+        onPointerDown={(event) => onPointerDown?.(clip.id, event)}
       >
-        {isGenerated(clip) && (
-          <span aria-hidden="true" style={{ font: '400 9px sans-serif', color: token.generated }}>
-            ✦
-          </span>
+        {/* First, so everything else paints over it: an audio strip fills the clip, and a waveform
+            drawn on top of the label would hide the one thing that names the clip. */}
+        {strip !== undefined && <StripLayer clip={clip} strip={strip} />}
+
+        <div className="relative flex min-w-0 items-center gap-1">
+          {isGenerated(clip) && <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />}
+          <span className="truncate text-[11px] font-medium">{clip.label}</span>
+
+          {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
+              there is something to show — an empty disclosure punishes the user for using it. */}
+          {onToggleExpand !== undefined && hasAnimation(clip) && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              data-clip-disclosure={clip.id}
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Hide' : 'Show'} ${clip.label} keyframe lanes`}
+              title={expanded ? 'Hide the parameter lanes' : 'Show the parameter lanes'}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleExpand(clip.id);
+              }}
+              className="size-3.5"
+            >
+              <Disclosure className="size-2.5" />
+            </Button>
+          )}
+
+          {passes > 0 && (
+            <Badge
+              variant={passes > passWarningThreshold ? 'destructive' : 'secondary'}
+              className="h-3.5 flex-none px-1 font-mono text-[8.5px]"
+            >
+              fx {passes}
+            </Badge>
+          )}
+          {clip.effects.some((effect) => effect.mask !== undefined) && (
+            <Badge variant="secondary" className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4">
+              <SquareDashedIcon className="size-2" />
+              mask
+            </Badge>
+          )}
+
+          {/* A link is the reason two clips move as one, so it has to be visible: a user whose sound
+              follows their picture without knowing why cannot tell a feature from a fault. */}
+          {linkedPartner(clip) !== undefined && (
+            <LinkIcon
+              data-clip-linked="true"
+              aria-hidden="true"
+              className="size-2.5 flex-none text-muted-foreground"
+            />
+          )}
+        </div>
+
+        {clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (
+          <div className="absolute bottom-1 left-1.5 font-mono text-[9px] text-chart-4">
+            seed {clip.provenance.seed}
+          </div>
         )}
-        <span
-          style={{
-            font: token.textClip,
-            color: labelColor(clip),
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {clip.label}
-        </span>
-        {/* The spec's §6.1: a clip can be opened to show its parameter lanes. Offered only when
-            there is something to show — an empty disclosure punishes the user for using it. */}
-        {onToggleExpand !== undefined && hasAnimation(clip) && (
-          <button
-            type="button"
-            data-clip-disclosure={clip.id}
-            aria-expanded={expanded}
-            aria-label={`${expanded ? 'Hide' : 'Show'} ${clip.label} keyframe lanes`}
-            title={expanded ? 'Hide the parameter lanes' : 'Show the parameter lanes'}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleExpand(clip.id);
-            }}
-            style={{
-              flex: 'none',
-              width: 12,
-              height: 12,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: token.textSoft,
-              font: `400 8px ${token.fontUi}`,
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
-          >
-            {expanded ? '▾' : '▸'}
-          </button>
-        )}
-        {passes > 0 && (
-          <ClipChip tone={passes > passWarningThreshold ? 'warn' : 'ok'} label={`fx ${passes}`} />
-        )}
-        {clip.effects.some((effect) => effect.mask !== undefined) && <ClipChip tone="mask" label="mask" />}
-        {/* A link is the reason two clips move as one, so it has to be visible: a user whose sound
-            follows their picture without knowing why cannot tell a feature from a fault. */}
-        {linkedPartner(clip) !== undefined && (
-          <span
-            data-clip-linked="true"
-            aria-hidden="true"
-            title="Linked to its audio or video — they move together"
-            style={{ font: '400 9px sans-serif', color: token.textSoft, flex: 'none' }}
-          >
-            ⛓
-          </span>
+
+        {showHandles && (
+          <>
+            <TrimHandle
+              side="start"
+              rollable={rollableStart}
+              onPointerDown={(event) => onTrimStart?.(clip.id, event)}
+            />
+            <TrimHandle
+              side="end"
+              rollable={rollableEnd}
+              onPointerDown={(event) => onTrimEnd?.(clip.id, event)}
+            />
+          </>
         )}
       </div>
-
-      {clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 7,
-            bottom: 4,
-            font: token.textMeta,
-            color: token.generatedDim,
-          }}
-        >
-          seed {clip.provenance.seed}
-        </div>
-      )}
-
-      {showHandles && (
-        <>
-          <TrimHandle
-            side="start"
-            rollable={rollableStart}
-            onPointerDown={(event) => onTrimStart?.(clip.id, event)}
-          />
-          <TrimHandle
-            side="end"
-            rollable={rollableEnd}
-            onPointerDown={(event) => onTrimEnd?.(clip.id, event)}
-          />
-        </>
-      )}
-    </div>
+    </ActionMenu>
   );
 }
 
@@ -269,62 +220,16 @@ function StripLayer({ clip, strip }: { readonly clip: Clip; readonly strip: Clip
     <div
       aria-hidden="true"
       data-strip-kind={audio ? 'waveform' : 'filmstrip'}
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: audio ? '100%' : 34,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-      }}
+      className={cn('pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden', audio ? 'h-full' : 'h-8')}
     >
       <img
         src={strip.url}
         alt=""
         draggable={false}
-        style={{
-          position: 'absolute',
-          top: 0,
-          height: '100%',
-          width: `${strip.widths * 100}%`,
-          left: `${-strip.offset * 100}%`,
-          maxWidth: 'none',
-          opacity: 0.85,
-        }}
+        className="absolute top-0 h-full max-w-none opacity-85"
+        style={{ width: `${strip.widths * 100}%`, left: `${-strip.offset * 100}%` }}
       />
     </div>
-  );
-}
-
-function ClipChip({
-  tone,
-  label,
-}: {
-  readonly tone: 'ok' | 'warn' | 'mask';
-  readonly label: string;
-}): ReactNode {
-  const palette = {
-    ok: { fg: '#6fd8bf', bg: 'rgba(56, 193, 164, 0.16)' },
-    warn: { fg: token.warnText, bg: 'rgba(224, 164, 74, 0.2)' },
-    mask: { fg: '#ff9c7a', bg: 'rgba(255, 122, 82, 0.16)' },
-  }[tone];
-
-  return (
-    <span
-      style={{
-        height: 13,
-        padding: '0 5px',
-        borderRadius: 7,
-        background: palette.bg,
-        color: palette.fg,
-        font: `500 8.5px ${token.fontMono}`,
-        lineHeight: '13px',
-        flex: 'none',
-      }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -356,15 +261,8 @@ function TrimHandle({
         event.stopPropagation();
         onPointerDown(event);
       }}
-      style={{
-        position: 'absolute',
-        top: 0,
-        bottom: 0,
-        width: TRIM_HANDLE_PX,
-        ...(side === 'start' ? { left: 0 } : { right: 0 }),
-        cursor: 'ew-resize',
-        background: 'transparent',
-      }}
+      className={cn('absolute inset-y-0 cursor-ew-resize bg-transparent', side === 'start' ? 'left-0' : 'right-0')}
+      style={{ width: TRIM_HANDLE_PX }}
     />
   );
 }
