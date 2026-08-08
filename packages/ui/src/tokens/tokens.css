@@ -5,27 +5,43 @@
  * component that hard-codes `#4c9aff` is a bug: the mockups assign one meaning per accent — purple
  * always means "a generator produced this" — and a literal breaks that mapping silently.
  *
- * The palette is dark-only and deliberately so. This is a single-window desktop editor whose whole
- * job is judging picture; a light theme would change the surround the user grades against, and the
- * spec puts colour management out of scope rather than asking for two calibrated looks.
+ * Dark is the *default*, and for a reason worth keeping: this is a single-window editor whose job is
+ * judging picture, and a bright surround changes what the grade looks like. It is no longer the only
+ * option — a light theme is available under `[data-nos-theme='light']` because a tool nobody can use
+ * in a bright room is not serving anyone. The two palettes assign the same *meanings*, never the same
+ * values: purple still means "a generator produced this" in both.
+ *
+ * The structural surfaces step apart deliberately. An earlier version had the app, panel and canvas
+ * backgrounds within six units of each other, and the result was a window where nothing separated
+ * from anything — the panels were there, and the eye could not find them.
  */
 
 :root {
-  /* ---- Surfaces ---- */
-  --nos-bg-app: #0d0e11;
-  --nos-bg-panel: #101216;
-  --nos-bg-canvas: #0b0c0f;
-  --nos-bg-timeline: #0f1115;
-  --nos-surface-1: #171a20;
-  --nos-surface-2: #1a1d23;
-  --nos-surface-3: #1e2229;
-  --nos-surface-selected: #182233;
-  --nos-track-active: #141821;
+  /* ---- Surfaces ----
+     Stepped far enough apart to read as separate regions. The canvas is the darkest thing on screen
+     because picture is judged against it; panels sit above the app background, and controls above
+     the panels, so depth and function agree. */
+  --nos-bg-app: #0a0b0e;
+  --nos-bg-panel: #14171c;
+  /* Reserved for the preview, and the one surface a light theme does not lighten: picture is judged
+     against it. */
+  --nos-bg-canvas: #050608;
+  --nos-bg-timeline: #101318;
+  /* The lane area behind the clips. Chrome, not picture — which is why it is a separate token from
+     the canvas rather than a reuse of it. */
+  --nos-bg-lanes: #0d1015;
+  --nos-surface-1: #1c2027;
+  --nos-surface-2: #22262e;
+  --nos-surface-3: #292e37;
+  --nos-surface-selected: #1d2b42;
+  --nos-track-active: #171b23;
 
-  /* ---- Borders ---- */
-  --nos-border: #23262d;
-  --nos-border-subtle: #1f232a;
-  --nos-border-control: #2b3038;
+  /* ---- Borders ----
+     Strong enough to be a line rather than a suggestion: a border a user cannot see is a border that
+     does not separate anything. */
+  --nos-border: #333844;
+  --nos-border-subtle: #262b34;
+  --nos-border-control: #3d4450;
 
   /* ---- Text ---- */
   --nos-text-primary: #e2e6ec;
@@ -129,6 +145,79 @@
     --nos-transition-fast: 0ms;
     --nos-transition: 0ms;
   }
+}
+
+/**
+ * The light palette.
+ *
+ * Only the colours are redeclared — every metric, font and timing above is shared, because a theme is
+ * a change of surround and not of layout. The accents keep their *meanings* and change their values:
+ * the same blue that reads as an accent on near-black is illegible on near-white, so each is darkened
+ * until it carries the same weight against its own background.
+ *
+ * The canvas stays dark. It is the one surface that is not chrome — picture is judged against it, and
+ * a white surround around a graded frame changes what the user is looking at, which is the whole
+ * reason the dark theme is the default in the first place.
+ */
+:root[data-nos-theme='light'] {
+  --nos-bg-app: #eceef2;
+  --nos-bg-panel: #f7f8fa;
+  --nos-bg-canvas: #111317;
+  --nos-bg-timeline: #f1f3f6;
+  --nos-bg-lanes: #e8ebf0;
+  --nos-surface-1: #ffffff;
+  --nos-surface-2: #e7eaef;
+  --nos-surface-3: #dde1e8;
+  --nos-surface-selected: #d8e6fb;
+  --nos-track-active: #e4e8ef;
+
+  --nos-border: #c3c9d4;
+  --nos-border-subtle: #d8dde5;
+  --nos-border-control: #b3bac7;
+
+  --nos-text-primary: #171a20;
+  --nos-text-bright: #0f1216;
+  --nos-text-secondary: #2c323c;
+  --nos-text-muted: #4a515d;
+  --nos-text-soft: #59616e;
+  --nos-text-dim: #666e7c;
+  --nos-text-faint: #7b8391;
+  --nos-text-ghost: #949cab;
+
+  --nos-accent: #1f6fd6;
+  --nos-accent-strong: #14508f;
+  --nos-generated: #6b4fd8;
+  --nos-generated-text: #4a34a0;
+  --nos-generated-dim: #8b7ad0;
+  --nos-ok: #0f7a63;
+  --nos-ok-text: #0b5c4a;
+  --nos-warn: #a86a12;
+  --nos-warn-text: #8a560c;
+  --nos-mask: #cc4a22;
+  --nos-danger: #c02626;
+
+  /* Clip bodies keep their domain hues and lose their weight, so a timeline of them reads as a
+     diagram rather than as a wall of saturated blocks. */
+  --nos-clip-video-fill: linear-gradient(180deg, #cfdcf5, #bccdec);
+  --nos-clip-video-border: #7d9bd0;
+  --nos-clip-video-selected-fill: linear-gradient(180deg, #bcd2f6, #a8c2ee);
+  --nos-clip-generated-fill: linear-gradient(180deg, #ddd6f8, #cbc2f0);
+  --nos-clip-generated-border: #9b8cd8;
+  --nos-clip-audio-fill: #cbe8e0;
+  --nos-clip-audio-border: #6fae9d;
+  --nos-clip-audio-generated-fill: #d8d0f2;
+  --nos-clip-text-fill: #f2e4c4;
+  --nos-clip-text-border: #c2a15c;
+  --nos-clip-transition-fill: repeating-linear-gradient(45deg, #b9c9e8 0 3px, #cfdcf5 3px 6px);
+  --nos-clip-transition-border: #7d9bd0;
+
+  --nos-asset-video: #7d9bd0;
+  --nos-asset-audio: #6fae9d;
+  --nos-asset-image: #8d93a3;
+  --nos-asset-text: #c2a15c;
+  --nos-asset-unknown: #b3bac7;
+
+  --nos-focus-ring: 0 0 0 2px rgba(31, 111, 214, 0.5);
 }
 
 .nos-root {

@@ -252,7 +252,7 @@ export function Timeline(props: TimelineProps): ReactNode {
             flex: 1,
             position: 'relative',
             minWidth: 0,
-            background: token.bgCanvas,
+            background: token.bgLanes,
           }}
         >
           <div

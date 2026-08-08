@@ -16,7 +16,8 @@ import {
   isTimelineAsset,
 } from '@nos/media';
 import { Badge, Mono, PanelHeader, StatusDot } from '../primitives/Primitives.js';
-import { assetSwatch, folderSwatch, token } from '../tokens/tokens.js';
+import { token } from '../tokens/tokens.js';
+import { AssetIcon } from './AssetIcon.js';
 
 /**
  * The media browser.
@@ -27,8 +28,8 @@ import { assetSwatch, folderSwatch, token } from '../tokens/tokens.js';
  * - The tree is a projection of the filesystem, so it must survive changes made outside the app. It
  *   is rendered from an immutable `DirectoryNode`; the owner rebuilds that from watcher batches and
  *   passes a new one in.
- * - Arbitrary files and subdirectories are legal. Anything the app cannot type still renders, with a
- *   neutral swatch, because the user put it there deliberately.
+ * - Arbitrary files and subdirectories are legal. Anything the app cannot type still renders, as a
+ *   plain page, because the user put it there deliberately and "a file" is all this knows.
  * - Watcher state is shown. A silently dead watcher is worse than none: the user would trust a stale
  *   tree, and the spec's whole premise is that the folder is the truth.
  */
@@ -317,15 +318,13 @@ function TreeRow({
         {isDirectory ? (expanded ? '▾' : '▸') : '·'}
       </span>
 
-      <span
-        aria-hidden="true"
-        style={{
-          width: 9,
-          height: 9,
-          flex: 'none',
-          borderRadius: 2,
-          background: isDirectory ? folderSwatch(node.name) : assetSwatch((node as FileNode).assetType),
-        }}
+      {/* A glyph as well as the colour: a coloured square said there were four kinds of thing
+          without saying which was which, and nothing in the window taught the palette. */}
+      <AssetIcon
+        isDirectory={isDirectory}
+        name={node.name}
+        open={expanded}
+        {...(isDirectory ? {} : { assetType: (node as FileNode).assetType })}
       />
 
       <span

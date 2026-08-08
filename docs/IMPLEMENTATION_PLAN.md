@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1992 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2001 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2100,3 +2100,42 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   What the menu *offers* is a value, computed from the document, the selection and
   the clipboard, and tested without rendering anything; the component itself only
   knows how to be dismissed, chosen from, and kept on screen.
+
+- 2026-08-08: **Issues #1, #2, #6 and #7** — the visual pass, taken as one change
+  because they are one problem seen from four sides.
+
+  #6 said everything blended together, and it was right for a measurable reason:
+  the app, panel and canvas backgrounds sat within six units of each other, and the
+  borders were barely a shade off the surfaces they divided. The structural
+  surfaces now step apart deliberately and the borders are lines rather than
+  suggestions. That is a token change, which is exactly the right lever — one edit,
+  every panel.
+
+  #7 asked for a light theme. The tokens' own header had argued for dark-only, and
+  the argument was sound: a bright surround changes what a graded frame looks like.
+  It is not a reason to withhold the choice, so dark is now the *default* rather
+  than the only option. Only colours are redeclared — every metric, font and timing
+  is shared, because a theme is a change of surround and not of layout. The accents
+  keep their meanings and change their values: the blue that reads as an accent on
+  near-black is illegible on near-white.
+
+  Two decisions inside it. The **preview canvas stays dark in both themes** — it is
+  the one surface that is not chrome, and a white surround around a graded frame is
+  the thing the dark default exists to prevent. And the start-up theme deliberately
+  **does not follow the system**: a first run on a light desktop would put the user
+  in the wrong environment for the one judgement this tool supports. The verification
+  run caught that — the app came up light, because the original implementation
+  consulted `prefers-color-scheme` two lines below a comment explaining why it
+  should not.
+
+  #1 asked for real icons. A coloured square said there were four kinds of thing
+  without saying which was which, and nothing in the window taught the palette. Each
+  glyph is now the thing the file *is* — a frame with sprocket holes, a waveform, a
+  picture, lines of text — drawn as inline SVG so it inherits `currentColor`, needs
+  no network, and adds nothing to a project folder that belongs to the user. The
+  colour stays as reinforcement, which also makes the browser readable to someone
+  who cannot separate the hues.
+
+  #2 moved the transport under the preview. In the title bar it sat among file and
+  project actions, a hand's width from the frame being scrubbed and beside buttons
+  with nothing to do with playback.

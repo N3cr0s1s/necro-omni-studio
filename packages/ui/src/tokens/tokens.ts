@@ -14,6 +14,7 @@ export const token = {
   bgApp: 'var(--nos-bg-app)',
   bgPanel: 'var(--nos-bg-panel)',
   bgCanvas: 'var(--nos-bg-canvas)',
+  bgLanes: 'var(--nos-bg-lanes)',
   bgTimeline: 'var(--nos-bg-timeline)',
   surface1: 'var(--nos-surface-1)',
   surface2: 'var(--nos-surface-2)',

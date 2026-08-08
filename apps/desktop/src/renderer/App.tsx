@@ -57,6 +57,7 @@ import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
+import { useTheme } from './use-theme.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
@@ -134,6 +135,7 @@ export function App(): ReactNode {
   // Autosave writes a recovery *sibling*, never `project.json`: an autosave that overwrote the file
   // would destroy the last state the user deliberately saved, the moment they started experimenting.
   const autosave = useAutosave({ store, projectRoot: project?.root, bridge: bridge() });
+  const theme = useTheme();
 
   const tree = useProjectTree(project?.root);
   // The runtime probes ComfyUI once and reports which backend is actually in use; the registry then
@@ -606,15 +608,13 @@ export function App(): ReactNode {
         project={project}
         sidecar={sidecar}
         dirty={store.getSnapshot().dirty}
-        transport={transport}
-        frameRate={document.frameRate}
         jobs={runtime.snapshot.activeCount}
         onOpen={() => void openProject()}
         onSave={() => void save()}
         onExport={openExport}
         autosaveStatus={autosave.status}
-        meters={audio.meters}
-        onClearClip={audio.clearClip}
+        theme={theme.theme}
+        onToggleTheme={theme.toggle}
       />
 
       {autosave.offer !== undefined && (
@@ -722,6 +722,16 @@ export function App(): ReactNode {
             frame={playhead}
             sidecar={sidecar}
             resolveAsset={proxies.resolve}
+          />
+
+          {/* Under the picture it controls. In the title bar it sat among file and project actions,
+              a hand's width from the frame a user is scrubbing and beside buttons that have nothing
+              to do with playback. */}
+          <Transport
+            transport={transport}
+            frameRate={document.frameRate}
+            meters={audio.meters}
+            onClearClip={audio.clearClip}
           />
 
           <div ref={laneRef} style={{ flex: 'none' }}>
@@ -861,28 +871,24 @@ function TitleBar({
   project,
   sidecar,
   dirty,
-  transport,
-  frameRate,
   jobs,
   onOpen,
   onSave,
   onExport,
   autosaveStatus,
-  meters,
-  onClearClip,
+  theme,
+  onToggleTheme,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
   readonly dirty: boolean;
-  readonly transport: Transport;
-  readonly frameRate: FrameRate;
   readonly jobs: number;
   readonly onOpen: () => void;
   readonly onSave: () => void;
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
-  readonly meters: MeterReading | undefined;
-  readonly onClearClip: () => void;
+  readonly theme: 'dark' | 'light';
+  readonly onToggleTheme: () => void;
 }): ReactNode {
   return (
     <header
@@ -911,33 +917,6 @@ function TitleBar({
         {project?.name ?? 'no project open'}
         {dirty ? ' •' : ''}
       </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Button onClick={() => transport.step(-1)} title="Previous frame (←)">
-          ◀
-        </Button>
-        <Button
-          tone={transport.playing ? 'active' : 'default'}
-          onClick={transport.toggle}
-          title="Play or pause (space)"
-        >
-          {transport.playing ? 'Pause' : 'Play'}
-        </Button>
-        <Button onClick={() => transport.step(1)} title="Next frame (→)">
-          ▶
-        </Button>
-        <span style={{ font: '600 13px ui-monospace, monospace', color: 'var(--nos-text-primary)' }}>
-          {/* The core formatter, not a local one: it handles drop-frame, which is exactly the rule that
-              is wrong in every hand-rolled timecode. */}
-          {formatFrames(transport.frame, frameRate)}
-        </span>
-        {/* Beside the timecode, where an editor already looks during playback. A mix with no meter is
-            a mix that can only be checked by exporting it and listening. */}
-        <LevelMeter
-          {...(meters?.peaks !== undefined ? { peaks: meters.peaks } : {})}
-          clipped={meters?.clipped ?? false}
-          onClearClip={onClearClip}
-        />
-      </div>
 
       <div style={{ flex: 1 }} />
       {/* The spec's job chip: generation runs for minutes, and a user who cannot see that something is
@@ -967,6 +946,14 @@ function TitleBar({
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
       </span>
       {project !== undefined && <AutosaveChip status={autosaveStatus} />}
+      {/* Named for what it switches to rather than what is on: a control labelled with the current
+          state reads as a status, and a user has to guess whether pressing it changes anything. */}
+      <Button
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme'}
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </Button>
       <Button onClick={onOpen}>Open project</Button>
       <Button onClick={onSave} disabled={project === undefined}>
         Save
@@ -975,6 +962,72 @@ function TitleBar({
         Export
       </Button>
     </header>
+  );
+}
+
+/**
+ * The transport.
+ *
+ * Its own strip directly under the preview, because that is what it controls. In the title bar it sat
+ * among file and project actions — a hand's width from the frame being scrubbed, beside buttons that
+ * have nothing to do with playback — and a user looking at the picture had to look away to move it.
+ */
+function Transport({
+  transport,
+  frameRate,
+  meters,
+  onClearClip,
+}: {
+  readonly transport: Transport;
+  readonly frameRate: FrameRate;
+  readonly meters: MeterReading | undefined;
+  readonly onClearClip: () => void;
+}): ReactNode {
+  return (
+    <div
+      aria-label="Transport"
+      style={{
+        height: 'var(--nos-transport-height)',
+        flex: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '0 16px',
+        background: 'var(--nos-bg-panel)',
+        borderTop: '1px solid var(--nos-border)',
+        borderBottom: '1px solid var(--nos-border)',
+      }}
+    >
+      <Button onClick={() => transport.step(-1)} title="Previous frame (←)">
+        ◀
+      </Button>
+      <Button
+        tone={transport.playing ? 'active' : 'default'}
+        onClick={transport.toggle}
+        title="Play or pause (space)"
+      >
+        {transport.playing ? 'Pause' : 'Play'}
+      </Button>
+      <Button onClick={() => transport.step(1)} title="Next frame (→)">
+        ▶
+      </Button>
+
+      <span style={{ font: 'var(--nos-text-readout)', color: 'var(--nos-text-primary)' }}>
+        {/* The core formatter, not a local one: it handles drop-frame, which is exactly the rule that
+            is wrong in every hand-rolled timecode. */}
+        {formatFrames(transport.frame, frameRate)}
+      </span>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Beside the timecode, where an editor already looks during playback. A mix with no meter is a
+          mix that can only be checked by exporting it and listening. */}
+      <LevelMeter
+        {...(meters?.peaks !== undefined ? { peaks: meters.peaks } : {})}
+        clipped={meters?.clipped ?? false}
+        onClearClip={onClearClip}
+      />
+    </div>
   );
 }
 
