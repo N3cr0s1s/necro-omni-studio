@@ -33,6 +33,7 @@ import {
   ScissorsIcon,
   Trash2Icon,
   TypeIcon,
+  Volume2Icon,
   VolumeXIcon,
 } from 'lucide-react';
 import { Button } from '@nos/ui/components/ui/button';
@@ -89,6 +90,13 @@ export interface TimelineProps {
   readonly playhead: FrameIndex;
   readonly selectedClips: ReadonlySet<string>;
   readonly snapEnabled: boolean;
+  /**
+   * Whether dragging the playhead is audible.
+   *
+   * A preference rather than a mode: the spec asks for scrub audio, and scrub audio is also the first
+   * thing some editors turn off. Absent leaves the toggle out entirely rather than showing a dead one.
+   */
+  readonly scrubAudioEnabled?: boolean;
   readonly rippleEnabled: boolean;
 
   /** Filmstrips and waveforms by clip id, supplied as derivations complete. */
@@ -115,6 +123,7 @@ export interface TimelineProps {
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onToggleSnap?: () => void;
+  readonly onToggleScrubAudio?: () => void;
   readonly onToggleRipple?: () => void;
   readonly onZoom?: (framesPerPixel: number, anchorPx: number) => void;
   /** Scrolls the view by a pixel delta. Without it the timeline cannot be moved at all. */
@@ -432,12 +441,14 @@ export function Timeline(props: TimelineProps): ReactNode {
 
 function TimelineToolbar({
   snapEnabled,
+  scrubAudioEnabled,
   rippleEnabled,
   viewport,
   totalFrames,
   clipCount: clips,
   document,
   onToggleSnap,
+  onToggleScrubAudio,
   onToggleRipple,
   onFit,
   onAddTrack,
@@ -469,6 +480,22 @@ function TimelineToolbar({
         <ArrowRightLeftIcon />
         Ripple
       </Toggle>
+
+      {onToggleScrubAudio !== undefined && (
+        <Toggle
+          size="sm"
+          pressed={scrubAudioEnabled === true}
+          onPressedChange={() => onToggleScrubAudio()}
+          title={
+            scrubAudioEnabled === true
+              ? 'Scrub audio on: dragging the playhead plays what is under it'
+              : 'Scrub audio off: dragging the playhead is silent'
+          }
+        >
+          {scrubAudioEnabled === true ? <Volume2Icon /> : <VolumeXIcon />}
+          Scrub
+        </Toggle>
+      )}
 
       {(onMarkIn ?? onMarkOut) !== undefined && (
         <>

@@ -1216,3 +1216,34 @@ describe('markers', () => {
     expect(onRemoveMarker).toHaveBeenCalledWith(120);
   });
 });
+
+/**
+ * Scrub audio.
+ *
+ * §6.2 asks for "audio mix **and scrub**". The engine could play a short grain at a frame from the
+ * day it was written and nothing ever called it, so dragging the playhead was silent — and the toggle
+ * exists because scrub audio is also the first thing some editors turn off.
+ */
+describe('the scrub audio toggle', () => {
+  it('is left out entirely when nothing can toggle it', () => {
+    // A dead control teaches the user that the others might be dead too.
+    renderTimeline();
+    expect(screen.queryByRole('button', { name: /Scrub/ })).toBeNull();
+  });
+
+  it('says which way it is set, not just that it exists', () => {
+    renderTimeline({ scrubAudioEnabled: true, onToggleScrubAudio: vi.fn() });
+    expect(screen.getByTitle(/dragging the playhead plays what is under it/)).toBeTruthy();
+
+    cleanup();
+    renderTimeline({ scrubAudioEnabled: false, onToggleScrubAudio: vi.fn() });
+    expect(screen.getByTitle(/dragging the playhead is silent/)).toBeTruthy();
+  });
+
+  it('reports the toggle rather than performing it', () => {
+    const onToggleScrubAudio = vi.fn();
+    renderTimeline({ scrubAudioEnabled: true, onToggleScrubAudio });
+    screen.getByRole('button', { name: /Scrub/ }).click();
+    expect(onToggleScrubAudio).toHaveBeenCalled();
+  });
+});

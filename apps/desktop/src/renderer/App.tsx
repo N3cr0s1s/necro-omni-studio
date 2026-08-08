@@ -205,6 +205,8 @@ export function App(): ReactNode {
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [snap, setSnap] = useState(true);
+  // §6.2 asks for scrub audio, and scrub audio is also the first thing some editors turn off.
+  const [scrubAudio, setScrubAudio] = useState(true);
   const [ripple, setRipple] = useState(false);
   const [widthPx, setWidthPx] = useState(1200);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -668,6 +670,25 @@ export function App(): ReactNode {
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
+  /**
+   * Moving the playhead, audibly.
+   *
+   * The engine has been able to play a short grain at a frame since it was written — `scrub` is on its
+   * interface and on this hook's — and nothing ever called it, so dragging the playhead was silent and
+   * §6.2's "audio mix **and scrub**" was half implemented.
+   *
+   * Not while playing. The engine stops playback to make room for a grain, which is right when the
+   * transport is parked and wrong when it is running: a click on the ruler mid-playback should move
+   * the play position, not replace the sound with a blip.
+   */
+  const scrubTo = useCallback(
+    (frame: FrameIndex) => {
+      transport.seek(frame);
+      if (scrubAudio && !transport.playing) audio.scrub(frame);
+    },
+    [audio, scrubAudio, transport],
+  );
+
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   /*
@@ -1334,7 +1355,9 @@ export function App(): ReactNode {
                   selectedClips={selected}
                   snapEnabled={snap}
                   rippleEnabled={ripple}
-                  onScrub={transport.seek}
+                  onScrub={scrubTo}
+                  scrubAudioEnabled={scrubAudio}
+                  onToggleScrubAudio={() => setScrubAudio((on) => !on)}
                   onSelectClip={(clip, additive) =>
                     setSelected((current) =>
                       additive ? new Set([...current, clip]) : new Set([clip as string]),
