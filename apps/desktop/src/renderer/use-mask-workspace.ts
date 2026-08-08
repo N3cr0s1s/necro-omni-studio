@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AssetPath,
   type ClipId,
@@ -18,9 +18,11 @@ import {
   maskTrackId,
   moveTo,
   removePrompt,
+  createMaskCache,
   setPropagation,
 } from '@nos/masks';
-import type { SidecarInfo } from '../main/ipc-contract.js';
+import type { DesktopBridge, SidecarInfo } from '../main/ipc-contract.js';
+import { createBridgeMaskStorage } from './mask-storage.js';
 import { useSegmentation } from './use-segmentation.js';
 
 /**
@@ -52,13 +54,43 @@ export function useMaskWorkspace(
   selectedClip: string | undefined,
   playhead: FrameIndex,
   sidecar: SidecarInfo | undefined,
+  /**
+   * How the cache reaches the project folder.
+   *
+   * Passed in rather than reached for, so this hook stays testable without a shell — and so a build
+   * with no bridge at all degrades to masks that live only in memory rather than throwing.
+   */
+  bridge: () => DesktopBridge | undefined = () => (globalThis as { nos?: DesktopBridge }).nos,
 ): MaskWorkspace {
   const [sessions, setSessions] = useState<ReadonlyMap<string, MaskSession>>(new Map());
+  /** Clips whose cache has been read this session, so a select does not re-read on every render. */
+  const loaded = useRef<Set<string>>(new Set());
+  /** The run whose result is waiting to be written, set when it starts and cleared when it lands. */
+  const pendingSave = useRef<{ clip: ClipId; source: AssetPath } | undefined>(undefined);
+  const cache = useMemo(() => createMaskCache(createBridgeMaskStorage(bridge)), [bridge]);
 
   const located = useMemo(
     () => (selectedClip === undefined ? undefined : locateClip(document, clipId(selectedClip))),
     [document, selectedClip],
   );
+
+  /**
+   * Writes a finished run to `masks/`.
+   *
+   * Keyed on the run that produced it, so a session whose prompts have since changed cannot be saved
+   * under the old key — the cache's whole guarantee is that a hit means "these prompts, this range,
+   * this source", and a late write would break it.
+   */
+  useEffect(() => {
+    const pending = pendingSave.current;
+    if (pending === undefined) return;
+
+    const current = sessions.get(pending.clip);
+    if (current === undefined || current.running || current.frames.size === 0) return;
+
+    pendingSave.current = undefined;
+    void cache.save(current.track, pending.source, [...current.frames.values()]);
+  }, [cache, sessions]);
 
   const session = useMemo(() => {
     if (selectedClip === undefined || located === undefined) return undefined;
@@ -91,6 +123,50 @@ export function useMaskWorkspace(
 
   const segmentation = useSegmentation(sidecar, update);
 
+  /**
+   * The source a clip's masks are keyed against.
+   *
+   * Part of the cache key, so a mask cut from one take is never served for another — which is what
+   * makes the key content-addressed rather than merely a clip id.
+   */
+  const source = located?.clip.kind === 'video' ? located.clip.source.asset : undefined;
+
+  /**
+   * Reads a clip's masks back from `masks/` the first time it is selected.
+   *
+   * Without this the cache was write-only in effect: a project reopened the next morning had an effect
+   * bound to a mask that existed on disk and in no session, so it rendered unmasked — which reads as
+   * the mask being wrong rather than as the mask not being loaded.
+   *
+   * Runs once per clip, guarded by whether a session already exists rather than by a flag: a session
+   * that has been run has frames of its own, and re-reading over them would discard work.
+   */
+  useEffect(() => {
+    const key = selectedClip;
+    if (key === undefined || source === undefined || session === undefined) return;
+    if (session.frames.size > 0 || loaded.current.has(key)) return;
+
+    loaded.current.add(key);
+    let cancelled = false;
+
+    void cache.load(session.track, source).then((frames) => {
+      // Nothing cached is the common case and not worth a state update: an empty map replacing an
+      // empty map would re-render every panel bound to the session.
+      if (cancelled || frames.length === 0) return;
+      setSessions((current) => {
+        const existing = current.get(key);
+        if (existing === undefined || existing.frames.size > 0) return current;
+        const next = new Map(current);
+        next.set(key, { ...existing, frames: new Map(frames.map((frame) => [frame.frame, frame])) });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cache, selectedClip, session, source]);
+
   return {
     session,
     capabilities: segmentation.capabilities,
@@ -102,8 +178,13 @@ export function useMaskWorkspace(
       [update],
     ),
     run: useCallback(
-      (source: AssetPath) => {
-        if (session !== undefined) segmentation.run(session, source);
+      (asset: AssetPath) => {
+        if (session === undefined) return;
+        segmentation.run(session, asset);
+        // Saved when the run reports it is finished rather than here: the frames do not exist yet, and
+        // writing a partial set under a key that says "these prompts, this range" would turn a
+        // cancelled run into a cache hit that is quietly incomplete.
+        pendingSave.current = { clip: session.track.clip, source: asset };
       },
       [segmentation, session],
     ),
