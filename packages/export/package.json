@@ -1,0 +1,17 @@
+{
+  "name": "@nos/export",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Export settings, frame iteration and progress. Drives the same compositor the preview uses.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*",
+    "@nos/compositor": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

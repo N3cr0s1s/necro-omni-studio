@@ -113,8 +113,13 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       `node packages/text/rastercheck/run.mjs`).
 
 ### Phase 6 — M8: Export
-- [ ] Offscreen render loop reusing the compositor
-- [ ] ffmpeg pipe export (H.264/H.265), progress, cancel
+- [x] Export settings, validation, size estimate, frame iteration, progress
+      tracking (`@nos/export`). Calls `buildRenderPlan` directly — no
+      export-specific plan builder. 34 tests, including one asserting the export
+      plan is **identical** to the preview plan for the same frame.
+- [x] ffmpeg pipe encoder in the sidecar: streaming stdin, H.264/H.265, audio
+      muxing, progress, cancel. 17 tests against real ffmpeg, verifying a playable
+      mp4, the frame count, the exact frame rate and **decoded pixel orientation**.
 - [ ] Export dialog UI
 
 ### Phase 7 — M9: Generator framework
@@ -145,8 +150,8 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–5 complete (M1–M7).**
-**798 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–5 complete (M1–M7). Phase 6 in progress — encoder done, dialog UI left.**
+**832 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -155,9 +160,7 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: Phase 6 (M8) — ffmpeg export reusing the compositor. This is where the
-WYSIWYG guarantee gets its real test: export must build the *same* render plan and
-run the *same* executor, differing only in destination and texture provider. The Electron shell
+Next: the export dialog UI, then Phase 7 (M9) — the generator framework. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -240,6 +243,30 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Export rules (keep these)
+
+- Export has **no plan builder of its own**. It calls `buildRenderPlan` exactly as
+  the preview does; a second builder is precisely how the two would drift and break
+  the WYSIWYG guarantee. A test asserts the two plans are identical for a frame.
+- Frames stream over **one long-lived request** into ffmpeg's stdin. A 1080p RGBA
+  frame is 8 MB and a three-minute export ~43 GB; that is fine through a pipe and
+  hopeless as thousands of separate requests. Awaiting `drain` is what applies
+  backpressure — without it the renderer buffers the whole export in memory.
+- `-vf vflip` is **mandatory**: WebGL's framebuffer origin is bottom-left, every
+  image format's is top-left, so `readPixels` output is upside down. Flipping in
+  ffmpeg keeps the preview path free of a transform that exists only for export.
+  A test decodes frame 0 and checks the pixels.
+- `-pix_fmt yuv420p` is forced. ffmpeg would otherwise pick `yuv444p` for some
+  inputs, producing a file that plays in VLC and shows black in QuickTime.
+- Frame counting tracks **bytes**, not frames per chunk. HTTP chunk boundaries do
+  not align with frame boundaries, so dividing each chunk discards the remainder
+  and under-reports progress.
+- stderr is drained **continuously**, and the drain task must be **referenced** —
+  an unreferenced `asyncio.create_task` can be garbage collected mid-await, which
+  reintroduces the pipe-full deadlock the drain exists to prevent.
+- A cancelled export **deletes** its partial file: a truncated mp4 has no moov atom,
+  will not play, and leaving one in `renders/` invites the user to try.
 
 ### Text layer rules (keep these)
 
@@ -704,6 +731,22 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   just-created texture survives the first sweep. That is deliberate — evicting
   before first use would make a clip re-rasterize on every sweep tick — and the test
   now asserts both halves of the behaviour.
+
+- 2026-08-08: Export encoder (M8). 34 TypeScript tests + 17 Python tests against
+  real ffmpeg — a playable mp4, correct dimensions and frame count, the exact
+  rational frame rate surviving, audio muxing, H.265, and cancellation removing the
+  partial file.
+
+  The orientation test earns its keep: it decodes frame 0 back to RGBA and checks
+  which half is which colour. Without `-vf vflip` an export is upside down, and that
+  is invisible in the preview — it would only be discovered in the delivered file.
+
+  Two real bugs found here. A test caught the frame counter dividing **per chunk**,
+  so integer division discarded the remainder every time and progress under-reported
+  on any streamed export (three chunks of 3.33 frames counted 9, not 10); it now
+  tracks bytes. And `ruff` caught RUF006 on my own defensive code: the stderr drain
+  task was created without a reference, so it could be garbage collected mid-await
+  and cause exactly the pipe-full encoder deadlock it was written to prevent.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

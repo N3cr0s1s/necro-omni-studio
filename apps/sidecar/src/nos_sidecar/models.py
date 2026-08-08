@@ -145,3 +145,34 @@ class ErrorModel(BaseModel):
 
     kind: str
     detail: str
+
+
+class ExportStartRequest(StrictModel):
+    """Begins an encode job.
+
+    ``expected_frames`` is advisory — it drives progress reporting only. The encoder does not
+    enforce it,
+    because a cancelled export legitimately writes fewer frames than planned.
+    """
+
+    job_id: str = Field(min_length=1, max_length=128)
+    output: str
+    width: int = Field(gt=0, le=8192)
+    height: int = Field(gt=0, le=8192)
+    frame_rate: str = Field(description='Exact rational, e.g. "30000/1001"')
+    codec: Literal["h264", "h265"] = "h264"
+    crf: int = Field(default=19, ge=0, le=51)
+    speed: Literal["veryfast", "fast", "medium", "slow"] = "medium"
+    expected_frames: int = Field(default=0, ge=0)
+    audio: str | None = None
+    audio_codec: Literal["aac", "flac"] = "aac"
+    audio_bitrate_kbps: int = Field(default=320, gt=0, le=2000)
+
+
+class ExportStatusModel(BaseModel):
+    job_id: str
+    state: str
+    frames_written: int
+    expected_frames: int
+    output: str
+    error: str | None = None

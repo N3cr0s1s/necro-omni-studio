@@ -32,19 +32,22 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__, ffmpeg
+from .encoder import EncodeError, EncoderService
 from .media_service import MediaError, MediaService
 from .models import (
     CacheStatsModel,
     DerivedArtifactModel,
     DeriveRequest,
     ErrorModel,
+    ExportStartRequest,
+    ExportStatusModel,
     HealthModel,
     MediaMetadataModel,
     ProbeRequest,
     ScanRequest,
     ScanResponse,
 )
-from .paths import ensure_project_layout
+from .paths import PathError, ensure_project_layout, to_relative
 
 
 class Settings:
@@ -89,6 +92,15 @@ def require_token_header_or_query(
     _check_token(request, x_nos_token or token)
 
 
+def get_encoder(request: Request) -> EncoderService:
+    """Resolve the encoder service, or report that startup has not finished."""
+    resolved = getattr(request.app.state, "encoder", None)
+    if resolved is None:
+        raise HTTPException(status_code=503, detail="sidecar is not ready")
+    assert isinstance(resolved, EncoderService)
+    return resolved
+
+
 def get_service(request: Request) -> MediaService:
     """Resolve the media service, or report that startup has not finished."""
     resolved = getattr(request.app.state, "service", None)
@@ -101,6 +113,7 @@ def get_service(request: Request) -> MediaService:
 Authorized = Depends(require_token)
 AuthorizedUrl = Depends(require_token_header_or_query)
 ServiceDep = Annotated[MediaService, Depends(get_service)]
+EncoderDep = Annotated[EncoderService, Depends(get_encoder)]
 
 
 def create_app(project_root: Path, token: str | None = None) -> FastAPI:
@@ -119,11 +132,19 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
         tooling = ffmpeg.Tooling.discover()
         ensure_project_layout(settings.project_root)
         instance.state.service = MediaService(settings.project_root, tooling)
+        instance.state.encoder = EncoderService(settings.project_root, tooling)
         instance.state.tooling = tooling
         try:
             yield
         finally:
+            # Cancel anything still encoding: a half-written mp4 outliving the process is worse than
+            # none, and the file would have no moov atom so it could not play anyway.
+            encoder = getattr(instance.state, "encoder", None)
+            if encoder is not None:
+                for job in encoder.active():
+                    await encoder.cancel(job)
             instance.state.service = None
+            instance.state.encoder = None
 
     app = FastAPI(
         title="Necro Omni Studio media sidecar",
@@ -136,6 +157,14 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
         openapi_url=None,
     )
     app.state.settings = settings
+
+    @app.exception_handler(EncodeError)
+    async def encode_error_handler(_request: Request, error: Exception) -> JSONResponse:
+        assert isinstance(error, EncodeError)
+        return JSONResponse(
+            status_code=error.status,
+            content=ErrorModel(kind=error.kind, detail=error.detail).model_dump(),
+        )
 
     @app.exception_handler(MediaError)
     async def media_error_handler(_request: Request, error: Exception) -> JSONResponse:
@@ -196,4 +225,86 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
         size_bytes, file_count = media.cache_stats()
         return CacheStatsModel(size_bytes=size_bytes, file_count=file_count)
 
+    @app.post("/export/start", response_model=ExportStatusModel, dependencies=[Authorized])
+    async def export_start(
+        body: ExportStartRequest, media: ServiceDep, encoder: EncoderDep
+    ) -> ExportStatusModel:
+        """Spawn an encoder and hold its stdin open."""
+        destination = media.resolve(body.output)
+        audio_path = media.require_file(body.audio) if body.audio is not None else None
+
+        job = await encoder.start(
+            body.job_id,
+            destination,
+            width=body.width,
+            height=body.height,
+            frame_rate=body.frame_rate,
+            codec=body.codec,
+            crf=body.crf,
+            speed=body.speed,
+            expected_frames=body.expected_frames,
+            audio_path=audio_path,
+            audio_codec=body.audio_codec,
+            audio_bitrate_kbps=body.audio_bitrate_kbps,
+        )
+        return _export_status(job, media)
+
+    @app.post(
+        "/export/{job_id}/frames", response_model=ExportStatusModel, dependencies=[Authorized]
+    )
+    async def export_frames(
+        job_id: str, request: Request, media: ServiceDep, encoder: EncoderDep
+    ) -> ExportStatusModel:
+        """Stream raw RGBA frames into the encoder.
+
+        The body is consumed as it arrives rather than buffered: an export is far larger than
+        memory, and
+        awaiting each write is what applies backpressure to the renderer.
+        """
+        job = encoder.get(job_id)
+        async for chunk in request.stream():
+            if chunk:
+                await encoder.write_frames(job, chunk)
+        return _export_status(job, media)
+
+    @app.get("/export/{job_id}", response_model=ExportStatusModel, dependencies=[Authorized])
+    async def export_status(
+        job_id: str, media: ServiceDep, encoder: EncoderDep
+    ) -> ExportStatusModel:
+        return _export_status(encoder.get(job_id), media)
+
+    @app.post(
+        "/export/{job_id}/finish", response_model=ExportStatusModel, dependencies=[Authorized]
+    )
+    async def export_finish(
+        job_id: str, media: ServiceDep, encoder: EncoderDep
+    ) -> ExportStatusModel:
+        job = await encoder.finish(encoder.get(job_id))
+        return _export_status(job, media)
+
+    @app.post(
+        "/export/{job_id}/cancel", response_model=ExportStatusModel, dependencies=[Authorized]
+    )
+    async def export_cancel(
+        job_id: str, media: ServiceDep, encoder: EncoderDep
+    ) -> ExportStatusModel:
+        job = await encoder.cancel(encoder.get(job_id))
+        return _export_status(job, media)
+
     return app
+
+
+def _export_status(job, media: MediaService) -> ExportStatusModel:
+    """Project a job onto the wire model, reporting the output project-relative."""
+    try:
+        output = to_relative(media.root, job.output)
+    except PathError:
+        output = str(job.output)
+    return ExportStatusModel(
+        job_id=job.job_id,
+        state=job.state.value,
+        frames_written=job.frames_written,
+        expected_frames=job.expected_frames,
+        output=output,
+        error=job.error,
+    )
