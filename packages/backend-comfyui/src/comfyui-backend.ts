@@ -1,4 +1,4 @@
-import { type Result, assetPath, err, ok } from '@nos/core';
+import { type AssetPath, type Result, assetPath, err, ok } from '@nos/core';
 import type {
   BackendCapabilities,
   BackendError,
@@ -60,6 +60,15 @@ export interface ComfyUiBackendOptions {
   readonly clientId: string;
   /** Where downloaded outputs land, project-relative. */
   readonly outputFolder?: string;
+  /**
+   * Copies a finished output out of the backend and into the project folder.
+   *
+   * Required, and the reason a generation used to end with nothing the user could reach: ComfyUI
+   * writes into *its own* output directory, so a job could complete, report three files, show three
+   * variants — and none of them existed anywhere the application could read. Injected because
+   * writing to disk is the shell's privilege, not this package's.
+   */
+  readonly download: (query: string, destination: AssetPath) => Promise<Result<void, BackendError>>;
 }
 
 interface HistoryEntry {
@@ -71,6 +80,25 @@ interface ComfyFileRef {
   readonly filename: string;
   readonly subfolder?: string;
   readonly type?: string;
+}
+
+/**
+ * The `/view` query for one output file.
+ *
+ * `subfolder` and `type` both matter: ComfyUI serves temp and output files from different roots, and
+ * a preview node writes into a subfolder — omitting either returns a 404 for a file that is there.
+ */
+export function viewQuery(file: {
+  readonly filename: string;
+  readonly subfolder?: string;
+  readonly type?: string;
+}): string {
+  const parameters = new URLSearchParams({ filename: file.filename });
+  if (file.subfolder !== undefined && file.subfolder !== '') {
+    parameters.set('subfolder', file.subfolder);
+  }
+  parameters.set('type', file.type ?? 'output');
+  return `/view?${parameters.toString()}`;
 }
 
 export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorBackend {
@@ -183,12 +211,20 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
         for (const [outputKey, files] of Object.entries(nodeOutputs)) {
           for (const file of files ?? []) {
             if (typeof file?.filename !== 'string') continue;
+
+            // The filename alone would collide across jobs — ComfyUI names by prefix and counter, and
+            // two runs of one generator produce `sfx_00001_.flac` twice. Prefixing with the job keeps
+            // a variant set distinguishable in `generated/` after the fact.
+            const destination = assetPath(`${outputFolder}/${job}_${file.filename}`);
+            const copied = await options.download(viewQuery(file), destination);
+            if (!copied.ok) return copied;
+
             outputs.push({
               // Keyed by node so the manifest's `outputs[].node` can match it. The manifest, not the
               // backend, decides what an output *means*.
               key: nodeId,
               type: guessType(file.filename, outputKey),
-              path: assetPath(`${outputFolder}/${file.filename}`),
+              path: destination,
             });
           }
         }

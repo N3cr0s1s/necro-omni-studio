@@ -123,6 +123,19 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
     () =>
       createComfyUiBackend({
         endpoint: { baseUrl: endpoint },
+        // The step that made a finished generation reachable at all: ComfyUI writes into its own
+        // output directory, so without this a job completed, reported three files, showed three
+        // variants — and none of them existed anywhere the application could read.
+        download: async (query, destination) => {
+          const api = bridge();
+          if (api === undefined) {
+            return { ok: false, error: { kind: 'unreachable', detail: 'no desktop bridge' } };
+          }
+          const result = await api.backendDownload(query, destination);
+          return result.ok
+            ? { ok: true, value: undefined }
+            : { ok: false, error: { kind: 'unreachable', detail: result.body } };
+        },
         transport: {
           // Every HTTP call goes through the main process. ComfyUI sends no CORS headers, so a direct
           // fetch from a `file://` renderer fails as "unreachable" with the server running perfectly —

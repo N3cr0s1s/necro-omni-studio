@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1944 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1952 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2043,3 +2043,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   as a duplicate — the destination is already named in the field above. The control
   now carries the path in its own title and adds the *action* rather than a second
   copy of the information.
+
+- 2026-08-08: **Issue #3** — generated output was unreachable. The report: three
+  SFX variants generated, visible in ComfyUI, visible in the Variants tab, and
+  neither audible nor present in the file browser.
+
+  The cause was one missing step. `collect` built `generated/<filename>` — a
+  *project-relative path* — and **nothing ever downloaded the file**. ComfyUI writes
+  into its own output directory, so a job could finish, report three files and show
+  three variants while none of them existed anywhere the application could read.
+  The module's own header had documented `GET /view?filename=… download` since M10;
+  the download was never written.
+
+  Fetching now happens in the main process, through a new `backendDownload` channel:
+  bytes crossing the boundary and a path on disk are both its business and neither
+  is the renderer's. Written to a temporary sibling and renamed, because the folder
+  watcher is live and a partially written file would surface in the browser as an
+  asset the user could drag onto a timeline.
+
+  Outputs are prefixed with the job id. ComfyUI names by prefix and counter, so two
+  runs of one generator both produce `bed_0031.flac` and the second would overwrite
+  the first.
+
+  The second half of the report — *"nor can I listen to them"* — was a control the
+  picker has offered since M9 with nothing wired to it. Auditioning is an element
+  rather than the mix engine on purpose: what is being auditioned is one *file*,
+  before it is a clip, with no track, no automation and no place on the timeline,
+  and routing it through the mixer would mean inventing all three to throw them
+  away. Selecting a different variant stops the previous one, which is the one
+  thing that would otherwise make an A/B comparison useless.

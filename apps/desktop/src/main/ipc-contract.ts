@@ -44,6 +44,8 @@ export const IPC = {
   backendFetch: 'backend:fetch',
   /** Uploads a project file to the backend as multipart form data. */
   backendUpload: 'backend:upload',
+  /** Downloads a backend file into the project folder. */
+  backendDownload: 'backend:download',
   /** Where the generator backend lives. */
   backendConfig: 'backend:config',
   /** Streams encoded frame bytes to the sidecar from the main process. */
@@ -182,6 +184,15 @@ export interface DesktopBridge {
   /** Uploads a project file to the backend. The bytes never pass through the renderer. */
   backendUpload(path: string, file: string, field?: string): Promise<BackendResponse>;
   backendConfig(): Promise<BackendConfig>;
+  /**
+   * Downloads a file from the generator backend into the project folder.
+   *
+   * The one thing missing that made generated output unreachable: the backend reported *where the
+   * file would be* in the project and nothing ever fetched it, so a finished generation existed only
+   * inside ComfyUI. Bytes cross the boundary in the main process, which is also the only side
+   * allowed to name a path on disk.
+   */
+  backendDownload(path: string, destination: string): Promise<BackendResponse>;
 
   /**
    * Sends raw frames to the encoder, from the main process.

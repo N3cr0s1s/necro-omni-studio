@@ -15,6 +15,8 @@ import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPi
 import { ClipInspector } from './ClipInspector.js';
 import { TextInspector } from './TextInspector.js';
 import { ProjectSettings } from './ProjectSettings.js';
+import { useAudition } from './use-audition.js';
+import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
 
@@ -44,6 +46,8 @@ export interface RightPanelProps {
   readonly libraryProblems: readonly LibraryProblem[];
   readonly runtime: GeneratorRuntime;
   readonly playhead: FrameIndex;
+  /** Where the sidecar serves project files, so a generated variant can be auditioned. */
+  readonly sidecar: SidecarInfo | undefined;
   readonly selectedClip: string | undefined;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -398,8 +402,9 @@ function GenerateTab({
  * is the behaviour the spec asks for and the reason the picker is driven by a derived selection rather
  * than by a "generation finished" event.
  */
-function VariantsTab({ runtime, registry, onAcceptVariant }: RightPanelProps): ReactNode {
+function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanelProps): ReactNode {
   const [current, setCurrent] = useState<string | undefined>(undefined);
+  const audition = useAudition(sidecar);
 
   const group = runtime.snapshot.groups[runtime.snapshot.groups.length - 1];
   const manifest = group === undefined ? undefined : registry?.manifestFor(group.generator);
@@ -426,7 +431,14 @@ function VariantsTab({ runtime, registry, onAcceptVariant }: RightPanelProps): R
     <div style={{ padding: 12 }}>
       <VariantPicker
         selection={selection}
-        onSelect={(run) => setCurrent(run)}
+        auditioning={audition.playing}
+        onAudition={() => audition.toggle(selection.current?.output?.path)}
+        onSelect={(run) => {
+          // Stopped on a change of variant: leaving the previous one playing under the new selection
+          // is the one thing that would make an A/B comparison useless.
+          audition.stop();
+          setCurrent(run);
+        }}
         onStep={(delta) => {
           const ready = selection.candidates.filter((candidate) => candidate.ready);
           if (ready.length === 0) return;
@@ -442,6 +454,7 @@ function VariantsTab({ runtime, registry, onAcceptVariant }: RightPanelProps): R
         }}
         onDiscard={() => runtime.cancelGroup(selection.group)}
       />
+      {audition.error !== undefined && <Mono tone="var(--nos-danger)">{audition.error}</Mono>}
     </div>
   );
 }

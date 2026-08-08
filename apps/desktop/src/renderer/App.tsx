@@ -748,6 +748,7 @@ export function App(): ReactNode {
           libraryProblems={library.problems}
           runtime={runtime}
           playhead={playhead}
+          sidecar={sidecar}
           selectedClip={[...selected][0]}
           canUndo={store.getSnapshot().canUndo}
           canRedo={store.getSnapshot().canRedo}

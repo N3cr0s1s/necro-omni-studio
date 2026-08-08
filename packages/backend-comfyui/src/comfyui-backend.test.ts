@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type ComfyUiBackendOptions,
   type ComfyUiSocket,
   type ComfyUiTransport,
   createComfyUiBackend,
   parseSocketEvent,
+  viewQuery,
 } from './comfyui-backend.js';
 
 /** A transport whose responses the test scripts, so no server is needed. */
@@ -43,12 +45,23 @@ function fakeTransport(
   };
 }
 
-const backendWith = (transport: ComfyUiTransport) =>
+/** Records what the backend asked to be downloaded, since that is the step outputs depend on. */
+const downloads: { query: string; destination: string }[] = [];
+
+type Download = ComfyUiBackendOptions['download'];
+
+const backendWith = (transport: ComfyUiTransport, download: Download = defaultDownload) =>
   createComfyUiBackend({
     endpoint: { baseUrl: 'http://localhost:8188' },
     transport,
     clientId: 'client-1',
+    download,
   });
+
+const defaultDownload: Download = async (query, destination) => {
+  downloads.push({ query, destination });
+  return { ok: true, value: undefined };
+};
 
 describe('submit', () => {
   it('posts the graph and returns the prompt id', async () => {
@@ -148,10 +161,37 @@ describe('collect', () => {
   };
 
   it('maps history outputs onto project-relative paths', async () => {
+    // Prefixed with the job: ComfyUI names by prefix and counter, so two runs of one generator both
+    // produce `bed_0031.flac` and the second would overwrite the first in `generated/`.
     const result = await backendWith(fakeTransport({ '/history/': history })).collect('job1');
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual([{ key: '57', type: 'audio', path: 'generated/bed_0031.flac' }]);
+      expect(result.value).toEqual([{ key: '57', type: 'audio', path: 'generated/job1_bed_0031.flac' }]);
+    }
+  });
+
+  it('downloads every output into the project, which is what makes one reachable', async () => {
+    // ComfyUI writes into its own output directory. Without this a job completes, reports its files
+    // and shows its variants, while none of them exist anywhere the application can read.
+    downloads.length = 0;
+    await backendWith(fakeTransport({ '/history/': history })).collect('job1');
+
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0]?.query).toContain('filename=bed_0031.flac');
+    expect(downloads[0]?.destination).toBe('generated/job1_bed_0031.flac');
+  });
+
+  it('reports a download that failed rather than a file that is not there', async () => {
+    const failing: Download = async () => ({
+      ok: false,
+      error: { kind: 'unreachable', detail: 'connection refused' },
+    });
+    const result = await backendWith(fakeTransport({ '/history/': history }), failing).collect('job1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe('unreachable');
+      expect('detail' in result.error && result.error.detail).toContain('connection refused');
     }
   });
 
@@ -277,5 +317,32 @@ describe('parseSocketEvent', () => {
     // A NaN fraction would render an empty progress bar with no clue why.
     const event = parseSocketEvent({ type: 'progress', data: {} });
     expect(event).toMatchObject({ kind: 'progress', value: 0, max: 0 });
+  });
+});
+
+describe('the view query', () => {
+  it('names the file', () => {
+    expect(viewQuery({ filename: 'bed_0031.flac' })).toContain('filename=bed_0031.flac');
+  });
+
+  it('defaults to the output root, which is where a finished render lands', () => {
+    expect(viewQuery({ filename: 'a.flac' })).toContain('type=output');
+  });
+
+  it('carries the subfolder a preview node writes into', () => {
+    // Omitting it returns a 404 for a file that is there.
+    expect(viewQuery({ filename: 'a.png', subfolder: 'previews' })).toContain('subfolder=previews');
+  });
+
+  it('omits an empty subfolder rather than sending a blank one', () => {
+    expect(viewQuery({ filename: 'a.png', subfolder: '' })).not.toContain('subfolder=');
+  });
+
+  it('honours a temp output, which is served from a different root', () => {
+    expect(viewQuery({ filename: 'a.png', type: 'temp' })).toContain('type=temp');
+  });
+
+  it('escapes a filename that needs it', () => {
+    expect(viewQuery({ filename: 'take one.flac' })).toContain('filename=take+one.flac');
   });
 });

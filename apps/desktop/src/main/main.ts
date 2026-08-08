@@ -291,6 +291,36 @@ function registerHandlers(): void {
     },
   );
 
+  ipcMain.handle(
+    IPC.backendDownload,
+    async (_event, path: unknown, destination: unknown): Promise<BackendResponse> => {
+      const target = resolveInProject(requireProject(), requireString(destination));
+      const { baseUrl } = backendConfig();
+
+      try {
+        const response = await fetch(`${baseUrl}${requireBackendPath(path)}`, {
+          headers: backendAuthHeaders(),
+        });
+        if (!response.ok) {
+          return { ok: false, status: response.status, body: await response.text() };
+        }
+
+        const { mkdir, writeFile, rename } = await import('node:fs/promises');
+        await mkdir(dirname(target), { recursive: true });
+        // Through a temporary sibling and a rename, for the same reason `project.json` is: the
+        // folder watcher is live, and a partially written file would surface in the browser as an
+        // asset the user could drag onto a timeline.
+        const temporary = `${target}.partial`;
+        await writeFile(temporary, Buffer.from(await response.arrayBuffer()));
+        await rename(temporary, target);
+
+        return { ok: true, status: response.status, body: '' };
+      } catch (error) {
+        return { ok: false, status: 0, body: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
+
   ipcMain.handle(IPC.backendFetch, async (_event, path: unknown, init: unknown): Promise<BackendResponse> => {
     const options = (init ?? {}) as { method?: string; body?: string; contentType?: string };
     return callBackend(requireBackendPath(path), {

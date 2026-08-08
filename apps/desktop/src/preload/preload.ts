@@ -48,6 +48,7 @@ const bridge: DesktopBridge = {
   backendFetch: (path, init) => ipcRenderer.invoke(IPC.backendFetch, path, init),
   backendUpload: (path, file, field) => ipcRenderer.invoke(IPC.backendUpload, path, file, field),
   backendConfig: () => ipcRenderer.invoke(IPC.backendConfig),
+  backendDownload: (path, destination) => ipcRenderer.invoke(IPC.backendDownload, path, destination),
   exportFrames: (path, frames) => ipcRenderer.invoke(IPC.exportFrames, path, frames),
 };
 
