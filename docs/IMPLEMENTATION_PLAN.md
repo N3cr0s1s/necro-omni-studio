@@ -221,7 +221,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2303 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2312 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Branch `build/foundation`, and `refactor/shadcn-baseui` on top of it (pushed).
@@ -241,6 +241,13 @@ ever tracking the first.
   opacity per frame since M4 and the shader honours all five; nothing could write one, so every clip
   sat centred, unscaled and fully opaque forever. Fixed: `@nos/editing/clip-transform` and a framing
   section in the clip inspector.
+- **A title's outline and shadow could not be set.** Rasterized since M7, including the care taken
+  not to draw the shadow twice — in a code path that had never run, because nothing could switch an
+  outline on. Fixed: the text inspector now offers every field `TextContent` carries.
+
+One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
+graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
+so building one would be widening the scope rather than closing a gap.
 
 The lesson worth keeping: when this plan says a milestone is done, check that a *user* can reach it,
 not that the package exports it. Grep for a document field that nothing writes.
