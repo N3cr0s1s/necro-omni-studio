@@ -1,0 +1,14 @@
+{
+  "name": "@nos/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain model, rational time math, document patches and dependency wiring. No I/O, no DOM.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

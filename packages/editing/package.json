@@ -1,0 +1,16 @@
+{
+  "name": "@nos/editing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Timeline editing operations: cut, trim, slip, move, ripple, snap, track management. Pure document transforms.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

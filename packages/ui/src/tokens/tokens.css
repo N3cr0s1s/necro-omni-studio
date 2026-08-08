@@ -1,0 +1,146 @@
+/**
+ * Design tokens, transcribed from the Claude Design mockups.
+ *
+ * Every colour, size and font in the application resolves through a variable declared here. A
+ * component that hard-codes `#4c9aff` is a bug: the mockups assign one meaning per accent — purple
+ * always means "a generator produced this" — and a literal breaks that mapping silently.
+ *
+ * The palette is dark-only and deliberately so. This is a single-window desktop editor whose whole
+ * job is judging picture; a light theme would change the surround the user grades against, and the
+ * spec puts colour management out of scope rather than asking for two calibrated looks.
+ */
+
+:root {
+  /* ---- Surfaces ---- */
+  --nos-bg-app: #0d0e11;
+  --nos-bg-panel: #101216;
+  --nos-bg-canvas: #0b0c0f;
+  --nos-bg-timeline: #0f1115;
+  --nos-surface-1: #171a20;
+  --nos-surface-2: #1a1d23;
+  --nos-surface-3: #1e2229;
+  --nos-surface-selected: #182233;
+  --nos-track-active: #141821;
+
+  /* ---- Borders ---- */
+  --nos-border: #23262d;
+  --nos-border-subtle: #1f232a;
+  --nos-border-control: #2b3038;
+
+  /* ---- Text ---- */
+  --nos-text-primary: #e2e6ec;
+  --nos-text-bright: #dfe3ea;
+  --nos-text-secondary: #c3cad6;
+  --nos-text-muted: #9aa1ad;
+  --nos-text-soft: #8a919e;
+  --nos-text-dim: #7d8492;
+  --nos-text-faint: #5a6068;
+  --nos-text-ghost: #4f555f;
+
+  /* ---- Accents: one meaning each ---- */
+  --nos-accent: #4c9aff;
+  --nos-accent-strong: #2b62b8;
+  --nos-generated: #9b8cff;
+  --nos-generated-text: #cfc6ff;
+  --nos-generated-dim: #7a6fb8;
+  --nos-ok: #38c1a4;
+  --nos-ok-text: #8fd8c7;
+  --nos-warn: #e0a44a;
+  --nos-warn-text: #e5be7c;
+  --nos-mask: #ff7a52;
+  --nos-danger: #ff6b6b;
+
+  /* ---- Domain fills for clip bodies ---- */
+  --nos-clip-video-fill: linear-gradient(180deg, #2f3d5c, #26314a);
+  --nos-clip-video-border: #40527a;
+  --nos-clip-video-selected-fill: linear-gradient(180deg, #33436a, #293656);
+  --nos-clip-generated-fill: linear-gradient(180deg, #2c2748, #241f3c);
+  --nos-clip-generated-border: #4b4180;
+  --nos-clip-audio-fill: #17322e;
+  --nos-clip-audio-border: #2f5f56;
+  --nos-clip-audio-generated-fill: #2a2145;
+  --nos-clip-text-fill: #38301d;
+  --nos-clip-text-border: #5c4c26;
+  --nos-clip-transition-fill: repeating-linear-gradient(45deg, #3d4f7a 0 3px, #2a3556 3px 6px);
+  --nos-clip-transition-border: #56699a;
+
+  /* ---- Asset type swatches, used by the browser ---- */
+  --nos-asset-video: #33415e;
+  --nos-asset-audio: #1e3b37;
+  --nos-asset-image: #3a4150;
+  --nos-asset-text: #5c4c26;
+  --nos-asset-unknown: #2b3038;
+
+  /* ---- Typography ---- */
+  --nos-font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Every numeric readout — timecode, frame counts, seeds, hashes, sizes — uses the mono stack so
+     digits align in columns and a changing value does not reflow its neighbours. */
+  --nos-font-mono: ui-monospace, Menlo, 'Cascadia Mono', 'Roboto Mono', monospace;
+
+  --nos-text-caption: 600 10px / 1.2 var(--nos-font-ui);
+  --nos-text-label: 400 11.5px / 1.4 var(--nos-font-ui);
+  --nos-text-body: 400 12px / 1.5 var(--nos-font-ui);
+  --nos-text-value: 500 11px / 1.3 var(--nos-font-mono);
+  --nos-text-meta: 400 10px / 1.4 var(--nos-font-mono);
+  --nos-text-clip: 500 10.5px / 1.2 var(--nos-font-ui);
+  --nos-text-readout: 600 19px / 1 var(--nos-font-mono);
+  --nos-caption-tracking: 0.09em;
+
+  /* ---- Metrics ---- */
+  --nos-titlebar-height: 44px;
+  --nos-panel-header-height: 34px;
+  --nos-browser-width: 300px;
+  --nos-inspector-width: 340px;
+  --nos-transport-height: 52px;
+  --nos-timeline-height: 392px;
+  --nos-track-header-width: 148px;
+  --nos-ruler-height: 26px;
+  --nos-control-height: 26px;
+  --nos-control-height-sm: 24px;
+  --nos-badge-height: 19px;
+
+  --nos-radius-inset: 3px;
+  --nos-radius-control: 4px;
+  --nos-radius-card: 5px;
+  --nos-radius-panel: 8px;
+
+  --nos-space-1: 4px;
+  --nos-space-2: 6px;
+  --nos-space-3: 8px;
+  --nos-space-4: 10px;
+  --nos-space-5: 12px;
+  --nos-space-6: 14px;
+  --nos-space-7: 18px;
+
+  /* ---- Motion ----
+     Capped at 120 ms and applied only to hover, focus and panel open/close. Nothing that moves
+     during a drag — clips, playhead, keyframe markers — may carry a transition, or it would fight
+     the pointer and blow the spec's 16 ms interaction budget. */
+  --nos-transition-fast: 90ms ease-out;
+  --nos-transition: 120ms ease-out;
+
+  --nos-focus-ring: 0 0 0 2px rgba(76, 154, 255, 0.55);
+}
+
+/* Honour a system request for reduced motion: the transitions here are decorative, so removing them
+   costs nothing and the alternative is discomfort for the user. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --nos-transition-fast: 0ms;
+    --nos-transition: 0ms;
+  }
+}
+
+.nos-root {
+  background: var(--nos-bg-app);
+  color: var(--nos-text-primary);
+  font: var(--nos-text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A visible focus ring is required for keyboard operation of the timeline and the inspector. It is
+   scoped to :focus-visible so a mouse click on a clip does not draw one. */
+.nos-root :focus-visible {
+  outline: none;
+  box-shadow: var(--nos-focus-ring);
+}

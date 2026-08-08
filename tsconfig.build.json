@@ -1,0 +1,26 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/media"
+    },
+    {
+      "path": "packages/sidecar-client"
+    },
+    {
+      "path": "packages/editing"
+    },
+    {
+      "path": "packages/compositor"
+    },
+    {
+      "path": "packages/audio"
+    },
+    {
+      "path": "packages/ui"
+    }
+  ]
+}

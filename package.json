@@ -1,0 +1,45 @@
+{
+  "name": "necro-omni-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local generative video editor. Generation, segmentation and shader effects are first-class timeline operations.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:clean": "tsc --build tsconfig.build.json --clean",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.18.0",
+    "jsdom": "^25.0.1",
+    "playwright": "^1.62.1",
+    "prettier": "^3.4.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.3",
+    "vitest": "^2.1.8"
+  }
+}

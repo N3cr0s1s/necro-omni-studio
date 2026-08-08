@@ -1,0 +1,41 @@
+[project]
+name = "nos-sidecar"
+version = "0.1.0"
+description = "Media service for Necro Omni Studio: probing, proxies, filmstrips, waveforms, segmentation."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "watchfiles>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "httpx>=0.28",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+# RUF002 flags typographic characters in docstrings as "ambiguous". The prose here uses × for
+# dimensions and — for asides, matching the design docs; these are documentation, not identifiers,
+# so there is nothing to confuse.
+ignore = ["RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

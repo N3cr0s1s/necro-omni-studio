@@ -1,0 +1,19 @@
+{
+  "name": "@nos/compositor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebGL2 compositor. One implementation shared by preview and export, per the spec's WYSIWYG requirement.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "glcheck": "node glcheck/run.mjs",
+    "glcheck:serve": "vite --port 5200"
+  }
+}

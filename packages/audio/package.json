@@ -1,0 +1,17 @@
+{
+  "name": "@nos/audio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Audio mix planning, Web Audio playback graph, scrubbing and metering.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

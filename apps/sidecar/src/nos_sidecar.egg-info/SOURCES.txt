@@ -1,0 +1,15 @@
+pyproject.toml
+src/nos_sidecar/__init__.py
+src/nos_sidecar/__main__.py
+src/nos_sidecar/app.py
+src/nos_sidecar/ffmpeg.py
+src/nos_sidecar/hashing.py
+src/nos_sidecar/media_service.py
+src/nos_sidecar/models.py
+src/nos_sidecar/paths.py
+src/nos_sidecar/peaks.py
+src/nos_sidecar.egg-info/PKG-INFO
+src/nos_sidecar.egg-info/SOURCES.txt
+src/nos_sidecar.egg-info/dependency_links.txt
+src/nos_sidecar.egg-info/requires.txt
+src/nos_sidecar.egg-info/top_level.txt

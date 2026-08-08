@@ -1,0 +1,94 @@
+{
+  "2": {
+    "inputs": {
+      "audio": "rovid_magyar_hang.mp3"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Magyar referencia (5-30 sec)"
+    }
+  },
+  "3": {
+    "inputs": {
+      "model_path": "s2-pro-bnb-nf4 (auto download)",
+      "text": "[fast]\n\nEgy pillanat!\n",
+      "language": "hu",
+      "device": "auto",
+      "precision": "float16",
+      "attention": "sdpa",
+      "max_new_tokens": 0,
+      "chunk_length": 150,
+      "temperature": 0.65,
+      "top_p": 0.8,
+      "repetition_penalty": 1.15,
+      "seed": 345091668,
+      "keep_model_loaded": false,
+      "offload_to_cpu": true,
+      "compile_model": false,
+      "reference_text": [
+        "10",
+        0
+      ],
+      "reference_audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "FishS2VoiceCloneTTS",
+    "_meta": {
+      "title": "Fish S2 Voice Clone (nf4 / 16GB)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "audio": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "PreviewAudio",
+    "_meta": {
+      "title": "Meghallgatas"
+    }
+  },
+  "5": {
+    "inputs": {
+      "filename_prefix": "audio/fish_s2_hu",
+      "audio": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "Mentes"
+    }
+  },
+  "6": {
+    "inputs": {
+      "audio": "csaj_hang.mp3"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Magyar referencia (5-30 sec)"
+    }
+  },
+  "9": {
+    "inputs": {
+      "value": "Hát, atyafiak, ez, ahogy a formája mutatja, csakis tojás lehet.\nErre aztán a többi feje is egyszeribe megvilágosult.\n– Persze, hogy tojás, mert mi más is lehetne, ha nem tojás!\nA csősz most már arra is emlékezett, hogy még egészen meleg volt, amikor a földről felvette.\nA bíró nemhiába hitte magát okos embernek, mert most még azt is tudni akarta, hogy a tojás micsoda tojás."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Input Text"
+    }
+  },
+  "10": {
+    "inputs": {
+      "value": "Ha ezt a hanganyagot hallgatod, az azt jelenti, hogy most itt kell lenned.\nEl kellett jönnie annak az időnek, hogy mindarra, ami most következik, befogadó legyél.\nEzzel a hanganyaggal hamarosan teljesülni fog a vágyad.\nValami nagyszerű dolog fog történni veled, és egy hihetetlen utazás felé haladsz, tele sikerrel, tele örömmel, tele boldogsággal, tele bőséggel és gazdagsággal.\nHallgasd ezt a hanganyagot rendszeresen, hogy a nagyszerűséget felébreszthessem benned, és az életed gyökeresen megváltozhasson.\nA mélyebb tapasztalás érdekében pedig helyezkedj kényelembe, és hunyd le a szemed!"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Input Text"
+    }
+  }
+}

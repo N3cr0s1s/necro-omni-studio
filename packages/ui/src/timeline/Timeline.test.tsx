@@ -1,0 +1,320 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  type Clip,
+  type TimelineDocument,
+  type VideoTrack,
+  FRAME_RATES,
+  assetPath,
+  clipId,
+  createDocument,
+  effectId,
+  effectInstanceId,
+  frameIndex,
+  generatorId,
+  jobRunId,
+  maskId,
+  projectId,
+  sequenceId,
+  spanFromBounds,
+  staticNumber,
+  trackId,
+} from '@nos/core';
+import { Timeline } from './Timeline.js';
+import { clipAccessibleLabel } from './ClipBody.js';
+import { createViewport } from './viewport.js';
+
+afterEach(cleanup);
+
+const transform = {
+  x: staticNumber(0),
+  y: staticNumber(0),
+  scale: staticNumber(1),
+  rotation: staticNumber(0),
+  opacity: staticNumber(1),
+};
+
+function video(id: string, start: number, end: number, extra: Partial<Clip> = {}): Clip {
+  return {
+    kind: 'video',
+    id: clipId(id),
+    span: spanFromBounds(frameIndex(start), frameIndex(end)),
+    label: id,
+    enabled: true,
+    effects: [],
+    source: {
+      asset: assetPath(`media/${id}.mp4`),
+      sourceIn: frameIndex(0),
+      sourceRate: FRAME_RATES.WEB_30,
+    },
+    transform,
+    speed: { factor: 1, preservePitch: true },
+    ...extra,
+  } as Clip;
+}
+
+function makeDocument(clips: readonly Clip[]): TimelineDocument {
+  const base = createDocument({
+    id: projectId('p1'),
+    sequenceId: sequenceId('s1'),
+    name: 'test',
+    frameRate: FRAME_RATES.WEB_30,
+    resolution: { width: 1920, height: 1080 },
+    trackIds: { video: trackId('v1'), audio: trackId('a1'), text: trackId('t1') },
+  });
+  const v1: VideoTrack = { ...(base.sequence.tracks[0] as VideoTrack), clips: clips as VideoTrack['clips'] };
+  return { ...base, sequence: { ...base.sequence, tracks: [v1, ...base.sequence.tracks.slice(1)] } };
+}
+
+function renderTimeline(overrides: Partial<Parameters<typeof Timeline>[0]> = {}) {
+  const document = overrides.document ?? makeDocument([video('a', 0, 300), video('b', 400, 700)]);
+  return render(
+    <Timeline
+      document={document}
+      viewport={createViewport({ framesPerPixel: 4, widthPx: 1000, frameRate: document.frameRate })}
+      playhead={frameIndex(100)}
+      selectedClips={new Set()}
+      snapEnabled
+      rippleEnabled={false}
+      {...overrides}
+    />,
+  );
+}
+
+describe('rendering', () => {
+  it('renders one lane per track', () => {
+    renderTimeline();
+    expect(document.querySelectorAll('[data-track-id]')).toHaveLength(3);
+  });
+
+  it('renders visible clips', () => {
+    renderTimeline();
+    expect(document.querySelectorAll('[data-clip-id]')).toHaveLength(2);
+  });
+
+  it('skips off-screen clips, keeping the DOM proportional to what is visible', () => {
+    // The viewport covers frames 0..4000; a clip at 90000 must not be rendered at all.
+    const doc = makeDocument([video('near', 0, 300), video('far', 90_000, 90_300)]);
+    renderTimeline({ document: doc });
+    expect(document.querySelector('[data-clip-id="far"]')).toBeNull();
+    expect(document.querySelector('[data-clip-id="near"]')).not.toBeNull();
+  });
+
+  it('shows the status line with rate, length and clip count', () => {
+    renderTimeline();
+    expect(screen.getByText('30 fps · 700 f · 2 clips')).toBeDefined();
+  });
+
+  it('shows the zoom readout the way the mockups do', () => {
+    renderTimeline();
+    expect(screen.getByText('4 f/px')).toBeDefined();
+  });
+});
+
+describe('clip appearance', () => {
+  it('marks generator output, so purple can be trusted to mean generated', () => {
+    const doc = makeDocument([
+      video('imported', 0, 100),
+      video('made', 200, 300, {
+        provenance: {
+          generator: generatorId('t2v'),
+          run: jobRunId('r1'),
+          seed: 4471,
+          createdAt: '2026-08-08T00:00:00.000Z',
+        },
+      }),
+    ]);
+    renderTimeline({ document: doc });
+
+    expect(document.querySelector('[data-clip-id="made"]')?.getAttribute('data-generated')).toBe(
+      'true',
+    );
+    expect(
+      document.querySelector('[data-clip-id="imported"]')?.getAttribute('data-generated'),
+    ).toBe('false');
+  });
+
+  it('shows the seed on a generated clip, since reproducing a result needs it', () => {
+    const doc = makeDocument([
+      video('made', 0, 400, {
+        provenance: {
+          generator: generatorId('t2v'),
+          run: jobRunId('r1'),
+          seed: 4471,
+          createdAt: '2026-08-08T00:00:00.000Z',
+        },
+      }),
+    ]);
+    renderTimeline({ document: doc });
+    expect(screen.getByText('seed 4471')).toBeDefined();
+  });
+
+  it('shows an effect count badge and a mask badge', () => {
+    const doc = makeDocument([
+      video('a', 0, 400, {
+        effects: [
+          {
+            id: effectInstanceId('fx1'),
+            effect: effectId('film_grain'),
+            enabled: true,
+            params: {},
+            mask: maskId('m1'),
+          },
+          { id: effectInstanceId('fx2'), effect: effectId('levels'), enabled: true, params: {} },
+        ],
+      }),
+    ]);
+    renderTimeline({ document: doc });
+    expect(screen.getByText('fx 2')).toBeDefined();
+    expect(screen.getByText('mask')).toBeDefined();
+  });
+
+  it('does not count disabled effects toward the pass budget', () => {
+    const doc = makeDocument([
+      video('a', 0, 400, {
+        effects: [
+          { id: effectInstanceId('fx1'), effect: effectId('a'), enabled: true, params: {} },
+          { id: effectInstanceId('fx2'), effect: effectId('b'), enabled: false, params: {} },
+        ],
+      }),
+    ]);
+    renderTimeline({ document: doc });
+    expect(screen.getByText('fx 1')).toBeDefined();
+  });
+
+  it('conveys provenance and effect count in the accessible name, not only in colour', () => {
+    const clip = video('made', 0, 100, {
+      provenance: {
+        generator: generatorId('t2v'),
+        run: jobRunId('r1'),
+        createdAt: '2026-08-08T00:00:00.000Z',
+      },
+      effects: [{ id: effectInstanceId('fx1'), effect: effectId('a'), enabled: true, params: {} }],
+    });
+    expect(clipAccessibleLabel(clip)).toBe('made, generated, 1 effect');
+  });
+
+  it('names a disabled clip as disabled', () => {
+    expect(clipAccessibleLabel(video('a', 0, 100, { enabled: false }))).toContain('disabled');
+  });
+});
+
+describe('selection', () => {
+  it('reports a clip selection on pointer down', async () => {
+    const user = userEvent.setup();
+    const onSelectClip = vi.fn();
+    renderTimeline({ onSelectClip });
+
+    await user.click(screen.getByRole('button', { name: /^a$/ }));
+
+    expect(onSelectClip).toHaveBeenCalledWith('a', false);
+  });
+
+  it('reports an additive selection when a modifier is held', async () => {
+    const user = userEvent.setup();
+    const onSelectClip = vi.fn();
+    renderTimeline({ onSelectClip });
+
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByRole('button', { name: /^a$/ }));
+    await user.keyboard('{/Shift}');
+
+    expect(onSelectClip).toHaveBeenCalledWith('a', true);
+  });
+
+  it('marks the selected clip for assistive technology', () => {
+    renderTimeline({ selectedClips: new Set(['a']) });
+    const clip = document.querySelector('[data-clip-id="a"]');
+    expect(clip?.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('track controls', () => {
+  it('exposes mute, solo and lock as pressable buttons per track', () => {
+    renderTimeline();
+    expect(screen.getByRole('button', { name: 'Mute V1' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Solo A1' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Lock T1' })).toBeDefined();
+  });
+
+  it('reflects track state through aria-pressed, not only through a tint', () => {
+    const doc = makeDocument([]);
+    const muted: TimelineDocument = {
+      ...doc,
+      sequence: {
+        ...doc.sequence,
+        tracks: doc.sequence.tracks.map((track) =>
+          track.id === 'v1' ? { ...track, muted: true } : track,
+        ),
+      },
+    };
+    renderTimeline({ document: muted });
+    expect(screen.getByRole('button', { name: 'Mute V1' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Solo V1' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('reports track toggles', async () => {
+    const user = userEvent.setup();
+    const onTrackMute = vi.fn();
+    renderTimeline({ onTrackMute });
+    await user.click(screen.getByRole('button', { name: 'Mute V1' }));
+    expect(onTrackMute).toHaveBeenCalledWith('v1');
+  });
+});
+
+describe('toolbar', () => {
+  it('shows snap as pressed when enabled', () => {
+    renderTimeline({ snapEnabled: true });
+    expect(screen.getByRole('button', { name: /Snap/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows ripple as unpressed when disabled', () => {
+    renderTimeline({ rippleEnabled: false });
+    expect(screen.getByRole('button', { name: 'Ripple' }).getAttribute('aria-pressed')).toBeNull();
+  });
+
+  it('reports toggles', async () => {
+    const user = userEvent.setup();
+    const onToggleSnap = vi.fn();
+    const onToggleRipple = vi.fn();
+    renderTimeline({ onToggleSnap, onToggleRipple });
+
+    await user.click(screen.getByRole('button', { name: /Snap/ }));
+    await user.click(screen.getByRole('button', { name: 'Ripple' }));
+
+    expect(onToggleSnap).toHaveBeenCalled();
+    expect(onToggleRipple).toHaveBeenCalled();
+  });
+});
+
+describe('ruler', () => {
+  it('is exposed as a slider for the playhead', () => {
+    renderTimeline();
+    expect(screen.getByRole('slider', { name: 'Playhead position' })).toBeDefined();
+  });
+
+  it('renders labelled ticks', () => {
+    renderTimeline();
+    expect(screen.getByText('00:00')).toBeDefined();
+  });
+});
+
+describe('trim handles', () => {
+  it('renders grab areas at both edges of a wide clip', () => {
+    renderTimeline();
+    const clip = document.querySelector('[data-clip-id="a"]');
+    expect(clip?.querySelector('[data-trim-handle="start"]')).not.toBeNull();
+    expect(clip?.querySelector('[data-trim-handle="end"]')).not.toBeNull();
+  });
+
+  it('omits handles on a clip too narrow to grab them', () => {
+    // At 4 f/px an 8-frame clip is 2 px wide; handles would cover it entirely and make moving
+    // impossible.
+    const doc = makeDocument([video('tiny', 0, 8)]);
+    renderTimeline({ document: doc });
+    const clip = document.querySelector('[data-clip-id="tiny"]');
+    expect(clip?.querySelector('[data-trim-handle="start"]')).toBeNull();
+  });
+});

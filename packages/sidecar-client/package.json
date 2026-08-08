@@ -1,0 +1,17 @@
+{
+  "name": "@nos/sidecar-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP implementation of the @nos/media contracts, backed by the Python sidecar.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*",
+    "@nos/media": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "sampleRate": 1000,
+  "bucketsPerSecond": 10,
+  "channels": 2,
+  "bucketCount": 20,
+  "byteLength": 348,
+  "firstBucketCh0": [
+    0.0,
+    0.0494999997317791
+  ],
+  "lastBucketCh0": [
+    0.949999988079071,
+    0.9994999766349792
+  ],
+  "firstBucketCh1": [
+    -0.02474999986588955,
+    -0.0
+  ],
+  "lastBucketCh1": [
+    -0.4997499883174896,
+    -0.4749999940395355
+  ]
+}
