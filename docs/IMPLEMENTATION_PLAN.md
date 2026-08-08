@@ -167,9 +167,23 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       naming real parameters, no two parameters on one pointer). 17 tests.
 
 ### Phase 9 — M11: SAM 2 masks
-- [ ] Mask model, RLE/PNG-sequence cache
-- [ ] Sidecar segmentation worker under the GPU semaphore
-- [ ] Segmentation UI (click points, propagation range bar)
+- [x] `@nos/masks`: mask model, prompts, session reducer. Engine-agnostic — the
+      segmenter is an interface, and nothing in the package knows what SAM 2 is.
+      73 tests.
+- [x] RLE codec in **COCO's column-major layout**, so masks from any SAM-family
+      tool decode unchanged. Implemented twice — TypeScript and Python — and the
+      two are pinned to one shared fixture in both test suites.
+- [x] Mask cache under `masks/`, keyed by source + range + prompt **order**. A
+      corrupt frame is a miss rather than a failure.
+- [x] Sidecar segmentation worker: engine protocol, probed availability reported
+      with a concrete reason, local GPU serialization, partial results kept
+      through a failure or cancel, malformed masks rejected before the cache.
+      54 tests.
+- [x] Segmentation UI: normalized click overlay, alt-click to exclude, prompt
+      list that seeks, propagation range bar that fills as masks land. 31 tests.
+- [x] Mask textures bound to the compositor's `mask` sampler slot, allocating
+      once per mask and re-uploading in place per frame. **Verified end to end
+      against a real WebGL2 driver**, including a transposition check.
 
 ### Phase 10 — Hardening
 - [ ] End-to-end smoke test (mock backend)
@@ -178,21 +192,25 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–8 complete (M1–M10). The generator framework works end to end: five
+**Phases 1–9 complete (M1–M11). The generator framework works end to end: five
 manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
-are all driven by the manifest alone. Remaining: M11 (SAM 2 masks) and
+are all driven by the manifest alone. The mask pipeline reaches the compositor's
+`mask` sampler with the whole path verified on a real driver. Remaining:
 Phase 10 hardening.**
-**1164 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
-17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
+**1282 TypeScript tests + 136 Python tests passing; `tsc --build` clean, `ruff` clean,
+22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
 
 Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
-(HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
-components), `apps/sidecar` (Python).
+(HTTP implementation), `@nos/editing` (document transforms), `@nos/compositor`,
+`@nos/effects`, `@nos/audio`, `@nos/text`, `@nos/export`, `@nos/generators`,
+`@nos/backend-comfyui`, `@nos/masks`, `@nos/ui` (tokens + components),
+`apps/sidecar` (Python). Generator library in `generators/`.
 
-Next: M11 — SAM 2 masks — then Phase 10 hardening. The Electron shell
+Next: Phase 10 hardening — an end-to-end smoke test over the mock backend, a
+timeline performance guard, and a final full-suite pass. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -911,3 +929,52 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   component callback props are now declared `(() => void) | undefined` rather than
   `?: () => void`, because a parent forwarding its own optional handler is the normal
   case and conditional spreads at every call site were pure noise.
+
+- 2026-08-08: Phase 7/8 UI completed. The generator panel, the variant picker and
+  the manifest inspector are all pure renderings of a value — a `RegistryRecord`,
+  a `VariantSelection`, a `ManifestDraft` — with the logic living in
+  `@nos/generators` where it is testable without a DOM. The rule the panel exists
+  to hold is worth restating: **nothing may branch on a generator id.** The switch
+  is over declared parameter *types*; a new generator is a JSON file and no code.
+
+  Two bugs the tests found. `toManifest` branded the id, so previewing a draft
+  whose id was still empty threw and took the whole inspector down at exactly the
+  moment the user was typing it — split into `draftManifestJson` (total) and
+  `toManifest` (validating, at the boundary). And a draft parameter identified by
+  its pointer became unaddressable the moment its pointer was cleared, which is
+  the state the spec's unbound manifests are *written in*; parameters now carry a
+  stable id separate from the binding.
+
+- 2026-08-08: A real generator library in `generators/`. Manifest files needed a
+  parser first: the on-disk form is the spec's snake_case, the runtime form is
+  camelCase, and one module owns both so the naming leaks into neither side. Five
+  manifests now cover every supplied graph, and `library.test.ts` validates each
+  against **its own** graph — not the union of all of them, since a `requires`
+  entry naming a class only some other graph uses would otherwise pass here and
+  fail on the first run.
+
+  The coherence checks are the interesting half: defaults inside their declared
+  ranges, preset pins naming parameters that exist, no two parameters bound to one
+  pointer, and a seed wherever `default_variants > 1`. Each of those is a mistake
+  that produces a manifest which loads cleanly and behaves wrongly.
+
+- 2026-08-08: M11, the mask pipeline. The design rule from the spec is that a mask
+  is an asset type like any other and reaches an effect through a declared `mask`
+  sampler slot, so `@nos/masks` knows nothing about SAM 2 — the segmenter is an
+  interface — and the compositor knows nothing about how a mask was produced.
+
+  RLE follows **COCO's column-major layout** rather than anything private, so
+  masks from any SAM-family tool decode unchanged. It is implemented twice, in
+  TypeScript and Python, and both suites are pinned to one shared fixture: a
+  row/column swap is invisible in every square test and produces a transposed mask
+  with nothing in any log. The GL harness closes the loop by rendering a decoded
+  left-half mask over a red source on a real driver and reading pixels back — and
+  a negative control confirmed those assertions actually fail when the mask is
+  transposed, rather than passing for a coincidental reason.
+
+  Two decisions worth recording. Partial results survive everywhere: a propagation
+  that fails at frame 300 of 500 keeps its 300 frames, in the session model, in the
+  service and through a cancel. And an unavailable engine is reported with a
+  concrete, actionable reason rather than hidden — the same rule the generator
+  registry follows, because SAM 2 is an optional install and its absence has to be
+  legible instead of looking like a missing feature.
