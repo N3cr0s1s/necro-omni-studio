@@ -1,6 +1,11 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, CircleXIcon, PlayIcon, SquareIcon, XIcon } from 'lucide-react';
-import { type VariantCandidate, type VariantSelection, describeSelection } from '@nos/generators';
+import {
+  type VariantCandidate,
+  type VariantSelection,
+  describeSelection,
+  stepSelection,
+} from '@nos/generators';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@nos/ui/components/ui/card';
@@ -33,9 +38,17 @@ export interface VariantPickerProps {
   readonly auditioning?: boolean;
   readonly style?: CSSProperties | undefined;
 
-  /** Reports the chosen candidate's key. */
+  /**
+   * Reports the chosen candidate's key.
+   *
+   * The **only** channel by which the selection changes, stepping included. There used to be a second
+   * one — `onStep(delta)`, with the caller working out which candidate that landed on — and the caller
+   * got it wrong in a way nothing could catch: it reported the new candidate's *run*, and a batched run
+   * carries several candidates, so the key never matched and every step fell back to the first variant.
+   * Stepping is a pure function of the selection and a delta, so it happens here and arrives as a key
+   * like any other choice.
+   */
   readonly onSelect?: ((candidate: string) => void) | undefined;
-  readonly onStep?: ((delta: number) => void) | undefined;
   readonly onAudition?: (() => void) | undefined;
   readonly onAccept?: (() => void) | undefined;
   readonly onDiscard?: (() => void) | undefined;
@@ -46,7 +59,6 @@ export function VariantPicker({
   auditioning = false,
   style,
   onSelect,
-  onStep,
   onAudition,
   onAccept,
   onDiscard,
@@ -55,15 +67,21 @@ export function VariantPicker({
   const canAccept = current !== undefined;
   const canStep = selection.readyCount > 1;
 
+  /** Moves to another ready candidate, wrapping. Reported as a key, exactly like a click on a chip. */
+  function step(delta: number): void {
+    const next = stepSelection(selection, delta).current;
+    if (next !== undefined && next.key !== current?.key) onSelect?.(next.key);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     // Arrow keys because comparing variants is a back-and-forth, and reaching for the mouse between each
     // comparison is what makes a chooser feel slow.
     switch (event.key) {
       case 'ArrowLeft':
-        onStep?.(-1);
+        step(-1);
         break;
       case 'ArrowRight':
-        onStep?.(1);
+        step(1);
         break;
       case 'Enter':
         if (canAccept) onAccept?.();
@@ -120,7 +138,7 @@ export function VariantPicker({
             variant="outline"
             size="icon-sm"
             disabled={!canStep}
-            onClick={() => onStep?.(-1)}
+            onClick={() => step(-1)}
             aria-label="Previous variant"
             title="Previous variant (←)"
           >
@@ -141,7 +159,7 @@ export function VariantPicker({
             variant="outline"
             size="icon-sm"
             disabled={!canStep}
-            onClick={() => onStep?.(1)}
+            onClick={() => step(1)}
             aria-label="Next variant"
             title="Next variant (→)"
           >

@@ -349,17 +349,57 @@ describe('stepping', () => {
     const none = selectionOf([run('r1')]);
     expect(stepSelection(none, 1)).toBe(none);
   });
+
+  /**
+   * Stepping within one batched run.
+   *
+   * The case every test above missed, because three separate runs give every candidate its own run id
+   * and the difference between identifying one by run and by key never shows. A batched submit is one
+   * run carrying three variants — and it is what the spec's own audio manifest does by default.
+   *
+   * Identified by run, the search for "where am I" found the first of the three whichever was selected,
+   * and the guard against standing still then compared the same run to itself and refused to move. In
+   * the application that was arrow keys doing nothing at all.
+   */
+  describe('inside a batched run', () => {
+    const three = () => selectionOf([batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])]);
+
+    it('advances to the next variant of the same run', () => {
+      expect(stepSelection(three(), 1).current?.key).toBe('r1#1');
+    });
+
+    it('steps back from the third to the second, not to the first', () => {
+      const onThird = selectionOf([batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])], 'r1#2');
+      expect(stepSelection(onThird, -1).current?.key).toBe('r1#1');
+    });
+
+    it('wraps backwards from the first to the last', () => {
+      expect(stepSelection(three(), -1).current?.key).toBe('r1#2');
+    });
+
+    it('comes back round to where it started', () => {
+      const walked = stepSelection(stepSelection(stepSelection(three(), 1), 1), 1);
+      expect(walked.current?.key).toBe('r1#0');
+    });
+  });
 });
 
 describe('selecting directly', () => {
   it('selects a ready candidate', () => {
     const selection = selectionOf([done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')]);
-    expect(selectCandidate(selection, jobRunId('r2')).current?.run).toBe('r2');
+    expect(selectCandidate(selection, 'r2#0').current?.run).toBe('r2');
   });
 
   it('ignores a candidate that is not ready', () => {
     const selection = selectionOf([done('r1', 1, 'a.flac'), run('r2', { status: 'running' })]);
-    expect(selectCandidate(selection, jobRunId('r2'))).toBe(selection);
+    expect(selectCandidate(selection, 'r2#0')).toBe(selection);
+  });
+
+  it('picks the variant asked for, not its batch', () => {
+    // By key, because a run names all three at once — and by run this returned the batch's first
+    // variant however the user asked for its third.
+    const selection = selectionOf([batched('r1', [11, 22, 33], ['a.flac', 'b.flac', 'c.flac'])]);
+    expect(selectCandidate(selection, 'r1#2').current?.seed).toBe(33);
   });
 });
 

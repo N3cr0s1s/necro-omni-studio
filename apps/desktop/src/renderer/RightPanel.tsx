@@ -535,7 +535,9 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
       group,
       runs: runtime.snapshot.runs.filter((run) => run.group === group.id),
       manifest,
-      ...(current !== undefined ? { current: current as never } : {}),
+      // No cast: both sides are a candidate key. The `as never` that used to sit here was hiding the
+      // fact that a run id was being passed where a key was required.
+      ...(current !== undefined ? { current } : {}),
     });
   }, [group, manifest, runtime.snapshot.runs, current]);
 
@@ -553,18 +555,14 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
         selection={selection}
         auditioning={audition.playing}
         onAudition={() => audition.toggle(selection.current?.output?.path)}
-        onSelect={(run) => {
+        // A candidate **key**, not a run: a batched run carries several variants, so naming the run
+        // would select all of them at once — and, since no candidate key ever equals a run id, in
+        // practice selected none of them and fell back to the first.
+        onSelect={(candidate) => {
           // Stopped on a change of variant: leaving the previous one playing under the new selection
           // is the one thing that would make an A/B comparison useless.
           audition.stop();
-          setCurrent(run);
-        }}
-        onStep={(delta) => {
-          const ready = selection.candidates.filter((candidate) => candidate.ready);
-          if (ready.length === 0) return;
-          const index = ready.findIndex((candidate) => candidate.run === selection.current?.run);
-          const next = ready[(((index + delta) % ready.length) + ready.length) % ready.length];
-          if (next !== undefined) setCurrent(next.run);
+          setCurrent(candidate);
         }}
         onAccept={() => {
           const outcome = acceptSelection(selection);

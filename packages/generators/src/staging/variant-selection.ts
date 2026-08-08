@@ -229,25 +229,35 @@ function matches(output: BackendOutput, descriptor: OutputDescriptor): boolean {
  * Wraps, and walks **only** ready candidates: stepping onto a variant that is still generating would show
  * an empty frame and make the control feel broken half the time. Returns the same selection when there is
  * nothing else to step to, so a caller can compare identity to know whether anything changed.
+ *
+ * Candidates are found by **key**, never by run. A batched submit is one run carrying several variants,
+ * so comparing runs found the first of them whichever was selected — and then refused to move, because
+ * the candidate it had stepped to shared that same run. Against the spec's own audio manifest, which is
+ * batched by default, that made the arrow keys do nothing at all.
  */
 export function stepSelection(selection: VariantSelection, delta: number): VariantSelection {
   const ready = selection.candidates.filter((candidate) => candidate.ready);
   if (ready.length === 0) return selection;
 
-  const currentIndex = ready.findIndex((candidate) => candidate.run === selection.current?.run);
+  const currentIndex = ready.findIndex((candidate) => candidate.key === selection.current?.key);
   const steps = Math.trunc(delta);
   const nextIndex = (((currentIndex + steps) % ready.length) + ready.length) % ready.length;
   const next = ready[nextIndex];
-  if (next === undefined || next.run === selection.current?.run) return selection;
+  if (next === undefined || next.key === selection.current?.key) return selection;
 
   return { ...selection, current: next };
 }
 
-/** Selects a specific run, ignoring one that is not ready. */
-export function selectCandidate(selection: VariantSelection, run: JobRunId): VariantSelection {
-  const candidate = selection.candidates.find((entry) => entry.run === run && entry.ready);
-  if (candidate === undefined || candidate.run === selection.current?.run) return selection;
-  return { ...selection, current: candidate };
+/**
+ * Selects a specific candidate, ignoring one that is not ready.
+ *
+ * By key for the same reason as above: a run names a whole batch, and selecting by it would pick that
+ * batch's first variant however the user asked for its third.
+ */
+export function selectCandidate(selection: VariantSelection, candidate: string): VariantSelection {
+  const chosen = selection.candidates.find((entry) => entry.key === candidate && entry.ready);
+  if (chosen === undefined || chosen.key === selection.current?.key) return selection;
+  return { ...selection, current: chosen };
 }
 
 /**

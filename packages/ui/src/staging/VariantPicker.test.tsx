@@ -160,23 +160,52 @@ describe('interaction', () => {
     expect(onSelect).toHaveBeenCalledWith('r3#0');
   });
 
-  it('reports stepping in both directions', async () => {
+  it('steps to the next candidate and reports it by key', async () => {
+    // A **key**, not a delta and not a run. Reporting a delta left the caller to work out which
+    // candidate it landed on, and the caller answered with the candidate's *run* — which no key ever
+    // equals, so every step silently fell back to the first variant.
     const user = userEvent.setup();
-    const onStep = vi.fn();
-    renderPicker({ onStep });
+    const onSelect = vi.fn();
+    renderPicker({ onSelect });
     await user.click(screen.getByRole('button', { name: 'Next variant' }));
+    expect(onSelect).toHaveBeenCalledWith('r2#0');
+  });
+
+  it('wraps backwards from the first to the last', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderPicker({ onSelect });
     await user.click(screen.getByRole('button', { name: 'Previous variant' }));
-    expect(onStep.mock.calls).toEqual([[1], [-1]]);
+    expect(onSelect).toHaveBeenCalledWith('r3#0');
+  });
+
+  it('steps from wherever the selection actually is', async () => {
+    // The case the old shape got wrong in the application: standing on variant 3, stepping back has to
+    // reach variant 2 rather than restarting from the beginning.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderPicker({ selection: selectionOf(allDone, 'r3#0'), onSelect });
+    await user.click(screen.getByRole('button', { name: 'Previous variant' }));
+    expect(onSelect).toHaveBeenCalledWith('r2#0');
   });
 
   it('steps with the arrow keys, since comparing is a back-and-forth', async () => {
     const user = userEvent.setup();
-    const onStep = vi.fn();
-    renderPicker({ onStep });
+    const onSelect = vi.fn();
+    renderPicker({ onSelect });
 
     screen.getByRole('group', { name: /Variants/ }).focus();
-    await user.keyboard('{ArrowRight}{ArrowLeft}');
-    expect(onStep.mock.calls).toEqual([[1], [-1]]);
+    await user.keyboard('{ArrowRight}');
+    expect(onSelect).toHaveBeenCalledWith('r2#0');
+  });
+
+  it('says nothing when there is nowhere to step', async () => {
+    // One ready variant: reporting the same key would be a state change the caller has to no-op.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderPicker({ selection: selectionOf([done('r1', 11)]), onSelect });
+    await user.click(screen.getByRole('button', { name: 'Next variant' }));
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('keeps on Enter and discards on Escape', async () => {
