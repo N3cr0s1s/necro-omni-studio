@@ -127,6 +127,101 @@ class TestProbe:
         assert response.status_code == 422
 
 
+class TestStill:
+    """Lifting one frame out of a video as a project file.
+
+    Deliberately not a derivation. A frame grabbed for a generator's first input is something the
+    run is pinned to, and everything under ``cache/`` is regenerated under a hash-derived name and
+    deleted whenever the cache is cleared.
+    """
+
+    def test_writes_the_frame_into_the_project(self, client: TestClient, project) -> None:
+        response = client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": 1.0,
+                "destination": "media/stills/landscape_30.png",
+            },
+        )
+        assert response.status_code == 200
+        still = response.json()
+        assert still["asset"] == "media/stills/landscape_30.png"
+        assert still["reused"] is False
+        assert (still["width"], still["height"]) == (320, 180)
+        assert (project / "media" / "stills" / "landscape_30.png").exists()
+
+    def test_leaves_no_partial_file_behind(self, client: TestClient, project) -> None:
+        # The project folder is watched; a watcher that sees a half-written PNG hands the browser a
+        # file it cannot decode.
+        client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": 0.5,
+                "destination": "media/stills/a.png",
+            },
+        )
+        assert list((project / "media" / "stills").glob("*.partial")) == []
+
+    def test_reuses_a_frame_already_grabbed(self, client: TestClient) -> None:
+        # Stepping back and forth between two candidate frames is the normal case.
+        body = {
+            "asset": "media/landscape.mp4",
+            "seconds": 1.0,
+            "destination": "media/stills/again.png",
+        }
+        assert client.post("/media/still", json=body).json()["reused"] is False
+        assert client.post("/media/still", json=body).json()["reused"] is True
+
+    def test_refuses_to_write_into_the_cache(self, client: TestClient) -> None:
+        # Clearing the cache would break every run pinned to the frame.
+        response = client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": 1.0,
+                "destination": "cache/grabbed.png",
+            },
+        )
+        assert response.status_code == 400
+        assert response.json()["kind"] == "invalid-path"
+
+    def test_refuses_to_escape_the_project(self, client: TestClient) -> None:
+        response = client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": 1.0,
+                "destination": "../escaped.png",
+            },
+        )
+        assert response.status_code == 400
+
+    def test_reports_a_timestamp_past_the_end(self, client: TestClient) -> None:
+        # ffmpeg exits 0 having written nothing, which is reachable by asking for the last frame.
+        response = client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": 600.0,
+                "destination": "media/stills/past.png",
+            },
+        )
+        assert response.status_code == 422
+
+    def test_rejects_a_negative_timestamp(self, client: TestClient) -> None:
+        response = client.post(
+            "/media/still",
+            json={
+                "asset": "media/landscape.mp4",
+                "seconds": -1.0,
+                "destination": "media/stills/neg.png",
+            },
+        )
+        assert response.status_code == 422
+
+
 class TestProxy:
     def test_constrains_the_short_edge_for_landscape(self, client: TestClient) -> None:
         response = client.post(

@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2005 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2048 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2170,3 +2170,52 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   screen explained it. The group's parameters now travel with the outcome. The
   number fields showed `0` for an untouched parameter for the same reason, telling
   the user a generator would run with zero when it would in fact run with fifty.
+
+- 2026-08-08: Issues #10, #11 and #14.
+
+  **#10** was mine. Moving the ruler into a row of its own — so it would stay put
+  while the tracks scrolled — gave it a width of its own. The moment a project had
+  enough tracks to raise a scrollbar, the lane column gave up fifteen pixels and the
+  ruler did not, so every tick pointed fifteen pixels away from the frame it named
+  and the error grew with the zoom. That reads exactly as the report described it:
+  the tracks slipped sideways. The ruler is sticky inside the lane column now. It
+  still stays put, and there is one width instead of two, so there is nothing left
+  to keep in sync. Measured live at eight tracks: ruler and lanes both 1117 px at
+  the same left edge, where before only the lanes shrank.
+
+  **#11** was a feature that had never been reachable. A manifest may declare a
+  parameter that names a file — `first_frame`, a voice reference, a mask — and the
+  panel rendered every one of them as a read-only field reading `not set`. Every
+  image-to-anything generator was therefore a dead end, and `Generate` stayed lit
+  and submitted a graph with an empty image slot, so the failure surfaced in ComfyUI
+  where its cause was much harder to see.
+
+  The picker offers the project's own files, filtered by the parameter's *declared
+  type* and never by the generator, which is the property the framework rests on.
+  Cache contents are excluded: they are regenerated under hash-derived names and
+  deleted on Clear, so a run pinned to one would stop reproducing. A run now reports
+  everything blocking it at once, as values, so the greyed button and the field it
+  names cannot disagree.
+
+  **#14** followed immediately: pick a first frame that is not a file yet. The frame
+  under the playhead is very often the one meant — the end of the previous shot, a
+  pose mid-take — and exporting a still by hand, finding it, and coming back is the
+  round trip that makes one tool feel like three.
+
+  Split so that only the undecidable half needs a decoder. `frameGrabTarget` in
+  `@nos/editing` answers *what* is under the playhead: the topmost enabled video
+  clip, the source frame reached through exact rational seconds at the source's own
+  rate and through the clip's speed, and a destination named after both so grabbing
+  the same frame twice is one file rather than a pile. The sidecar's `/media/still`
+  does the half that cannot be tested without ffmpeg, writing to a `.partial`
+  neighbour and renaming — the folder is watched, and a watcher that sees a
+  half-written PNG hands the browser a file it cannot decode. It refuses to write
+  under `cache/`, because a grabbed still is an *input* a run is pinned to.
+
+  Live: standing at frame 89 of a 30 fps clip, the button read *Grab frame 89 of
+  withsound.mp4*, and `media/stills/withsound_000089.png` came back holding the
+  frame the preview was showing.
+
+  Harness note, since it cost three runs: `pkill -f electron` matches the shell
+  command line issuing it whenever that line also mentions electron, so the kill and
+  the launch must never share a command.

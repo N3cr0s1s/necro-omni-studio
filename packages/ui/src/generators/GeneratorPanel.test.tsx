@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assetPath, generatorId, presetId } from '@nos/core';
 import type { AssetChoice, GeneratorManifest, RegistryRecord } from '@nos/generators';
 import { entriesFor } from '@nos/generators';
-import { type GeneratorPanelProps, GeneratorPanel } from './GeneratorPanel.js';
+import { type FrameGrabOffer, type GeneratorPanelProps, GeneratorPanel } from './GeneratorPanel.js';
 
 afterEach(cleanup);
 
@@ -156,6 +156,73 @@ describe('a parameter that names a file', () => {
     const select = screen.getByLabelText('First frame') as HTMLSelectElement;
     expect(select.value).toBe('media/deleted.png');
     expect(screen.getByText('media/deleted.png — missing')).toBeDefined();
+  });
+});
+
+describe('grabbing the frame under the playhead', () => {
+  const withImage = manifest({
+    params: [{ key: 'first_frame', label: 'First frame', type: 'image', required: true, bind: '/x' }],
+  });
+
+  function renderWithGrab(offer: Partial<FrameGrabOffer>, overrides: Partial<GeneratorPanelProps> = {}) {
+    const grab = vi.fn();
+    render(
+      <GeneratorPanel
+        record={record({ manifest: withImage, entries: entriesFor(withImage) })}
+        params={{}}
+        frameGrab={{ describe: 'frame 137 of take.mp4', grab, ...offer }}
+        {...overrides}
+      />,
+    );
+    return grab;
+  }
+
+  it('offers the frame the playhead is on, naming it', async () => {
+    // The reason this exists: a first frame is very often a moment already in the cut, and exporting
+    // a still by hand, finding it, and coming back is the round trip that makes one tool feel like three.
+    const user = userEvent.setup();
+    const grab = renderWithGrab({});
+    const button = screen.getByRole('button', { name: 'Use current frame' });
+
+    expect(button.title).toContain('frame 137 of take.mp4');
+    await user.click(button);
+
+    expect(grab).toHaveBeenCalledWith('first_frame');
+  });
+
+  it('stays visible but disabled when nothing is under the playhead', () => {
+    // A control that appears and disappears as the playhead moves is harder to learn than one that
+    // says why it cannot act.
+    renderWithGrab({ describe: undefined });
+    const button = screen.getByRole('button', { name: 'Use current frame' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.title).toContain('Move the playhead over a video clip');
+  });
+
+  it('is offered even when the project holds no image at all', () => {
+    // Which is the state a fresh project is in, and the one where the grab is most useful.
+    renderWithGrab({}, { assetChoices: [] });
+    expect(screen.getByRole('button', { name: 'Use current frame' })).toBeDefined();
+  });
+
+  it('says it is working rather than looking dead', () => {
+    renderWithGrab({ busy: true });
+    const button = screen.getByRole('button', { name: 'Grabbing…' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('is not offered for a parameter that does not take an image', () => {
+    const withAudio = manifest({
+      params: [{ key: 'voice', label: 'Voice', type: 'audio', bind: '/x' }],
+    });
+    render(
+      <GeneratorPanel
+        record={record({ manifest: withAudio, entries: entriesFor(withAudio) })}
+        params={{}}
+        frameGrab={{ describe: 'frame 1 of a.mp4', grab: vi.fn() }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Use current frame' })).toBeNull();
   });
 });
 

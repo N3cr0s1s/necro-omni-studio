@@ -25,6 +25,7 @@ from .models import (
     MediaMetadataModel,
     ProxySpecModel,
     ScanEntryModel,
+    StillModel,
     VideoStreamModel,
     WaveformSpecModel,
 )
@@ -223,6 +224,65 @@ class MediaService:
 
     def cache_key(self, digest: str, spec: DerivedSpecModel) -> str:
         return f"{spec.kind}_{_describe_spec(spec)}_{digest[:16]}"
+
+    async def still(self, asset: str, seconds: float, destination: str) -> StillModel:
+        """Write the frame at ``seconds`` of a video to ``destination`` inside the project.
+
+        Idempotent by path. The caller names the file after the source and the frame, so asking
+        twice for the same frame is the normal case — a user stepping back and forth between two
+        candidate frames would otherwise pay for ffmpeg each time.
+
+        The write goes to a temporary neighbour and is renamed into place. The project folder is
+        watched, and a watcher that sees a half-written PNG will hand the browser a file it cannot
+        decode; a rename is atomic on both target platforms, so the file appears whole or not at
+        all.
+        """
+        source = self.require_file(asset)
+        target = self.resolve(destination)
+        if is_cache_path(destination):
+            # A grabbed frame under `cache/` would be deleted by Clear cache and would stop a run
+            # from reproducing. Refused here rather than in the UI: this is the invariant's home.
+            raise MediaError(
+                "invalid-path",
+                f"{destination} is under {CACHE_FOLDER}, which is disposable",
+                status=400,
+            )
+
+        if target.exists() and target.stat().st_size > 0:
+            width, height = await self._image_size(destination)
+            return StillModel(asset=destination, width=width, height=height, reused=True)
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(f"{target.name}.partial")
+        try:
+            await ffmpeg.run(
+                ffmpeg.still_command(self._tooling.ffmpeg, source, partial, seconds=seconds),
+                timeout=120,
+            )
+        except ffmpeg.FfmpegError as error:
+            with contextlib.suppress(OSError):
+                partial.unlink()
+            raise MediaError("failed", f"{asset}: {error}", status=422) from error
+
+        if not partial.exists() or partial.stat().st_size == 0:
+            with contextlib.suppress(OSError):
+                partial.unlink()
+            # ffmpeg exits 0 having written nothing when the timestamp is past the end of the
+            # source, which is reachable by asking for the last frame of a clip.
+            raise MediaError(
+                "failed",
+                f"{asset}: no frame at {seconds:.3f}s",
+                status=422,
+            )
+
+        partial.replace(target)
+        width, height = await self._image_size(destination)
+        return StillModel(asset=destination, width=width, height=height, reused=False)
+
+    async def _image_size(self, asset: str) -> tuple[int, int]:
+        probed = await self.probe(asset)
+        image = probed.image
+        return (image.width, image.height) if image is not None else (0, 0)
 
     def derived_relative(self, digest: str, spec: DerivedSpecModel) -> str:
         return f"{CACHE_FOLDER}/{self.cache_key(digest, spec)}.{DERIVED_EXTENSIONS[spec.kind]}"

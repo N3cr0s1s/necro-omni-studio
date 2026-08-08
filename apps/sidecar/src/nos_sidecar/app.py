@@ -51,6 +51,8 @@ from .models import (
     SegmentFramesModel,
     SegmentStartRequest,
     SegmentStatusModel,
+    StillModel,
+    StillRequest,
 )
 from .paths import PathError, ensure_project_layout, to_relative
 from .segmentation import (
@@ -236,6 +238,10 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
     @app.post("/media/derive", response_model=DerivedArtifactModel, dependencies=[Authorized])
     async def derive(body: DeriveRequest, media: ServiceDep) -> DerivedArtifactModel:
         return await media.derive(body.asset, body.spec)
+
+    @app.post("/media/still", response_model=StillModel, dependencies=[Authorized])
+    async def still(body: StillRequest, media: ServiceDep) -> StillModel:
+        return await media.still(body.asset, body.seconds, body.destination)
 
     @app.get("/media/file", dependencies=[AuthorizedUrl])
     async def read_file(asset: str, media: ServiceDep) -> FileResponse:

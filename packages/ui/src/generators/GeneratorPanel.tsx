@@ -46,12 +46,35 @@ export interface GeneratorPanelProps {
    * decides what a project's files are called, because reading a folder is not this component's job.
    */
   readonly assetChoices?: readonly AssetChoice[];
+  /**
+   * Capturing the frame under the playhead for an image-valued parameter.
+   *
+   * Offered alongside the project's files rather than instead of them: a first frame is very often
+   * a moment already in the cut, and asking the user to export a still, find it, and come back is
+   * the kind of round trip that makes a tool feel like several tools.
+   */
+  readonly frameGrab?: FrameGrabOffer;
 
   readonly onChangeParam?: (key: string, value: string | number | boolean) => void;
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
   readonly onChangeVariantCount?: (count: number) => void;
   readonly onToggleSeedLock?: () => void;
   readonly onRun?: () => void;
+}
+
+/**
+ * What grabbing the current frame would do, as the caller sees it.
+ *
+ * `describe` is `undefined` when there is nothing under the playhead — the button is then shown
+ * disabled saying so, rather than hidden, because a control that appears and disappears as the
+ * playhead moves is harder to learn than one that explains itself.
+ */
+export interface FrameGrabOffer {
+  /** What would be captured, e.g. `frame 137 of take.mp4`. `undefined` when nothing is. */
+  readonly describe: string | undefined;
+  /** True while the frame is being written, so the button can say so instead of looking dead. */
+  readonly busy?: boolean;
+  grab(paramKey: string): void;
 }
 
 export function GeneratorPanel({
@@ -62,6 +85,7 @@ export function GeneratorPanel({
   lockedSeed,
   capabilityOptions,
   assetChoices,
+  frameGrab,
   onChangeParam,
   onChangePreset,
   onChangeVariantCount,
@@ -154,6 +178,7 @@ export function GeneratorPanel({
             missing={blocked.has(param.key)}
             {...(capabilityOptions !== undefined ? { capabilityOptions } : {})}
             {...(isAssetParam(param) ? { choices: choicesFor(param, assetChoices ?? []) } : {})}
+            {...(frameGrab !== undefined && param.type === 'image' ? { frameGrab } : {})}
             {...(param.type === 'seed' ? { seedLocked: lockedSeed !== undefined } : {})}
             {...(onChangeParam !== undefined ? { onChange: onChangeParam } : {})}
             {...(onToggleSeedLock !== undefined ? { onToggleSeedLock } : {})}
@@ -280,6 +305,7 @@ function ParamControl({
   missing = false,
   capabilityOptions,
   choices,
+  frameGrab,
   seedLocked,
   onChange,
   onToggleSeedLock,
@@ -291,6 +317,7 @@ function ParamControl({
   readonly missing?: boolean;
   readonly capabilityOptions?: ReadonlyMap<string, readonly string[]>;
   readonly choices?: readonly AssetChoice[];
+  readonly frameGrab?: FrameGrabOffer;
   readonly seedLocked?: boolean;
   readonly onChange?: (key: string, value: string | number | boolean) => void;
   readonly onToggleSeedLock?: () => void;
@@ -438,6 +465,8 @@ function ParamControl({
           disabled={disabled}
           missing={missing}
           choices={choices ?? []}
+          paramKey={param.key}
+          {...(frameGrab !== undefined ? { frameGrab } : {})}
           {...(onChange !== undefined ? { onChange: (next) => onChange(param.key, next) } : {})}
         />
       )}
@@ -463,6 +492,8 @@ function AssetField({
   disabled,
   missing,
   choices,
+  paramKey,
+  frameGrab,
   onChange,
 }: {
   readonly id: string;
@@ -471,43 +502,65 @@ function AssetField({
   readonly disabled: boolean;
   readonly missing: boolean;
   readonly choices: readonly AssetChoice[];
+  readonly paramKey: string;
+  readonly frameGrab?: FrameGrabOffer;
   readonly onChange?: (value: string) => void;
 }): ReactNode {
-  if (choices.length === 0) {
-    return <ValueField>{`no ${label.toLowerCase()} available in this project`}</ValueField>;
-  }
-
-  // A value the project no longer contains is kept as its own option rather than silently snapping to
-  // the first file: a deleted or renamed asset must show as the thing that is wrong, and a select
+  // A value the project no longer contains is kept as its own option rather than silently snapping
+  // to the first file: a deleted or renamed asset must show as the thing that is wrong, and a select
   // whose value is absent from its options resets itself, which would change the run without saying so.
   const known = choices.some((choice) => choice.path === value);
+  const grabbable = frameGrab !== undefined && frameGrab.describe !== undefined;
 
   return (
-    <select
-      id={id}
-      aria-label={label}
-      disabled={disabled}
-      value={value}
-      onChange={(event) => onChange?.(event.target.value)}
-      style={{
-        height: token.controlHeight,
-        background: token.surface1,
-        border: `1px solid ${missing ? token.danger : token.borderControl}`,
-        borderRadius: token.radiusControl,
-        color: value === '' ? token.textGhost : token.textBright,
-        font: `400 11.5px ${token.fontUi}`,
-        padding: `0 ${token.space2}`,
-        maxWidth: '100%',
-      }}
-    >
-      <option value="">not set</option>
-      {!known && value !== '' && <option value={value}>{`${value} — missing`}</option>}
-      {choices.map((choice) => (
-        <option key={choice.path} value={choice.path}>
-          {choice.label}
-        </option>
-      ))}
-    </select>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
+      {choices.length === 0 && value === '' ? (
+        <ValueField>{`no ${label.toLowerCase()} available in this project`}</ValueField>
+      ) : (
+        <select
+          id={id}
+          aria-label={label}
+          disabled={disabled}
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          style={{
+            height: token.controlHeight,
+            background: token.surface1,
+            border: `1px solid ${missing ? token.danger : token.borderControl}`,
+            borderRadius: token.radiusControl,
+            color: value === '' ? token.textGhost : token.textBright,
+            font: `400 11.5px ${token.fontUi}`,
+            padding: `0 ${token.space2}`,
+            maxWidth: '100%',
+          }}
+        >
+          <option value="">not set</option>
+          {!known && value !== '' && <option value={value}>{`${value} — missing`}</option>}
+          {choices.map((choice) => (
+            <option key={choice.path} value={choice.path}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {frameGrab !== undefined && (
+        // Shown disabled rather than hidden when there is nothing under the playhead: a control that
+        // comes and goes as the playhead moves is harder to learn than one that says why it cannot act.
+        <Button
+          disabled={disabled || !grabbable || frameGrab.busy === true}
+          onClick={() => frameGrab.grab(paramKey)}
+          title={
+            grabbable
+              ? `Grab ${frameGrab.describe} into the project and use it here`
+              : 'Move the playhead over a video clip to grab a frame'
+          }
+          style={{ justifyContent: 'center' }}
+        >
+          {frameGrab.busy === true ? 'Grabbing…' : 'Use current frame'}
+        </Button>
+      )}
+    </div>
   );
 }
 

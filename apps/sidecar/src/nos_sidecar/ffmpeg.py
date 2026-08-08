@@ -256,6 +256,42 @@ def filmstrip_command(
     ]
 
 
+def still_command(ffmpeg: str, source: Path, destination: Path, *, seconds: float) -> list[str]:
+    """Build the command that lifts one frame out of a video as a PNG.
+
+    ``-ss`` before ``-i`` so ffmpeg seeks rather than decoding up to the timestamp: on a long
+    source the difference is a second against a minute, and this runs while the user waits with a
+    generator panel open.
+
+    ``-accurate_seek`` because the fast seek lands on the preceding keyframe otherwise, and the
+    frame a user picked is the frame they were looking at — being two seconds early is exactly the
+    kind of "close enough" that makes an image-to-video result inexplicable.
+
+    PNG rather than JPEG: this is a generator *input*, and re-compressing a frame that is about to
+    condition a diffusion model adds artefacts for no saving that matters at one image. The muxer is
+    named explicitly rather than inferred from the extension, because the destination is a
+    ``.partial`` file — the whole point of which is that nothing mistakes it for a finished image.
+    """
+    return [
+        ffmpeg,
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-accurate_seek",
+        "-ss",
+        f"{max(0.0, seconds):.6f}",
+        "-i",
+        str(source),
+        "-frames:v",
+        "1",
+        "-f",
+        "image2",
+        "-c:v",
+        "png",
+        str(destination),
+    ]
+
+
 def waveform_pcm_command(
     ffmpeg: str, source: Path, *, sample_rate: int, channels: int
 ) -> list[str]:

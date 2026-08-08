@@ -14,6 +14,7 @@ import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/ma
 import type { DirectoryNode } from '@nos/media';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
 import { assetChoicesFrom } from './generator-assets.js';
+import { useFrameGrab } from './use-frame-grab.js';
 import { ClipInspector } from './ClipInspector.js';
 import { TextInspector } from './TextInspector.js';
 import { ProjectSettings } from './ProjectSettings.js';
@@ -271,10 +272,13 @@ function GenerateTab({
   runtime,
   playhead,
   projectTree,
+  document,
+  sidecar,
   onAuthorManifest,
 }: RightPanelProps): ReactNode {
   const records = registry?.all() ?? [];
   const assetChoices = useMemo(() => assetChoicesFrom(projectTree), [projectTree]);
+  const frameGrab = useFrameGrab(document, playhead, sidecar);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [preset, setPreset] = useState<PresetId | undefined>(undefined);
   const [params, setParams] = useState<Readonly<Record<string, string | number | boolean>>>({});
@@ -378,6 +382,18 @@ function GenerateTab({
             ? { capabilityOptions: runtime.capabilities.enumOptions }
             : {})}
           assetChoices={assetChoices}
+          frameGrab={{
+            describe: frameGrab.available,
+            busy: frameGrab.busy,
+            // The grabbed path is written straight into the parameter: a user who asked for this
+            // frame wants it used, and making them find the new file in a dropdown afterwards
+            // would be a second step for a decision already made.
+            grab: (key) => {
+              void frameGrab.grab().then((asset) => {
+                if (asset !== undefined) setParams((current) => ({ ...current, [key]: asset }));
+              });
+            },
+          }}
           onChangeParam={(key, value) => setParams((current) => ({ ...current, [key]: value }))}
           onChangePreset={setPreset}
           onChangeVariantCount={setVariantCount}

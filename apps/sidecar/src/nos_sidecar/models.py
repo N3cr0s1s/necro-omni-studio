@@ -69,6 +69,29 @@ class ProbeRequest(StrictModel):
     asset: str
 
 
+class StillRequest(StrictModel):
+    """Lift one frame of a video out as an image the project owns.
+
+    Not a derivation: a still grabbed for a generator's first frame is an *input*, so it belongs in
+    the project rather than under ``cache/``. A cached file is regenerated under a name derived from
+    a content hash and is deleted whenever the cache is cleared — a run pinned to one would stop
+    reproducing, which is exactly what a seed and a recorded input exist to prevent.
+    """
+
+    asset: str
+    seconds: float = Field(ge=0)
+    destination: str
+
+
+class StillModel(BaseModel):
+    asset: str
+    """Project-relative path of the written image."""
+    width: int
+    height: int
+    reused: bool
+    """True when the frame had already been grabbed, so the caller can skip a progress indicator."""
+
+
 class ProxySpecModel(StrictModel):
     kind: Literal["proxy"] = "proxy"
     short_edge: int = Field(default=1080, gt=0, le=4320)

@@ -3,6 +3,7 @@ import {
   type ContentHash,
   type FrameRate,
   type Result,
+  assetPath,
   contentHash,
   err,
   frameCount,
@@ -41,6 +42,8 @@ import { type SidecarTransport, type TransportError } from './transport.js';
 
 const PROBE_TIMEOUT_MS = 60_000;
 const DERIVE_TIMEOUT_MS = 30 * 60_000;
+/** A single seek and one frame decoded. Generous for a long source on a cold cache, still bounded. */
+const STILL_TIMEOUT_MS = 2 * 60_000;
 
 /** Wire shapes, mirroring `apps/sidecar/src/nos_sidecar/models.py`. */
 interface WireVideoStream {
@@ -97,9 +100,30 @@ interface WireCacheStats {
   readonly file_count: number;
 }
 
+/**
+ * One frame of a video, written into the project as an image.
+ *
+ * Not a `DerivedArtifact`: those live under `cache/` and are disposable by definition. A grabbed
+ * still is an *input* — a generator run is pinned to it — so it is an asset the project owns and a
+ * cache clear must never take it away.
+ */
+export interface GrabbedStill {
+  readonly asset: AssetPath;
+  readonly width: number;
+  readonly height: number;
+  /** True when the frame had already been grabbed, so the caller can skip a progress indicator. */
+  readonly reused: boolean;
+}
+
 /** Combined surface, so the app wires one object rather than three that share a transport. */
 export interface MediaClient extends MediaProber, DerivedArtifactService {
   scan(subtree?: AssetPath): Promise<Result<readonly FileEntry[], TransportError>>;
+  /** Writes the frame at `seconds` of `asset` to `destination`, inside the project. */
+  grabStill(request: {
+    readonly asset: AssetPath;
+    readonly seconds: number;
+    readonly destination: AssetPath;
+  }): Promise<Result<GrabbedStill, TransportError>>;
   fileUrl(asset: AssetPath | string): string;
   health(): Promise<Result<SidecarHealth, TransportError>>;
 }
@@ -229,6 +253,34 @@ export function createMediaClient(transport: SidecarTransport): MediaClient {
       });
       if (!response.ok) return response;
       return ok(response.value.entries.map(toFileEntry));
+    },
+
+    async grabStill(request: {
+      readonly asset: AssetPath;
+      readonly seconds: number;
+      readonly destination: AssetPath;
+    }): Promise<Result<GrabbedStill, TransportError>> {
+      const response = await transport.postJson<{
+        asset: string;
+        width: number;
+        height: number;
+        reused: boolean;
+      }>(
+        '/media/still',
+        {
+          asset: request.asset,
+          seconds: request.seconds,
+          destination: request.destination,
+        },
+        { timeoutMs: STILL_TIMEOUT_MS },
+      );
+      if (!response.ok) return response;
+      return ok({
+        asset: assetPath(response.value.asset),
+        width: response.value.width,
+        height: response.value.height,
+        reused: response.value.reused,
+      });
     },
 
     fileUrl(asset: AssetPath | string): string {
