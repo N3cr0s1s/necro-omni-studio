@@ -521,6 +521,16 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- Unaccepted variants stay on disk by design, so something has to be able to **remove
+  them later**. `generated/` reached 63 MB across 39 takes in a day of use, of which the
+  sequence used one.
+- A bulk removal answers only about **candidates it was given**, so it cannot propose a
+  file it was never told about. What is eligible is the shell's question — only it can
+  read a folder — and what is *used* is the document's: a clip's source or a mask's
+  asset.
+- The browser's tree is **not** the place to ask what is on disk. It hides `.nos.json`
+  records deliberately, so a rule that needs them finds nothing; read the folder.
+
 - Provenance exists to be **fed back**, not only read. `recallRun` turns a record into a
   request: with the seed it reproduces, without it only the seed moves and everything
   that made the take is kept.
