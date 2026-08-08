@@ -23,6 +23,7 @@ import {
   setClipEnabled,
   splitAllTracksAt,
   splitClip,
+  withLinkedClips,
 } from '@nos/editing';
 
 /**
@@ -148,13 +149,16 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
 
       copy() {
         const { store, selected } = latest.current;
-        clipboard.current = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        // Linked partners come too, or pasting the copy would produce a silent picture.
+        const document = store.getDocument();
+        clipboard.current = copyClips(document, withLinkedClips(document, [...selected] as ClipId[]));
         setCanPaste(clipboard.current.entries.length > 0);
       },
 
       cut() {
         const { store, selected } = latest.current;
-        clipboard.current = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        const document = store.getDocument();
+        clipboard.current = copyClips(document, withLinkedClips(document, [...selected] as ClipId[]));
         setCanPaste(clipboard.current.entries.length > 0);
         removeSelection(latest.current, latest.current.ripple);
       },
@@ -167,7 +171,8 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
         // Copy and paste in one action, landing immediately after the original — the shape a user
         // means by "another one of these", without making them find the gap.
         const { store, selected } = latest.current;
-        const copied = copyClips(store.getDocument(), [...selected] as ClipId[]);
+        const document = store.getDocument();
+        const copied = copyClips(document, withLinkedClips(document, [...selected] as ClipId[]));
         if (copied.entries.length === 0) return;
 
         const origin = Math.min(...copied.entries.map((entry) => entry.clip.span.start));
@@ -272,8 +277,10 @@ function pasteAt(options: ClipEditOptions, clipboard: Clipboard, at: FrameIndex)
  * — leaves the others removed rather than rolling back work the user did want.
  */
 function removeSelection(options: ClipEditOptions, ripple: boolean): void {
-  const targets = [...options.selected] as ClipId[];
-  if (targets.length === 0) return;
+  if (options.selected.size === 0) return;
+  // A video and the audio split from it are one thing to a user: deleting the picture and leaving the
+  // sound playing over the next shot is never what was meant.
+  const targets = withLinkedClips(options.store.getDocument(), [...options.selected] as ClipId[]);
 
   const removed: ClipId[] = [];
   options.store.commit(ripple ? 'ripple delete' : 'delete clip', (current) => {

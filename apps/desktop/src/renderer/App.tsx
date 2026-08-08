@@ -235,7 +235,14 @@ export function App(): ReactNode {
 
   // The drag owns the document while a gesture is in flight, so the timeline renders its live preview
   // and the store records exactly one entry when the pointer is released.
-  const drag = useClipDrag({ document, viewport, snapEnabled: snap, playhead, commit: commitDocument });
+  const drag = useClipDrag({
+    document,
+    viewport,
+    snapEnabled: snap,
+    selected,
+    playhead,
+    commit: commitDocument,
+  });
 
   const openProject = useCallback(async () => {
     const api = bridge();

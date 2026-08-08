@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1878 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1891 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1925,3 +1925,28 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   different reasons for a clip to have jumped, and a bare line leaves the user to
   work it out. Dashed, so it is never mistaken for the playhead it may be sitting
   exactly on top of.
+
+- 2026-08-08: Operations reach the whole selection, and linked clips travel with
+  their partner. Dragging one clip of a selection had moved only that clip, which
+  quietly undoes the point of having a selection: a user who marqueed a scene and
+  dragged it would find one clip moved and the rest left behind — the worst outcome
+  available, because it looks like it worked. `withLinkedClips`, written yesterday
+  for the marquee, had no callers.
+
+  `moveClips` is deliberately **not** a loop over `moveClip`. Applied one at a time,
+  each move collides with the clips that have not moved yet, so shifting a run of
+  adjacent clips would refuse at the first one because its neighbour is still where
+  it was. The set has to be shifted and *then* checked, which is the entire reason
+  the operation exists.
+
+  Its collision rule is exact rather than convenient: only pairs with **exactly one**
+  side moving are checked. A translation preserves relative positions, so two clips
+  both in the set overlap afterwards if and only if they overlapped before —
+  reporting them would blame this move for a state the document was already in, and
+  leave a selection unable to escape a mess it did not create. A test covers that
+  case; it is the one that caught the rule.
+
+  The group meets frame zero **together**: clamping each clip on its own would pile
+  a whole scene onto the first frame. Delete, copy, cut and duplicate now take
+  linked partners along too — deleting the picture and leaving its sound playing
+  over the next shot is never what was meant.

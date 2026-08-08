@@ -15,3 +15,4 @@ export * from './range-ops.js';
 export * from './track-ops.js';
 export * from './clipboard.js';
 export * from './selection.js';
+export * from './move-many.js';

@@ -14,11 +14,13 @@ import {
   DEFAULT_SNAP_PIXELS,
   collectSnapCandidates,
   moveClip,
+  moveClips,
   slipClip,
   snapSpanTranslation,
   snapThresholdFrames,
   trimClipEnd,
   trimClipStart,
+  withLinkedClips,
 } from '@nos/editing';
 import { type TimelineViewport, pxToFrames } from '@nos/ui';
 
@@ -73,13 +75,20 @@ export interface ClipDragOptions {
   readonly document: TimelineDocument;
   readonly viewport: TimelineViewport;
   readonly snapEnabled: boolean;
+  /**
+   * What is selected, so dragging one clip of a selection moves the whole thing.
+   *
+   * Without this a user who marqueed a scene and dragged it would find one clip moved and the rest
+   * left behind — the worst outcome available, because it looks like it worked.
+   */
+  readonly selected: ReadonlySet<string>;
   /** Snap candidates include the playhead, which is where a user aligns a cut most often. */
   readonly playhead: FrameIndex;
   readonly commit: (label: string, next: TimelineDocument) => void;
 }
 
 export function useClipDrag(options: ClipDragOptions): ClipDrag {
-  const { document, viewport, snapEnabled, playhead, commit } = options;
+  const { document, viewport, snapEnabled, selected, playhead, commit } = options;
 
   const [drag, setDrag] = useState<DragState | undefined>(undefined);
   const [preview, setPreview] = useState<TimelineDocument | undefined>(undefined);
@@ -88,8 +97,8 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 
   // Read inside the window listeners, which are attached once per gesture and must not close over a
   // stale document or zoom.
-  const latest = useRef({ drag, viewport, snapEnabled, document, playhead });
-  latest.current = { drag, viewport, snapEnabled, document, playhead };
+  const latest = useRef({ drag, viewport, snapEnabled, document, playhead, selected });
+  latest.current = { drag, viewport, snapEnabled, document, playhead, selected };
 
   const begin = useCallback(
     (kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>) => {
@@ -113,6 +122,7 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
         snapEnabled: latest.current.snapEnabled,
         viewport: latest.current.viewport,
         playhead: latest.current.playhead,
+        selected: latest.current.selected,
       });
 
       if (result.ok) {
@@ -178,7 +188,12 @@ interface DragOutcome {
 function applyDrag(
   state: DragState,
   deltaFrames: number,
-  context: { snapEnabled: boolean; viewport: TimelineViewport; playhead: FrameIndex },
+  context: {
+    snapEnabled: boolean;
+    viewport: TimelineViewport;
+    playhead: FrameIndex;
+    selected: ReadonlySet<string>;
+  },
 ): Result<DragOutcome, EditError> {
   const located = locateClip(state.document, state.clip);
   if (located === undefined) return { ok: false, error: { kind: 'clip-not-found', clip: state.clip } };
@@ -197,16 +212,33 @@ function applyDrag(
     return plain(slipClip(state.document, state.clip, -deltaFrames));
   }
 
+  // Everything that travels with the grabbed clip: the rest of the selection when it is part of one,
+  // plus whatever is linked to any of them. A video and the audio split from it are one thing to a
+  // user, so a drag on either has to reach both or the two come apart at the first move.
+  const group = withLinkedClips(
+    state.document,
+    context.selected.has(state.clip) ? ([...context.selected] as ClipId[]) : [state.clip],
+  );
+
   const target = frameIndex(Math.max(0, clip.span.start + deltaFrames));
   const snap = context.snapEnabled
     ? snapSpanTranslation(
         target,
         clip.span.duration,
-        // The clip being dragged is ignored, or it would snap to its own edges and never move.
-        collectSnapCandidates(state.document, context.playhead, { ignoreClips: [state.clip] }),
+        // Everything being dragged is ignored, or the group would snap to its own edges.
+        collectSnapCandidates(state.document, context.playhead, { ignoreClips: group }),
         snapThresholdFrames(DEFAULT_SNAP_PIXELS, context.viewport.framesPerPixel),
       )
     : { frame: target };
+
+  if (group.length > 1) {
+    // Translated as a set, so the clips keep their spacing and a run of adjacent ones can move at
+    // all — applied one at a time, each would collide with the neighbour that has not moved yet.
+    const moved = moveClips(state.document, group, snap.frame - clip.span.start);
+    return moved.ok
+      ? { ok: true, value: { document: moved.value.document, snappedTo: snap.snappedTo } }
+      : moved;
+  }
 
   const moved = moveClip(state.document, state.clip, track.id as TrackId, snap.frame);
   return moved.ok ? { ok: true, value: { document: moved.value, snappedTo: snap.snappedTo } } : moved;
