@@ -275,6 +275,19 @@ Two more, found only by running it:
 
 ### The check that actually finds these
 
+A fifth check, cheap and repeatable: **count how many times a function name is defined.**
+
+```
+grep -rhno "^\(export \)\?function [a-zA-Z0-9_]*" --include=*.ts --include=*.tsx apps packages \
+  | sed 's/.*function //' | sort | uniq -c | sort -rn
+```
+
+Test fixtures dominate the top and are fine. What is left has found, in two passes: four copies of the
+edit-error describer — where improving one left the message on screen unchanged, because the keyboard
+path used another — and four of `clamp01`, which had **already drifted**, three refusing a non-finite
+value and the fourth passing it through. Duplication here is not a tidiness complaint; it is where this
+codebase's real bugs have come from.
+
 Two of the five were unreachable UI and three were wrong output. Grepping for a document field with no
 writer finds the first kind. The second needs a different question, and it is the one worth asking
 here: **does the export do exactly what the preview does?** Anywhere the two paths are written
