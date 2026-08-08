@@ -521,6 +521,15 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- The job queue belongs to the **project**. A take is a file in that project's `generated/` folder and
+  an accepted variant carries a project-relative path, so a group surviving a project change offers
+  variants whose files are not where the new clip would look — with a picker that looks normal.
+- Clearing **cancels before it forgets**. Forgetting alone leaves runs burning the GPU for results
+  nobody can reach, and the snapshot looks identical either way — which is why a test that asserts on
+  the snapshot cannot tell the two apart. Assert on the backend's cancellation record.
+- A test that passes against the mutant you are guarding against is not a test. Every check written
+  here should be run once against a deliberately broken version before it is trusted.
+
 - The GPU semaphore serializes **every** consumer, not just the queue. `GpuConsumer` named four and
   tests exercised four; production acquired with one. A lock only one caller takes is not a lock.
 - A shared resource must be created **once per window**, outside any memo whose dependencies can
