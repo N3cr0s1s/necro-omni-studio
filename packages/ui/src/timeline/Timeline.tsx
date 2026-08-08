@@ -215,25 +215,16 @@ export function Timeline(props: TimelineProps): ReactNode {
     >
       <TimelineToolbar {...props} totalFrames={totalFrames} clipCount={clipCount(document)} />
 
-      {/* The ruler is pinned and the tracks scroll under it. Before this the whole area was a fixed
-          height with `overflow: hidden`, so the moment a project had more tracks than fitted — which
-          the toolbar's own `+ V/A/T` buttons make easy — the rest were invisible and unreachable. */}
-      <div style={{ display: 'flex', flex: 'none' }}>
-        <div style={{ width: token.trackHeaderWidth, flex: 'none' }} />
-        <div ref={laneAreaRef} style={{ flex: 1, position: 'relative', minWidth: 0, overflow: 'hidden' }}>
-          <TimelineRuler
-            ticks={ticks}
-            viewport={viewport}
-            markers={document.sequence.markers}
-            {...(document.sequence.workRange !== undefined ? { workRange: document.sequence.workRange } : {})}
-            onPointerDown={handleRulerPointerDown}
-            {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
-          />
-        </div>
-      </div>
+      {/*
+        One scroller holding the headers, the ruler and the lanes, with the ruler *sticky* rather than
+        lifted into a row of its own.
 
-      {/* Headers and lanes scroll as one element, which is the only way they stay aligned: two
-          scrollers kept in sync by hand drift the moment either is scrolled by anything but a wheel. */}
+        The lifted version drifted horizontally: once the tracks overflowed, the scroller gave up a
+        scrollbar's width and the ruler's separate row did not, so the ticks stopped lining up with
+        the clips beneath them. Making the ruler part of the very column it measures removes the
+        possibility instead of compensating for it — there is one width now, and nothing to keep in
+        sync. Headers and lanes scroll as one element for the same reason vertically.
+      */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         <TrackHeaderColumn
           tracks={document.sequence.tracks}
@@ -247,6 +238,8 @@ export function Timeline(props: TimelineProps): ReactNode {
         />
 
         <div
+          ref={laneAreaRef}
+          data-lane-column=""
           onWheel={handleWheel}
           style={{
             flex: 1,
@@ -255,6 +248,21 @@ export function Timeline(props: TimelineProps): ReactNode {
             background: token.bgLanes,
           }}
         >
+          {/* Sticky, so it stays visible while the tracks scroll under it and still belongs to the
+              column whose pixels it measures. */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 4 }}>
+            <TimelineRuler
+              ticks={ticks}
+              viewport={viewport}
+              markers={document.sequence.markers}
+              {...(document.sequence.workRange !== undefined
+                ? { workRange: document.sequence.workRange }
+                : {})}
+              onPointerDown={handleRulerPointerDown}
+              {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
+            />
+          </div>
+
           <div
             style={{ position: 'relative' }}
             onPointerDown={marquee.begin}

@@ -451,13 +451,27 @@ describe('many tracks', () => {
     expect(scroller?.contains(document.querySelector('[data-track-header]'))).toBe(true);
   });
 
-  it('keeps the ruler out of the scrolling area, so it stays put', () => {
+  it('measures the ruler against the very column the clips are drawn in', () => {
+    // The invariant behind a reported misalignment. While the ruler sat in a row of its own above the
+    // scroller, the two columns were free to be different widths — and the moment enough tracks
+    // brought up a scrollbar they were, so every tick pointed a scrollbar's width away from the frame
+    // it named. There is no arithmetic that fixes that, only one column instead of two; jsdom has no
+    // layout to measure, so what is asserted is the structure that makes the widths the same object.
     renderTimeline();
     const ruler = screen.getByRole('slider', { name: 'Playhead position' });
     const lane = document.querySelector('[data-track-id]') as HTMLElement;
 
+    const column = ruler.closest('[data-lane-column]');
+    expect(column).not.toBeNull();
+    expect(lane.closest('[data-lane-column]')).toBe(column);
     expect(ruler.contains(lane)).toBe(false);
-    expect(lane.closest('[role="slider"]')).toBeNull();
+  });
+
+  it('renders exactly one ruler', () => {
+    // Cheap, and it is the shape the misalignment took while the move was half-done: a second ruler
+    // scrolled with the tracks under the pinned one, which reads as the ticks sliding.
+    renderTimeline();
+    expect(screen.getAllByRole('slider', { name: 'Playhead position' })).toHaveLength(1);
   });
 });
 
