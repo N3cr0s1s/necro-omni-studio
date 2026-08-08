@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
 import {
+  ArrowLeftRightIcon,
+  ArrowLeftToLineIcon,
+  ArrowRightToLineIcon,
+  type LucideIcon,
+  MoveHorizontalIcon,
+} from 'lucide-react';
+import {
   type Clip,
   type FrameRate,
   type TimelineDocument,
@@ -72,6 +79,7 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
 
       <Row
         label="start"
+        icon={ArrowRightToLineIcon}
         value={span.start}
         rate={document.frameRate}
         onCommit={(next) => {
@@ -88,6 +96,7 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
 
       <Row
         label="duration"
+        icon={MoveHorizontalIcon}
         value={span.duration}
         rate={document.frameRate}
         min={1}
@@ -97,6 +106,7 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
       {source !== undefined && (
         <Row
           label="source in"
+          icon={ArrowLeftRightIcon}
           value={source.sourceIn}
           rate={source.sourceRate}
           onCommit={(next) => {
@@ -116,7 +126,8 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
       )}
 
       <div className="flex items-center gap-2">
-        <span className="w-19 text-xs text-muted-foreground">end</span>
+        <ArrowLeftToLineIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+        <span className="w-14 text-xs text-muted-foreground">end</span>
         {/* Read-only: it is start plus duration, and a fifth field would be a second way to say
             "duration" that has to agree with the first. */}
         <span className="font-mono text-xs text-muted-foreground tabular-nums">{end}</span>
@@ -128,12 +139,21 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
 /** One frame-valued field, with the timecode it corresponds to beside it. */
 function Row({
   label,
+  icon: Icon,
   value,
   rate,
   min,
   onCommit,
 }: {
   readonly label: string;
+  /**
+   * What this row does to the clip, as a glyph.
+   *
+   * Four rows of frame numbers read as one block, and the difference between them is precisely the
+   * thing a user has to get right: moving, trimming and slipping look identical as labels and are
+   * three different edits.
+   */
+  readonly icon: LucideIcon;
   readonly value: number;
   readonly rate: FrameRate;
   readonly min?: number;
@@ -141,7 +161,8 @@ function Row({
 }): ReactNode {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-19 text-xs text-muted-foreground">{label}</span>
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="w-14 text-xs text-muted-foreground">{label}</span>
       <NumberField
         aria-label={label}
         value={value}

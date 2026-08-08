@@ -19,11 +19,22 @@ import {
   generatePreset,
   mergeGeneratedKeyframes,
 } from '@nos/text';
-import { TypeIcon } from 'lucide-react';
+import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  ArrowDownToLineIcon,
+  ArrowUpFromLineIcon,
+  PaintBucketIcon,
+  SquareIcon,
+  TypeIcon,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { NumberField } from '@nos/ui';
 import { Field, FieldTitle } from '@nos/ui/components/ui/field';
 import { Input } from '@nos/ui/components/ui/input';
 import { Separator } from '@nos/ui/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
 import { Switch } from '@nos/ui/components/ui/switch';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Textarea } from '@nos/ui/components/ui/textarea';
@@ -120,6 +131,18 @@ export function createTextClip(id: string, start: number, frames = DEFAULT_TEXT_
   };
 }
 
+/**
+ * The three alignments and the glyph each is universally drawn with.
+ *
+ * A table rather than a switch in the markup so the order is declared once and the control is a map
+ * over it — adding a fourth alignment, if the model ever grows one, is a line here.
+ */
+const ALIGNMENTS = [
+  { value: 'left', Icon: AlignLeftIcon },
+  { value: 'center', Icon: AlignCenterIcon },
+  { value: 'right', Icon: AlignRightIcon },
+] as const;
+
 export function TextInspector({ document, clip, onChange }: TextInspectorProps): ReactNode {
   const located = clip === undefined ? undefined : locateClip(document, clip as never);
   if (located === undefined || located.clip.kind !== 'text') return null;
@@ -190,18 +213,33 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
           </NativeSelect>
         </Labelled>
         <Labelled label="Align">
-          <NativeSelect
+          {/*
+           * Icons rather than a dropdown, which is the one place in this panel where a picture is
+           * genuinely clearer than the word: alignment has a universal glyph, the three options are
+           * mutually exclusive, and a dropdown costs three interactions to say what one click says.
+           * `type="single"` keeps exactly one selected, which is what the model allows.
+           */}
+          <ToggleGroup
             aria-label="Align"
+            variant="outline"
+            size="sm"
+            multiple={false}
             className="w-full"
-            value={text.content.align}
-            onChange={(event) => setContent({ align: event.target.value as TextContent['align'] })}
+            value={[text.content.align]}
+            onValueChange={(next) => {
+              // Base UI reports an empty array when the pressed item is toggled off. Alignment has no
+              // "none", so the current value stands rather than being cleared.
+              const picked = next[0];
+              if (picked === undefined) return;
+              setContent({ align: picked as TextContent['align'] });
+            }}
           >
-            {['left', 'center', 'right'].map((align) => (
-              <NativeSelectOption key={align} value={align}>
-                {align}
-              </NativeSelectOption>
+            {ALIGNMENTS.map(({ value, Icon }) => (
+              <ToggleGroupItem key={value} value={value} aria-label={value} className="flex-1">
+                <Icon />
+              </ToggleGroupItem>
             ))}
-          </NativeSelect>
+          </ToggleGroup>
         </Labelled>
         <Labelled label="Colour">
           <Input
@@ -257,6 +295,7 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
       */}
       <OptionalSection
         label="Outline"
+        icon={SquareIcon}
         enabled={text.content.outline !== undefined}
         onToggle={(on) => setContent({ outline: on ? DEFAULT_OUTLINE : undefined })}
       >
@@ -291,6 +330,7 @@ export function TextInspector({ document, clip, onChange }: TextInspectorProps):
 
       <OptionalSection
         label="Shadow"
+        icon={PaintBucketIcon}
         enabled={text.content.shadow !== undefined}
         onToggle={(on) => setContent({ shadow: on ? DEFAULT_SHADOW : undefined })}
       >
@@ -377,7 +417,15 @@ function AnimationRow({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{caption}</span>
+      <div className="flex items-center gap-2">
+        {/* In and out are the same control twice; the arrow is what tells them apart at a glance. */}
+        {caption === 'Animate in' ? (
+          <ArrowUpFromLineIcon className="size-3.5 text-muted-foreground" />
+        ) : (
+          <ArrowDownToLineIcon className="size-3.5 text-muted-foreground" />
+        )}
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{caption}</span>
+      </div>
       <div className="flex gap-2">
         <NativeSelect
           aria-label={caption}
@@ -479,11 +527,14 @@ function applyPreset(clip: TextClip, phase: 'in' | 'out', animation: TextAnimati
  */
 function OptionalSection({
   label,
+  icon: Icon,
   enabled,
   onToggle,
   children,
 }: {
   readonly label: string;
+  /** Marks the section at a glance, so a panel of five headings is scanned rather than read. */
+  readonly icon: LucideIcon;
   readonly enabled: boolean;
   readonly onToggle: (enabled: boolean) => void;
   readonly children: ReactNode;
@@ -492,6 +543,9 @@ function OptionalSection({
     <div className="flex flex-col gap-2">
       <Separator />
       <div className="flex items-center gap-2">
+        {/* Muted, not coloured: a heading glyph is a landmark, and the panel's colour already means
+            something specific elsewhere. */}
+        <Icon className="size-3.5 text-muted-foreground" />
         <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</span>
         <Switch aria-label={label} checked={enabled} onCheckedChange={onToggle} className="ml-auto" />
       </div>
