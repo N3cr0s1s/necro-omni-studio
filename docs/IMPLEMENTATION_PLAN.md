@@ -311,6 +311,12 @@ empty queue and an idle GPU. The socket adapter woke only on a `message`, so a b
 parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
 its source dies**, or the job waits forever and reports nothing.
 
+Two fields found this way and closed since: `clip.label` — the engine could rename a clip and the user
+could not, so three kept variants of one generator shared a single name — and `track.collapsed`, which
+round-tripped through `project.json` while nothing could set it or drew anything differently for it.
+The sweep that finds them is one line: for each exported operation, count references outside its own
+package and its tests.
+
 One field still has no writer and is left deliberately: `clip.speed`. The compositor and the audio
 graph both read it and `attributes` copies it, but the spec's §6.1 does not ask for a speed control,
 so building one would be widening the scope rather than closing a gap.
@@ -733,6 +739,18 @@ so it can gate a release:
   **latches** until reset — the user will not be looking at the instant it happened.
 
 ### Timeline UI rules (keep these)
+
+- A track's drawn height comes from `laneHeight`, never from `track.height` directly.
+  Five things need the answer — header, lane, clips, and the two running offsets for
+  the playhead and the drop indicator — and one of them disagreeing puts every row
+  below it at the wrong y.
+- **Collapsing is a view state**, so it is a track flag beside mute and solo, not an
+  edit. The height is kept and restored, the clips stay drawn as bars, and a locked
+  track collapses like any other: collapsing disturbs nothing on it.
+- Header widths are **measured, not guessed**. At 147 px a side-by-side header spent
+  everything on padding, four toggles and one gap, leaving 15 px for the name — about
+  one character. It is 44 wide for that reason, the disclosure takes the kind icon's
+  place where there is no room for both, and a collapsed row drops the toggles.
 
 - `frameToPx` deliberately does **not** round. Sub-pixel positions are what keep a
   clip's drawn edge on its frame; rounding accumulates into visible drift against
