@@ -29,7 +29,11 @@ import type {
   UniformValue,
 } from '../contracts/render-plan.js';
 import { countPasses } from '../contracts/render-plan.js';
-import { type EffectSourceResolver, uniformNames } from '../contracts/effect-source.js';
+import {
+  type EffectSourceResolver,
+  type EffectUniformDeclaration,
+  paramKeyOf,
+} from '../contracts/effect-source.js';
 
 /**
  * Builds the render plan for one frame.
@@ -152,7 +156,7 @@ function buildTransitionGroup(
       instance: transition.id,
       effect: transition.effect,
       progress,
-      uniforms: resolveUniforms(transition.params, frameIndex(elapsed), uniformNames(source)),
+      uniforms: resolveUniforms(transition.params, frameIndex(elapsed), source.uniforms),
     },
   };
 }
@@ -255,7 +259,7 @@ function resolvePasses(
     passes.push({
       instance: instance.id,
       effect: instance.effect,
-      uniforms: resolveUniforms(instance.params, clipRelative, uniformNames(source)),
+      uniforms: resolveUniforms(instance.params, clipRelative, source.uniforms),
       ...(instance.mask !== undefined ? { mask: instance.mask } : {}),
     });
   }
@@ -264,22 +268,24 @@ function resolvePasses(
 }
 
 /**
- * Evaluates parameters to uniform values at a frame.
+ * Evaluates document parameters into shader uniform values at a frame.
  *
- * Only parameters the shader actually declares are emitted. A stale parameter left behind by an
- * edited shader would otherwise produce a `getUniformLocation` miss on every frame, which is silent
- * but not free.
+ * Keyed by **uniform name** on the way out and read by **parameter key** on the way in, because a
+ * manifest may name them differently (`amount` in the document, `u_amount` in the shader). Only
+ * declared parameters are emitted: a stale one left behind by an edited shader would otherwise miss
+ * `getUniformLocation` on every frame, which is silent but not free.
  */
 export function resolveUniforms(
   params: Readonly<Record<string, AnimatableNumber | StaticValue>>,
   frame: FrameIndex,
-  declared: readonly string[],
+  declared: readonly EffectUniformDeclaration[],
 ): Readonly<Record<string, UniformValue>> {
-  const declaredSet = new Set(declared);
   const uniforms: Record<string, UniformValue> = {};
 
-  for (const [key, value] of Object.entries(params)) {
-    if (declaredSet.size > 0 && !declaredSet.has(key)) continue;
+  for (const declaration of declared) {
+    const value = params[paramKeyOf(declaration)];
+    if (value === undefined) continue;
+    const key = declaration.name;
 
     switch (value.kind) {
       case 'static':

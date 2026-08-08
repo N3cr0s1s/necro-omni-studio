@@ -51,6 +51,14 @@ const effects: EffectSourceResolver = {
           { name: 'u_invert', type: 'bool' },
         ],
       },
+      renamed: {
+        id: effectId('renamed'),
+        category: 'effect',
+        source: 'void main() {}',
+        samplers: ['source'],
+        // Document key `amount`, shader uniform `u_amount` — the shape the spec's manifest uses.
+        uniforms: [{ name: 'u_amount', type: 'float', paramKey: 'amount' }],
+      },
       crosswarp: {
         id: effectId('crosswarp'),
         category: 'transition',
@@ -402,6 +410,41 @@ describe('effect passes', () => {
       ],
     });
     const pass = planLayers(plan(makeDocument({ v1: [clip] }), 100))[0]!.passes[0]!;
+    expect(pass.uniforms['u_amount']).toEqual({ kind: 'float', value: 0.5 });
+  });
+
+  it('maps a document parameter key onto a differently named uniform', () => {
+    // `interfaces.md` §4 gives a parameter both a `key` and a `uniform`, and they routinely differ.
+    // Conflating them drops every such parameter, which presents as an effect that renders but ignores
+    // its controls.
+    const clip = video('a', 0, 100, {
+      effects: [
+        {
+          id: effectInstanceId('fx1'),
+          effect: effectId('renamed'),
+          enabled: true,
+          params: { amount: staticNumber(0.42) },
+        },
+      ],
+    });
+    const pass = planLayers(plan(makeDocument({ v1: [clip] }), 10))[0]!.passes[0]!;
+    // Keyed by the *uniform* name on the way out.
+    expect(pass.uniforms['u_amount']).toEqual({ kind: 'float', value: 0.42 });
+    expect(pass.uniforms['amount']).toBeUndefined();
+  });
+
+  it('falls back to the uniform name when a manifest uses one spelling for both', () => {
+    const clip = video('a', 0, 100, {
+      effects: [
+        {
+          id: effectInstanceId('fx1'),
+          effect: effectId('film_grain'),
+          enabled: true,
+          params: { u_amount: staticNumber(0.5) },
+        },
+      ],
+    });
+    const pass = planLayers(plan(makeDocument({ v1: [clip] }), 10))[0]!.passes[0]!;
     expect(pass.uniforms['u_amount']).toEqual({ kind: 'float', value: 0.5 });
   });
 

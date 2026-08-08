@@ -17,6 +17,9 @@
       "path": "packages/compositor"
     },
     {
+      "path": "packages/effects"
+    },
+    {
       "path": "packages/audio"
     },
     {

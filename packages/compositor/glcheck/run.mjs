@@ -41,8 +41,10 @@ const checks = {
   'no accumulation over 30 frames':          r?.poolAfterManyFrames?.borrowed === 0,
   'output is stable after many frames':      near(px('stableRepeat')[0], 64),
   'no GL errors':                            Object.values(r ?? {}).every((v) => v.glError === undefined || v.glError === 0),
+  // Every shipped built-in must compile: a fresh install shows these in its menu.
+  'every built-in effect compiles':          Array.isArray(r?.builtinLibrary) && r.builtinLibrary.length > 0 && r.builtinLibrary.every((b) => b.compiled),
 };
 const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
-console.log(JSON.stringify({ errors, passed: Object.keys(checks).length - failed.length, total: Object.keys(checks).length, failed, pixels: Object.fromEntries(Object.entries(r ?? {}).map(([k, v]) => [k, v.pixel ?? v])) }, null, 2));
+console.log(JSON.stringify({ errors, passed: Object.keys(checks).length - failed.length, total: Object.keys(checks).length, failed, pixels: Object.fromEntries(Object.entries(r ?? {}).filter(([k]) => k !== 'builtinLibrary').map(([k, v]) => [k, v.pixel ?? v])), builtinLibrary: r?.builtinLibrary }, null, 2));
 await browser.close();
 process.exit(errors.length === 0 && failed.length === 0 ? 0 : 1);

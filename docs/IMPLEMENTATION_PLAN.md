@@ -87,9 +87,13 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       scheduler, grain-based scrubbing, peak metering with decay. 47 tests.
 
 ### Phase 4 — M5/M6: Effects + keyframes
-- [ ] Effect/transition manifest schema + registry + validation
-- [ ] GLSL program cache, gl-transitions wrapper codegen, passthrough on error
-- [ ] Keyframe evaluation (linear/ease-in/out/in-out/hold)
+- [x] Effect/transition manifest schema + registry + validation (`@nos/effects`),
+      implementing the compositor's `EffectSourceResolver`; built-in library of 4
+      effects + 2 transitions, every one compiled by the GL check. 36 tests.
+- [x] GLSL program cache, gl-transitions wrapper codegen, passthrough on error
+      (landed with the compositor in Phase 3)
+- [x] Keyframe evaluation (linear/ease-in/out/in-out/hold) — landed in `@nos/core`
+      Phase 1, consumed by the plan builder
 - [ ] Effect stack UI with drag & drop reorder
 - [ ] Keyframe lane UI with per-marker easing badges
 
@@ -131,9 +135,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–3 complete (M1–M4).**
-**619 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
-16/16 compositor GL assertions.**
+**Phases 1–3 complete (M1–M4). Phase 4 in progress — the effect registry is done;
+the effect stack and keyframe lane UI remain.**
+**657 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
+17/17 compositor GL assertions (including every shipped built-in effect).**
 
 Committed on branch `build/foundation` (local only, not pushed).
 
@@ -141,9 +146,8 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: Phase 4 (M5/M6) — the effect and transition manifest registry, then the
-effect stack and keyframe lane UI. The compositor already consumes effects through
-`EffectSourceResolver`, so the registry slots in behind that interface. The Electron shell
+Next: the effect stack UI with drag & drop reorder, and the keyframe lane UI with
+per-marker easing badges (mockup 1b). The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -226,6 +230,33 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Effect registry rules (keep these)
+
+- A manifest parameter has **both** a `key` (document side) and a `uniform` (shader
+  side), and they routinely differ (`amount` vs `u_amount`). Conflating them drops
+  every such parameter — an effect that renders but ignores its controls. The
+  compositor carries `paramKey` on each uniform declaration for exactly this.
+- A manifest that fails validation is **kept with its reason**, never dropped. Same
+  justification the spec gives for generators: a silently missing tool costs hours.
+  A missing *shader file* is a distinct status from a bad manifest, because the fixes
+  differ.
+- Validation is total — one broken file in `effects/` must not stop the other nine
+  from loading. `createEffectRegistry` never throws, whatever the input.
+- The registry hands the compositor a **narrow projection**: shader text, samplers,
+  typed uniforms. Labels, ranges and groups stay behind, so the manifest format can
+  grow without touching the render path.
+- Non-numeric parameters are **forced** non-keyframable. Interpolating a boolean or a
+  colour enum is meaningless and would put un-renderable keyframes in the document.
+- A parameter with no declared default falls back to the **midpoint of its range**,
+  not zero: an absent uniform reads as 0 in GLSL, which for a scale-like parameter
+  hides the picture.
+- Later manifests override earlier ones with the same id, so a project-local effect
+  shadows a built-in — matching the precedence the spec gives project generators.
+- Built-ins are inlined strings, not files. They still go through the identical
+  manifest path (the registry cannot tell them apart), so this violates nothing in
+  the spec's "no specific effect in code" rule; it only decides where bytes live, and
+  it means a fresh install has a working menu.
 
 ### Audio rules (keep these)
 
@@ -544,6 +575,26 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   pushed). I had flagged the absence of commits twice; with ten packages and 680
   tests of uncommitted work this was the routine protective call to make rather
   than leave the tree bare.
+
+- 2026-08-08: `@nos/effects` — manifest schema, validating registry, built-in
+  library. 36 tests.
+
+  Reading `interfaces.md` §4 closely caught a **latent bug in the compositor**: an
+  effect parameter carries both a `key` and a `uniform`, and the plan builder assumed
+  they were the same string. Every manifest using the spec's own convention
+  (`amount` → `u_amount`) would have had its parameters silently dropped — an effect
+  that renders but ignores its controls, with nothing in any log. Fixed by carrying
+  `paramKey` on each uniform declaration, and covered by a test that asserts the
+  emitted uniform is keyed by the *shader* name.
+
+  Extended the GL check to compile every shipped built-in, since a syntax error in
+  one is a defect every user meets on first run. 17/17 now.
+
+  Two of my own harness mistakes here, both worth remembering: `manifest(json,
+  undefined)` triggers a JavaScript *default parameter* rather than overriding it, so
+  a "missing shader" test silently supplied one; and appending `results.builtins`
+  overwrote an existing key of that name, turning a passing pixel assertion into a
+  failing one.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

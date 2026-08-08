@@ -18,8 +18,10 @@ import {
   createGlCompositor,
   createProgramCache,
   createRenderTargetPool,
+  describeShaderError,
 } from '../src/index.js';
 import { clipId, effectId, effectInstanceId, frameIndex } from '@nos/core';
+import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, alpha: true });
@@ -115,6 +117,25 @@ const EFFECTS: Record<string, EffectShaderSource> = {
 };
 
 const effects: EffectSourceResolver = { resolve: (id) => EFFECTS[id] };
+
+/**
+ * Compiles every shipped built-in effect.
+ *
+ * These are the effects a fresh install shows in its menu, so a syntax error in one is a defect every
+ * user meets on first run. Verified here rather than trusted, for the same reason the wrapper is.
+ */
+const builtinResults = (() => {
+  const registry = createEffectRegistry(BUILTIN_EFFECTS);
+  return registry.available().map((entry) => {
+    const slot = createProgramCache(gl!, registry).get(entry.id);
+    return {
+      id: entry.id,
+      category: entry.manifest.category,
+      compiled: slot.status === 'ready',
+      error: slot.status === 'ready' ? undefined : describeShaderError(slot.error),
+    };
+  });
+})();
 
 const programs = createProgramCache(gl, effects);
 const builtins = createBuiltinPrograms(gl);
@@ -241,5 +262,7 @@ results.programFailures = programs.failures().map((error) => ({
   firstDiagnosticLine:
     error.kind === 'compile-failed' ? error.diagnostics[0]?.line : undefined,
 }));
+
+results.builtinLibrary = builtinResults;
 
 (window as unknown as { __glcheck: unknown }).__glcheck = results;

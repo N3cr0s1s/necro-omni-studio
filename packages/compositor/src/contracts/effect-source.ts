@@ -22,8 +22,23 @@ export type EffectUniformType = 'float' | 'int' | 'bool' | 'vec2' | 'vec4';
  * type there is nothing to declare, and the shader fails with "undeclared identifier".
  */
 export interface EffectUniformDeclaration {
+  /** GLSL uniform name, e.g. `u_amount`. */
   readonly name: string;
   readonly type: EffectUniformType;
+  /**
+   * Document parameter key feeding this uniform, e.g. `amount`.
+   *
+   * The manifest format in `interfaces.md` §4 gives a parameter both a `key` and a `uniform`, and they
+   * routinely differ — the document reads `amount` while the shader declares `u_amount`. Conflating
+   * them silently drops every parameter whose two names disagree, which presents as an effect that
+   * renders but ignores its controls. Defaults to `name` when a manifest uses one spelling for both.
+   */
+  readonly paramKey?: string;
+}
+
+/** The document key that feeds a uniform. */
+export function paramKeyOf(uniform: EffectUniformDeclaration): string {
+  return uniform.paramKey ?? uniform.name;
 }
 
 /** Declared sampler slots, in binding order. `source`, or `from`/`to` for a transition. */

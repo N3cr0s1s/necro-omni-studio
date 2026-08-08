@@ -1,0 +1,17 @@
+{
+  "name": "@nos/effects",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Effect and transition manifest schema, validation and registry. Implements the compositor's EffectSourceResolver.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*",
+    "@nos/compositor": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

@@ -15,5 +15,8 @@
     "typecheck": "tsc --build",
     "glcheck": "node glcheck/run.mjs",
     "glcheck:serve": "vite --port 5200"
+  },
+  "devDependencies": {
+    "@nos/effects": "*"
   }
 }
