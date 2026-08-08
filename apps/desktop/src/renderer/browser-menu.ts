@@ -1,5 +1,6 @@
+import { ExternalLinkIcon, FolderPlusIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { PROJECT_FOLDERS } from '@nos/core';
-import type { ContextMenuItem } from '@nos/ui';
+import type { ActionMenuItem } from '@nos/ui';
 
 /**
  * What a right-click in the project browser offers.
@@ -40,7 +41,7 @@ export function isProjectDocument(path: string): boolean {
   return path === 'project.json';
 }
 
-export function browserMenuItems(state: BrowserMenuState): readonly ContextMenuItem[] {
+export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuItem[] {
   const path = state.path;
   const protectedEntry = path !== undefined && (isReservedFolder(path) || isProjectDocument(path));
   const reason = protectedEntry ? ' — the project needs this one' : '';
@@ -51,21 +52,25 @@ export function browserMenuItems(state: BrowserMenuState): readonly ContextMenuI
       // Always available, including on empty space: making the first folder is exactly when there is
       // nothing to right-click on.
       label: state.isDirectory && path !== undefined ? `New folder in ${basename(path)}` : 'New folder',
+      icon: FolderPlusIcon,
     },
     {
       id: 'rename',
       label: `Rename${reason}`,
+      icon: PencilIcon,
       disabled: path === undefined || protectedEntry,
       separated: true,
     },
     {
       id: 'reveal',
       label: 'Show in file manager',
+      icon: ExternalLinkIcon,
       disabled: path === undefined,
     },
     {
       id: 'delete',
       label: `Move to trash${reason}`,
+      icon: Trash2Icon,
       disabled: path === undefined || protectedEntry,
       separated: true,
       danger: true,

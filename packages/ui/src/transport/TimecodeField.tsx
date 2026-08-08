@@ -6,7 +6,8 @@ import {
   parseSeekEntry,
   seekEntryText,
 } from '@nos/core';
-import { token } from '../tokens/tokens.js';
+import { Button } from '@nos/ui/components/ui/button';
+import { Input } from '@nos/ui/components/ui/input';
 
 /**
  * The transport's timecode, typed into as well as read.
@@ -50,24 +51,17 @@ export function TimecodeField({ frame, frameRate, duration, onSeek }: TimecodeFi
 
   if (draft === undefined || onSeek === undefined) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         aria-label={`Current time ${shown}`}
         title="Click to type a timecode, a frame number, or a relative move like +30"
         disabled={onSeek === undefined}
         onClick={() => setDraft(shown)}
-        style={{
-          font: token.textReadout,
-          color: token.textPrimary,
-          background: 'transparent',
-          border: '1px solid transparent',
-          borderRadius: token.radiusControl,
-          padding: '2px 6px',
-          cursor: onSeek === undefined ? 'default' : 'text',
-        }}
+        className="font-mono tabular-nums"
       >
         {shown}
-      </button>
+      </Button>
     );
   }
 
@@ -105,8 +99,8 @@ export function TimecodeField({ frame, frameRate, duration, onSeek }: TimecodeFi
   };
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: token.space2 }}>
-      <input
+    <span className="inline-flex items-center gap-2">
+      <Input
         autoFocus
         aria-label="Go to timecode"
         aria-invalid={problem !== undefined}
@@ -119,18 +113,12 @@ export function TimecodeField({ frame, frameRate, duration, onSeek }: TimecodeFi
         onKeyDown={handleKeyDown}
         // Committing on blur, like every inline field here: a user who clicks away has decided.
         onBlur={commit}
-        style={{
-          font: token.textReadout,
-          width: '12ch',
-          background: token.surface1,
-          border: `1px solid ${problem === undefined ? token.accent : token.danger}`,
-          borderRadius: token.radiusControl,
-          color: token.textBright,
-          padding: '2px 6px',
-        }}
+        // `aria-invalid` is what paints the refusal: the registry's Input already draws that state,
+        // so there is nothing to colour here.
+        className="h-7 w-[12ch] font-mono tabular-nums"
       />
       {problem !== undefined && (
-        <span role="alert" style={{ font: token.textMeta, color: token.danger }}>
+        <span role="alert" className="text-xs text-destructive">
           {problem}
         </span>
       )}

@@ -1,5 +1,23 @@
+import {
+  AudioLinesIcon,
+  ClipboardPasteIcon,
+  CopyIcon,
+  CopyPlusIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FilmIcon,
+  LinkIcon,
+  Link2OffIcon,
+  PaintBucketIcon,
+  PaletteIcon,
+  PencilIcon,
+  ScissorsIcon,
+  SplitIcon,
+  Trash2Icon,
+  TypeIcon,
+} from 'lucide-react';
 import { type ClipId, type TimelineDocument, type TrackId, linkedPartner, locateClip } from '@nos/core';
-import type { ContextMenuItem } from '@nos/ui';
+import type { ActionMenuItem } from '@nos/ui';
 
 /**
  * What a right-click offers.
@@ -54,7 +72,7 @@ export const CLIP_MENU_ACTIONS = [
 
 export type ClipMenuAction = (typeof CLIP_MENU_ACTIONS)[number];
 
-export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] {
+export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
   const target = state.clip;
   const located = target === undefined ? undefined : locateClip(state.document, target);
   const linked = located === undefined ? false : linkedPartner(located.clip) !== undefined;
@@ -72,38 +90,49 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
     // Track actions first, because the report that prompted them was "I cannot create a track" from
     // someone who had right-clicked and found only clip actions. The toolbar's `+ V` buttons existed
     // and were not where anyone looked.
-    { id: 'add-video-track', label: 'Add video track' },
-    { id: 'add-audio-track', label: 'Add audio track' },
-    { id: 'add-text-track', label: 'Add text track' },
+    { id: 'add-video-track', label: 'Add video track', icon: FilmIcon },
+    { id: 'add-audio-track', label: 'Add audio track', icon: AudioLinesIcon },
+    { id: 'add-text-track', label: 'Add text track', icon: TypeIcon },
     {
       id: 'rename-track',
       label: 'Rename track',
+      icon: PencilIcon,
       disabled: track === undefined,
     },
     {
       id: 'remove-track',
       label: 'Delete track',
+      icon: Trash2Icon,
       disabled: track === undefined || lastOfKind,
       danger: true,
     },
 
-    { id: 'cut', label: 'Cut', shortcut: 'Ctrl+X', disabled: nothing, separated: true },
-    { id: 'copy', label: 'Copy', shortcut: 'Ctrl+C', disabled: nothing },
-    { id: 'paste', label: 'Paste', shortcut: 'Ctrl+V', disabled: !state.canPaste },
-    { id: 'duplicate', label: 'Duplicate', shortcut: 'Ctrl+D', disabled: nothing },
+    { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: nothing, separated: true },
+    { id: 'copy', label: 'Copy', icon: CopyIcon, shortcut: 'Ctrl+C', disabled: nothing },
+    { id: 'paste', label: 'Paste', icon: ClipboardPasteIcon, shortcut: 'Ctrl+V', disabled: !state.canPaste },
+    { id: 'duplicate', label: 'Duplicate', icon: CopyPlusIcon, shortcut: 'Ctrl+D', disabled: nothing },
 
-    { id: 'split', label: 'Split at playhead', shortcut: 'S', disabled: nothing, separated: true },
+    {
+      id: 'split',
+      label: 'Split at playhead',
+      icon: SplitIcon,
+      shortcut: 'S',
+      disabled: nothing,
+      separated: true,
+    },
     {
       // Named for the state it produces rather than the verb, so the row says what will happen to
       // the clip the user is looking at.
       id: 'toggle-enabled',
       label: enabled ? 'Disable' : 'Enable',
+      icon: enabled ? EyeOffIcon : EyeIcon,
       shortcut: 'E',
       disabled: nothing,
     },
     {
       id: 'unlink',
       label: 'Unlink audio and video',
+      icon: Link2OffIcon,
       // Offered only on a linked clip: on anything else it would be a permanently dead row teaching
       // the user that this menu is mostly furniture.
       disabled: !linked,
@@ -113,12 +142,14 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
       // caller — so splitting a pair was a one-way door, and the only recovery was undo.
       id: 'link',
       label: 'Link audio and video',
+      icon: LinkIcon,
       disabled: !state.canLink,
     },
 
     {
       id: 'copy-attributes',
       label: 'Copy look',
+      icon: PaletteIcon,
       shortcut: 'Ctrl+Shift+C',
       disabled: target === undefined,
       separated: true,
@@ -126,6 +157,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
     {
       id: 'paste-attributes',
       label: 'Paste look',
+      icon: PaintBucketIcon,
       shortcut: 'Ctrl+Shift+V',
       disabled: !state.hasAttributes || nothing,
     },
@@ -133,6 +165,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
     {
       id: 'remove',
       label: state.ripple ? 'Ripple delete' : 'Delete',
+      icon: Trash2Icon,
       shortcut: 'Del',
       disabled: nothing,
       separated: true,

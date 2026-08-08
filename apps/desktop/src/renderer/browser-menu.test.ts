@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContextMenuItem } from '@nos/ui';
+import type { ActionMenuItem } from '@nos/ui';
 import {
   type BrowserMenuState,
   browserMenuItems,
@@ -13,7 +13,7 @@ function state(overrides: Partial<BrowserMenuState> = {}): BrowserMenuState {
   return { path: 'media/take.mp4', isDirectory: false, ...overrides };
 }
 
-const item = (items: readonly ContextMenuItem[], id: string) => items.find((entry) => entry.id === id);
+const item = (items: readonly ActionMenuItem[], id: string) => items.find((entry) => entry.id === id);
 
 describe('what the browser offers', () => {
   it('can always make a folder, including on empty space', () => {

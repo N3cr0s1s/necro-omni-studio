@@ -22,7 +22,7 @@ import {
 afterEach(cleanup);
 
 function fills(): number[] {
-  return [...document.querySelectorAll('[data-meter-fill]')].map((node) =>
+  return [...document.querySelectorAll('[data-slot="progress-indicator"]')].map((node) =>
     Number.parseFloat((node as HTMLElement).style.width),
   );
 }
@@ -58,7 +58,14 @@ describe('the scale', () => {
 });
 
 describe('the zones', () => {
-  it('is green through the usable range', () => {
+  it('paints from a theme role, never from a literal colour', () => {
+    for (const peak of [0.1, 0.9, 1]) {
+      expect(meterTone(peak)).toMatch(/bg-(primary|destructive)/);
+      expect(meterTone(peak)).not.toMatch(/#|rgb|oklch/);
+    }
+  });
+
+  it('is one colour through the usable range', () => {
     expect(meterTone(0.1)).toBe(meterTone(0.4));
   });
 
@@ -97,10 +104,20 @@ describe('drawing', () => {
 
   it('does not animate the bar', () => {
     // The decay that makes a peak readable is the engine's, applied to the value. Animating on top of
-    // it would draw a level that was never measured.
+    // it would draw a level that was never measured — so the registry's own `transition-all` on the
+    // indicator has to be turned off, and this is the assertion that notices if it comes back.
     render(<LevelMeter peaks={[0.5]} />);
-    const fill = document.querySelector('[data-meter-fill]') as HTMLElement;
-    expect(fill.style.transition).toBe('none');
+    const channel = document.querySelector('[data-meter-channel]') as HTMLElement;
+    expect(channel.className).toContain('[&_[data-slot=progress-indicator]]:transition-none');
+  });
+
+  it('keeps the bars out of the accessibility tree, because the meter carries the reading', () => {
+    // Two nested progress bars would announce a percentage the meter does not use, twice, and bury
+    // the clipping state underneath it.
+    render(<LevelMeter peaks={[0.5, 0.5]} />);
+    for (const channel of document.querySelectorAll('[data-meter-channel]')) {
+      expect(channel.getAttribute('aria-hidden')).toBe('true');
+    }
   });
 });
 
