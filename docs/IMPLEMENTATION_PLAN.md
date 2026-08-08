@@ -253,9 +253,14 @@ The **preview** is mounted: the same compositor the export uses, fed by textures
 decoded from the sidecar's file endpoint. Verified end to end against a real clip
 — the frame composites at the playhead and the canvas measures 16:9.
 
-Next: drag-to-move on the timeline, landing a chosen variant onto the timeline as
-a clip, and playback (the audio engine and the mix planner are built and tested
-but not yet driven by a transport).
+**Dragging, trimming and the transport** are in: a clip follows the pointer live
+and commits as one undo step, a rejected move stops with its reason, and space /
+arrow keys drive playback at the project rate (verified: one second advances
+exactly 30 frames at 30 fps).
+
+Next: driving the audio engine from the transport (the engine and mix planner are
+built and tested but not yet connected to playback), and landing a chosen variant
+onto the timeline as a clip.
 
 ### Editing rules (keep these)
 
@@ -1118,3 +1123,24 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   `max-height` constrain independently, so a 16:9 canvas in a 2:1 box is squashed
   rather than letterboxed. `aspect-ratio` is what keeps it honest. A preview that
   misreports framing is worse than no preview in an editor.
+
+- 2026-08-08: Dragging, trimming and the transport — the two gestures that make
+  the editor an editor rather than a viewer.
+
+  The drag holds to the rule the editing layer was designed for: every pointer
+  move re-applies the operation to the document **as it was when the gesture
+  began**, so the drag is a preview and the store records exactly one entry on
+  release. Applying deltas cumulatively instead would accumulate rounding at every
+  event, and a slow drag would end somewhere different from a fast one covering
+  the same distance. Verified in the running app: the clip follows to +200 frames,
+  stays on release, and one undo returns it exactly.
+
+  The transport advances from a wall clock rather than counting frames. A `+1` per
+  animation frame drifts as soon as a render exceeds a frame's budget — slowly on
+  a fast machine, obviously on a slow one, silently on both — while deriving the
+  frame from elapsed time makes a dropped frame *dropped* rather than accumulated
+  as error. That is what will keep audio aligned when the engine is connected.
+  Verified: one second of playback advances exactly 30 frames at 30 fps.
+
+  The timecode readout uses the core formatter rather than a local one, because
+  drop-frame is precisely the rule that is wrong in every hand-rolled timecode.
