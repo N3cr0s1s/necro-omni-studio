@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1784 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1804 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1811,3 +1811,20 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   sliding inside a window that did not move. The filmstrip placement work from this
   morning is what makes that visible at all. The range cut then left the surviving
   tails of both the video and its audio at x=488 with the range bar cleared.
+
+- 2026-08-08: The view follows the work, and undo has a key. `scrollFrame` changed
+  only as a side effect of zooming, so the timeline never moved on its own: during
+  playback the playhead left the right edge and the view sat still, showing
+  material that was no longer playing. There was no way to scroll at all, and
+  `zoomToFit` had been written and tested with nothing calling it. Undo and redo
+  had buttons in the inspector and no keyboard — `Ctrl+Z` did nothing.
+
+  The view follows **only while playing**. A user scrubbing or dragging is looking
+  at something they chose; yanking the view back would fight them.
+
+  This surfaced a bug that had been throwing since the shell was built: the
+  anchored zoom computed `scrollFrame + anchorPx * (before − after)` and handed the
+  result to `frameIndex`, which refuses a non-integer. Almost every zoom step lands
+  on a fraction, so **every ctrl+wheel zoom threw** — unnoticed, because nothing was
+  watching the renderer's console. Rounding fixes it and a test now covers a whole
+  gesture of steps.

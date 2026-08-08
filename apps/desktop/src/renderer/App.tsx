@@ -4,7 +4,6 @@ import {
   type AutosaveStatus,
   type Clip,
   type ClipId,
-  type FrameIndex,
   type FrameRate,
   type TimelineDocument,
   type TrackId,
@@ -39,7 +38,7 @@ import {
   trimClipStart,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
-import { Button, ExportDialog, LevelMeter, MediaBrowser, Timeline, createViewport } from '@nos/ui';
+import { Button, ExportDialog, LevelMeter, MediaBrowser, Timeline } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
@@ -55,6 +54,7 @@ import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
+import { useTimelineView } from './use-timeline-view.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
 import { useCacheStats } from './use-cache-stats.js';
 import { BrowserDetail } from './BrowserDetail.js';
@@ -107,8 +107,6 @@ export function App(): ReactNode {
   const [snap, setSnap] = useState(true);
   const [ripple, setRipple] = useState(false);
   const [widthPx, setWidthPx] = useState(1200);
-  const [framesPerPixel, setFramesPerPixel] = useState(1);
-  const [scrollFrame, setScrollFrame] = useState<FrameIndex>(frameIndex(0));
   const [error, setError] = useState<string | undefined>(undefined);
 
   const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
@@ -176,10 +174,18 @@ export function App(): ReactNode {
     seek: transport.seek,
   });
 
-  const viewport = useMemo(
-    () => createViewport({ framesPerPixel, scrollFrame, widthPx, frameRate: document.frameRate }),
-    [framesPerPixel, scrollFrame, widthPx, document.frameRate],
-  );
+  // The view follows the playhead while the transport runs, and owns the undo keys — both of which
+  // were missing entirely: `scrollFrame` moved only as a side effect of zooming, so playback ran off
+  // the right edge with the timeline sitting still.
+  const view = useTimelineView({
+    document,
+    store,
+    widthPx,
+    playhead,
+    playing: transport.playing,
+  });
+  const viewport = view.viewport;
+  const framesPerPixel = viewport.framesPerPixel;
 
   /**
    * Adopts an opened folder.
@@ -669,10 +675,9 @@ export function App(): ReactNode {
               }
               onToggleSnap={() => setSnap((value) => !value)}
               onToggleRipple={() => setRipple((value) => !value)}
-              onZoom={(next, anchorPx) => {
-                setFramesPerPixel(next);
-                setScrollFrame(frameIndex(Math.max(0, scrollFrame + anchorPx * (framesPerPixel - next))));
-              }}
+              onZoom={view.zoomAt}
+              onScrollBy={view.scrollBy}
+              onFit={view.fit}
             />
           </div>
         </main>

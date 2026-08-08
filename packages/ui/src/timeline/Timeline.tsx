@@ -62,6 +62,10 @@ export interface TimelineProps {
   readonly onToggleSnap?: () => void;
   readonly onToggleRipple?: () => void;
   readonly onZoom?: (framesPerPixel: number, anchorPx: number) => void;
+  /** Scrolls the view by a pixel delta. Without it the timeline cannot be moved at all. */
+  readonly onScrollBy?: (deltaPx: number) => void;
+  /** Frames the whole sequence, or the marked range when there is one. */
+  readonly onFit?: () => void;
   readonly onTrackMute?: (track: TrackId) => void;
   readonly onTrackSolo?: (track: TrackId) => void;
   readonly onTrackLock?: (track: TrackId) => void;
@@ -119,14 +123,22 @@ export function Timeline(props: TimelineProps): ReactNode {
 
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
-      // Ctrl/Cmd + wheel is the near-universal zoom gesture; plain wheel stays available for
-      // vertical scrolling through tracks.
-      if (!event.ctrlKey && !event.metaKey) return;
+      // Ctrl/Cmd + wheel is the near-universal zoom gesture.
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const bounds = laneAreaRef.current?.getBoundingClientRect();
+        const anchorPx = bounds === undefined ? 0 : event.clientX - bounds.left;
+        const factor = event.deltaY > 0 ? 1.25 : 0.8;
+        props.onZoom?.(viewport.framesPerPixel * factor, anchorPx);
+        return;
+      }
+
+      // A trackpad reports horizontal intent in `deltaX`; a mouse wheel has none, so shift is the
+      // conventional stand-in. Reading both means the gesture works on either device.
+      const horizontal = event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+      if (horizontal === 0 || props.onScrollBy === undefined) return;
       event.preventDefault();
-      const bounds = laneAreaRef.current?.getBoundingClientRect();
-      const anchorPx = bounds === undefined ? 0 : event.clientX - bounds.left;
-      const factor = event.deltaY > 0 ? 1.25 : 0.8;
-      props.onZoom?.(viewport.framesPerPixel * factor, anchorPx);
+      props.onScrollBy(horizontal);
     },
     [props, viewport.framesPerPixel],
   );
@@ -222,6 +234,7 @@ function TimelineToolbar({
   document,
   onToggleSnap,
   onToggleRipple,
+  onFit,
   onAddTrack,
   onMarkIn,
   onMarkOut,
@@ -311,6 +324,15 @@ function TimelineToolbar({
 
       <Mono tone={token.textDim}>zoom</Mono>
       <Mono tone={token.textDim}>{formatZoom(viewport)}</Mono>
+      {onFit !== undefined && (
+        <Button
+          onClick={onFit}
+          title="Fit the sequence — or the marked range — to the window (F)"
+          style={{ height: token.controlHeightSm }}
+        >
+          Fit
+        </Button>
+      )}
 
       <div style={{ flex: 1 }} />
 
