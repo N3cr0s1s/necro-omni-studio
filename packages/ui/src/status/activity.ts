@@ -147,6 +147,13 @@ export interface StatusNotice {
   readonly tone: 'info' | 'warning' | 'error';
   readonly message: string;
   readonly actions?: readonly StatusAction[];
+  /**
+   * Clears the notice, when the caller has something to clear.
+   *
+   * Optional because not every notice can be dismissed: one whose source the shell does not own would
+   * get a close button that did nothing, which is worse than no button at all.
+   */
+  readonly onDismiss?: (() => void) | undefined;
 }
 
 export interface StatusAction {

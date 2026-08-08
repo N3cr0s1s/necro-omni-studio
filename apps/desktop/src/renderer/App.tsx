@@ -128,6 +128,7 @@ import { RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
+import { useConfirmation } from './use-confirmation.js';
 
 /**
  * The application shell.
@@ -199,6 +200,8 @@ export function App(): ReactNode {
   const [ripple, setRipple] = useState(false);
   const [widthPx, setWidthPx] = useState(1200);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Messages that say something worked, which have a different lifetime from ones that say it did not.
+  const confirmation = useConfirmation();
 
   const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
   const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
@@ -482,17 +485,16 @@ export function App(): ReactNode {
         }
 
         setBlocked(undefined);
-        setError(
-          result.value.createdTrack
-            ? // Said out loud, because a track appearing is a change to the project the user did not
-              // literally ask for and would otherwise have to notice on their own.
-              `kept — ${manifest.name} went to a new track, ${result.value.track}`
-            : undefined,
-        );
+        setError(undefined);
+        if (result.value.createdTrack) {
+          // Said out loud, because a track appearing is a change to the project the user did not
+          // literally ask for and would otherwise have to notice on their own.
+          confirmation.say(`kept — ${manifest.name} went to a new track, ${result.value.track}`);
+        }
         return result.value.document;
       });
     },
-    [document.frameRate, store],
+    [confirmation, document.frameRate, store],
   );
 
   const acceptVariant = useCallback(
@@ -505,14 +507,14 @@ export function App(): ReactNode {
       if (outcome.target.kind !== 'timeline') {
         // Said out loud. The file is already in `generated/` and the browser shows it, but a Keep that
         // produced no visible change is indistinguishable from a Keep that failed.
-        setError(`kept — ${outcome.output.path} is in the project folder`);
+        confirmation.say(`kept — ${outcome.output.path} is in the project folder`);
         tree.refresh();
         return;
       }
 
       landVariant({ ...outcome, target: outcome.target }, manifest, 'staged');
     },
-    [landVariant, tree],
+    [confirmation, landVariant, tree],
   );
 
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
@@ -911,7 +913,29 @@ export function App(): ReactNode {
   const notices = useMemo((): readonly StatusNotice[] => {
     const failure = error ?? drag.rejection ?? exportRun.error ?? mediaImport.error;
     return [
-      ...(failure !== undefined ? [{ id: 'error', tone: 'error' as const, message: failure }] : []),
+      ...(failure !== undefined
+        ? [
+            {
+              id: 'error',
+              tone: 'error' as const,
+              message: failure,
+              // Only when the shell owns the message. A close button on an export's error would have
+              // to leave the error where it was, and a control that visibly does nothing is worse
+              // than none.
+              onDismiss: failure === error ? () => setError(undefined) : undefined,
+            },
+          ]
+        : []),
+      ...(confirmation.message !== undefined
+        ? [
+            {
+              id: 'confirmation',
+              tone: 'info' as const,
+              message: confirmation.message,
+              onDismiss: confirmation.clear,
+            },
+          ]
+        : []),
       ...(notice !== undefined ? [{ id: 'notice', tone: 'warning' as const, message: notice }] : []),
       ...(blocked !== undefined
         ? [
@@ -950,7 +974,17 @@ export function App(): ReactNode {
           ]
         : []),
     ];
-  }, [autosave, blocked, drag.rejection, error, exportRun.error, landVariant, mediaImport.error, notice]);
+  }, [
+    autosave,
+    blocked,
+    confirmation,
+    drag.rejection,
+    error,
+    exportRun.error,
+    landVariant,
+    mediaImport.error,
+    notice,
+  ]);
 
   const browserMenu: MenuBinding<BrowserMenuTarget> = useMemo(
     () => ({

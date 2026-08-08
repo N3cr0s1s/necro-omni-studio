@@ -10,6 +10,7 @@ import {
   SparklesIcon,
   TriangleAlertIcon,
   UploadIcon,
+  XIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@nos/ui/components/ui/badge';
@@ -135,20 +136,23 @@ function Notice({ notice }: { readonly notice: StatusNotice }): ReactNode {
     >
       <Icon className="size-3.5 shrink-0" />
       <span className="truncate">{notice.message}</span>
-      {notice.actions !== undefined && notice.actions.length > 0 && (
-        <div className="ml-auto flex shrink-0 gap-1.5">
-          {notice.actions.map((action) => (
-            <Button
-              key={action.label}
-              size="xs"
-              variant={action.primary === true ? 'default' : 'ghost'}
-              onClick={action.onClick}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      )}
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {notice.actions?.map((action) => (
+          <Button
+            key={action.label}
+            size="xs"
+            variant={action.primary === true ? 'default' : 'ghost'}
+            onClick={action.onClick}
+          >
+            {action.label}
+          </Button>
+        ))}
+        {notice.onDismiss !== undefined && (
+          <Button size="icon-xs" variant="ghost" onClick={notice.onDismiss} aria-label="Dismiss">
+            <XIcon />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
