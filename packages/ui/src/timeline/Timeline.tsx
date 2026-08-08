@@ -34,12 +34,12 @@ import {
   VolumeXIcon,
 } from 'lucide-react';
 import { Button } from '@nos/ui/components/ui/button';
-import { Input } from '@nos/ui/components/ui/input';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { cn } from '@nos/ui/lib/utils';
 import { ASSET_DRAG_TYPE } from '../media-browser/MediaBrowser.js';
 import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
+import { EditableName } from '../controls/EditableName.js';
 import { ClipBody } from './ClipBody.js';
 import type { ClipStrip } from './clip-strip.js';
 import {
@@ -622,7 +622,7 @@ function TrackHeader({
           autoEdit={renaming}
           value={track.name}
           title={`${track.name} — double-click to rename`}
-          className="min-w-0 flex-1"
+          className="min-w-0 flex-1 text-[11px] font-semibold"
           {...(onRename !== undefined ? { onCommit: (name: string) => onRename(track.id, name) } : {})}
         />
       </div>
@@ -885,80 +885,6 @@ function ResizeHandle({
       // Invisible until pointed at: a permanent line on every header would read as a divider the
       // user is meant to notice, when it is only there for the moment they reach for it.
       className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize bg-transparent"
-    />
-  );
-}
-
-/**
- * A label that becomes a field on double-click.
- *
- * Double-click rather than a pencil button: the header is already dense with M/S/L and a remove
- * control, and renaming is rare enough that it does not deserve permanent width. Escape abandons the
- * edit and Enter commits it, which is what every inline rename anywhere does — a field that could
- * only be left by clicking elsewhere would leave the user unsure whether their change took.
- */
-function EditableName({
-  value,
-  title,
-  className,
-  autoEdit = false,
-  onCommit,
-}: {
-  readonly value: string;
-  readonly title: string;
-  readonly className?: string | undefined;
-  /** Opens the field without a double-click, for a rename asked for somewhere else — a menu. */
-  readonly autoEdit?: boolean;
-  readonly onCommit?: (name: string) => void;
-}): ReactNode {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    // A rename chosen from the context menu has to land in the same field a double-click opens, or
-    // there would be two ways to rename a track that behaved differently.
-    if (!autoEdit) return;
-    setDraft(value);
-    setEditing(true);
-  }, [autoEdit, value]);
-
-  if (!editing || onCommit === undefined) {
-    return (
-      <span
-        title={onCommit === undefined ? value : title}
-        onDoubleClick={() => {
-          if (onCommit === undefined) return;
-          setDraft(value);
-          setEditing(true);
-        }}
-        className={cn('min-w-0 truncate text-[11px] font-semibold', className)}
-      >
-        {value}
-      </span>
-    );
-  }
-
-  const finish = (commit: boolean): void => {
-    setEditing(false);
-    if (commit) onCommit(draft);
-  };
-
-  return (
-    <Input
-      // Focused on appearing: the field exists only because the user just asked for it, and anything
-      // else would need a second click before they could type.
-      autoFocus
-      aria-label={`Rename ${value}`}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => finish(true)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') finish(true);
-        else if (event.key === 'Escape') finish(false);
-        else return;
-        event.preventDefault();
-      }}
-      className={cn('h-6 w-full min-w-0 px-1 py-0 text-[11px] font-semibold', className)}
     />
   );
 }

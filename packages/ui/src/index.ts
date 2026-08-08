@@ -12,6 +12,7 @@
  */
 export * from './semantics/glyphs.js';
 export * from './menus/ActionMenu.js';
+export * from './controls/EditableName.js';
 export * from './controls/NumberField.js';
 export * from './notes/NoteView.js';
 export * from './status/activity.js';

@@ -17,7 +17,7 @@ import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/e
 import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
 import type { MaskId } from '@nos/core';
 import { DiamondIcon, PlusIcon, WandSparklesIcon, XIcon } from 'lucide-react';
-import { type EffectStackEntry, EffectStack } from '@nos/ui';
+import { type EffectStackEntry, EditableName, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel, FieldTitle } from '@nos/ui/components/ui/field';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
@@ -59,6 +59,17 @@ export interface ClipInspectorProps {
    * segmented, which is what makes the control say so instead of vanishing.
    */
   readonly masks?: readonly MaskChoice[] | undefined;
+  /**
+   * Renames the clip. Absent leaves the name read-only rather than showing a field that does nothing.
+   */
+  readonly onRename?: ((clip: ClipId, name: string) => void) | undefined;
+  /**
+   * Opens the name field without a double-click, for a rename asked for from the context menu.
+   *
+   * Driven from outside for the same reason the track rename is: two ways of renaming that behaved
+   * differently would be worse than one.
+   */
+  readonly renaming?: boolean | undefined;
 }
 
 /** One bindable mask, as the inspector needs to show it. */
@@ -77,6 +88,8 @@ export function ClipInspector({
   onChange,
   onReject,
   masks,
+  onRename,
+  renaming,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -111,7 +124,16 @@ export function ClipInspector({
 
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3">
-      <p className="truncate font-mono text-xs text-muted-foreground">{located.clip.label}</p>
+      {/* The clip's name, and the only place it can be changed. Three kept variants of one generator
+          all arrive called `Stable Audio 3`, and a bin of `ad0eb912-…` files gives nothing else to tell
+          them apart by — naming them is how an edit stays legible to whoever opens it next. */}
+      <EditableName
+        value={located.clip.label}
+        title={`${located.clip.label} — double-click to rename`}
+        className="font-mono text-xs text-muted-foreground"
+        autoEdit={renaming === true}
+        {...(onRename !== undefined ? { onCommit: (name: string) => onRename(located.clip.id, name) } : {})}
+      />
 
       {/* Framing first: where a clip is and how much of it shows are questions about the clip itself,
           where an effect stack is about what is done to it afterwards. */}

@@ -415,3 +415,70 @@ describe('the mask slot', () => {
     expect('mask' in instance).toBe(false);
   });
 });
+
+/**
+ * Naming a clip.
+ *
+ * The capability sat in `@nos/editing` from the start with nothing calling it: a clip's label is drawn
+ * on the timeline, in the inspector and in every menu, and it could only ever be whatever the import or
+ * the generator chose. Three kept variants of one generator arrive with one name between them.
+ */
+describe('renaming a clip', () => {
+  function renderRenamable(options: { readonly renaming?: boolean } = {}) {
+    const onRename = vi.fn();
+    render(
+      <ClipInspector
+        document={single()}
+        clip="c1"
+        effects={effects}
+        playhead={0}
+        onChange={vi.fn()}
+        onRename={onRename}
+        {...(options.renaming === true ? { renaming: true } : {})}
+      />,
+    );
+    return onRename;
+  }
+
+  it('shows the name, and does not start as a field', () => {
+    // The inspector is read at a glance far more often than a clip is renamed.
+    renderRenamable();
+    expect(screen.getByText('c1')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Rename c1' })).toBeNull();
+  });
+
+  it('opens on a double-click and commits on Enter', async () => {
+    const onRename = renderRenamable();
+    await userEvent.dblClick(screen.getByText('c1'));
+
+    const field = screen.getByRole('textbox', { name: 'Rename c1' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'wide shot{Enter}');
+
+    expect(onRename).toHaveBeenCalledWith('c1', 'wide shot');
+  });
+
+  it('abandons the edit on Escape', async () => {
+    // The one way out that must not write. A field escapable only by clicking elsewhere leaves a user
+    // unsure whether what they typed took.
+    const onRename = renderRenamable();
+    await userEvent.dblClick(screen.getByText('c1'));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Rename c1' }), 'oops{Escape}');
+
+    expect(onRename).not.toHaveBeenCalled();
+  });
+
+  it('opens by itself when the rename was asked for elsewhere', async () => {
+    // The timeline's context menu offers `Rename clip`, and it has to land in this same field — two
+    // ways of renaming one thing that behaved differently would be worse than one.
+    renderRenamable({ renaming: true });
+    expect(screen.getByRole('textbox', { name: 'Rename c1' })).toBeTruthy();
+  });
+
+  it('stays read-only when nothing can rename it', () => {
+    // A locked track's clip: a field that silently discarded the edit would be worse than no field.
+    render(<ClipInspector document={single()} clip="c1" effects={effects} playhead={0} onChange={vi.fn()} />);
+    expect(screen.getByText('c1')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Rename c1' })).toBeNull();
+  });
+});

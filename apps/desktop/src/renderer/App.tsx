@@ -38,6 +38,7 @@ import {
   nextTrackId,
   removeTrack,
   renameTrack,
+  setClipLabel,
   setTrackHeight,
   toggleTrackFlag,
   trimClipEnd,
@@ -517,6 +518,39 @@ export function App(): ReactNode {
     [confirmation, landVariant, tree],
   );
 
+  /**
+   * Which clip's name field should open by itself, for a rename asked for from the timeline's menu.
+   *
+   * The clip rather than a flag. A boolean stays true after the field closes, so selecting the next
+   * clip would open *its* name field uninvited — the rename would follow the user around. Naming the
+   * clip makes the offer expire the moment the selection moves, with nothing to clear.
+   */
+  const [renamingClip, setRenamingClip] = useState<ClipId | undefined>(undefined);
+
+  /**
+   * Renames a clip.
+   *
+   * The capability existed in `@nos/editing` from the start and nothing called it: a clip's label is
+   * drawn on the timeline, in the inspector and in every menu, and it could only ever be whatever the
+   * import or the generator chose. Three kept variants of one generator arrive with one name between
+   * them.
+   */
+  const renameClip = useCallback(
+    (clip: ClipId, name: string) => {
+      setRenamingClip(undefined);
+      store.commit('rename clip', (current) => {
+        const result = setClipLabel(current, clip, name);
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        setError(undefined);
+        return result.value;
+      });
+    },
+    [store],
+  );
+
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
   const [authoring, setAuthoring] = useState(false);
 
@@ -594,6 +628,7 @@ export function App(): ReactNode {
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
+  // Whether the inspector's name field should open by itself, for a rename asked for from the timeline.
   const columns = useStoredLayout('nos.layout.columns');
   const rows = useStoredLayout('nos.layout.rows');
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
@@ -850,6 +885,14 @@ export function App(): ReactNode {
           break;
         case 'paste-attributes':
           clipEdits.pasteAttributes();
+          break;
+        case 'rename-clip':
+          // Selecting first, because the menu can be opened over a clip that is not the selected one
+          // and the inspector shows the selection. Renaming a clip the user is not looking at is the
+          // one thing this must not do.
+          if (target.clip !== undefined) setSelected(new Set([target.clip]));
+          setRightTab('inspector');
+          setRenamingClip(target.clip);
           break;
         case 'remove':
           clipEdits.remove();
@@ -1272,6 +1315,8 @@ export function App(): ReactNode {
             masks={masks}
             maskChoices={maskChoices}
             onTabChange={setRightTab}
+            onRenameClip={renameClip}
+            renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
             document={document}
             effects={effectRegistry}
             onChangeDocument={commitDocument}

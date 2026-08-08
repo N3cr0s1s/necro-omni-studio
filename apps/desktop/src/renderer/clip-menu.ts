@@ -57,6 +57,7 @@ export const CLIP_MENU_ACTIONS = [
   'add-text-track',
   'rename-track',
   'remove-track',
+  'rename-clip',
   'cut',
   'copy',
   'paste',
@@ -107,7 +108,17 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       danger: true,
     },
 
-    { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: nothing, separated: true },
+    {
+      // Named for what it renames, because this menu also offers `Rename track` and the two are one
+      // click apart. A clip and the row it sits on are different things to name.
+      id: 'rename-clip',
+      label: 'Rename clip',
+      icon: PencilIcon,
+      disabled: nothing,
+      separated: true,
+    },
+
+    { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: 'Ctrl+X', disabled: nothing },
     { id: 'copy', label: 'Copy', icon: CopyIcon, shortcut: 'Ctrl+C', disabled: nothing },
     { id: 'paste', label: 'Paste', icon: ClipboardPasteIcon, shortcut: 'Ctrl+V', disabled: !state.canPaste },
     { id: 'duplicate', label: 'Duplicate', icon: CopyPlusIcon, shortcut: 'Ctrl+D', disabled: nothing },

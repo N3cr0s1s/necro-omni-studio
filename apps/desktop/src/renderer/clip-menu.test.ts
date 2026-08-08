@@ -204,6 +204,21 @@ describe('track actions', () => {
     expect(item(items, 'rename-track')?.disabled).toBeFalsy();
   });
 
+  it('offers to rename the clip that was clicked, separately from its lane', () => {
+    // Both are in this menu, one click apart. A clip and the row it sits on are different things to
+    // name, and the generated ones arrive sharing a name with every sibling variant.
+    const items = clipMenuItems(state({ clip: clipId('c1'), track: trackId('v1') }));
+    expect(item(items, 'rename-clip')?.disabled).toBeFalsy();
+    expect(item(items, 'rename-clip')?.label).toBe('Rename clip');
+    expect(item(items, 'rename-track')?.label).toBe('Rename track');
+  });
+
+  it('cannot rename a clip when the click was on no clip', () => {
+    // An empty lane. Renaming would have to pick a clip the user did not click.
+    const items = clipMenuItems(state({ clip: undefined, selectionSize: 0, track: trackId('v1') }));
+    expect(item(items, 'rename-clip')?.disabled).toBe(true);
+  });
+
   it('cannot rename or delete when the click was on no lane at all', () => {
     // Below the last track. Offering it would act on some other track, which is the one thing a
     // context menu must never do.

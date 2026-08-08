@@ -29,6 +29,7 @@ import {
   UndoIcon,
 } from 'lucide-react';
 import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
+import type { ClipId } from '@nos/core';
 import type { MaskChoice } from './ClipInspector.js';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
@@ -109,6 +110,10 @@ export interface RightPanelProps {
   readonly onAddText: () => void;
   /** Reports an edit the document layer refused, so the shell can show its reason. */
   readonly onReject: (reason: string) => void;
+  /** Renames a clip. Absent leaves its name read-only rather than offering a field that does nothing. */
+  readonly onRenameClip?: ((clip: ClipId, name: string) => void) | undefined;
+  /** Opens the clip's name field, for a rename asked for from the timeline's context menu. */
+  readonly renamingClip?: boolean | undefined;
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
@@ -178,6 +183,8 @@ function InspectorTab({
   onRedo,
   onAddText,
   onReject,
+  onRenameClip,
+  renamingClip,
 }: RightPanelProps): ReactNode {
   return (
     <div className="flex flex-col">
@@ -197,6 +204,8 @@ function InspectorTab({
         onChange={onChangeDocument}
         onReject={onReject}
         {...(maskChoices !== undefined ? { masks: maskChoices } : {})}
+        {...(onRenameClip !== undefined ? { onRename: onRenameClip } : {})}
+        renaming={renamingClip}
       />
 
       <ProjectSettings document={document} onChange={onChangeDocument} onReject={onReject} />
