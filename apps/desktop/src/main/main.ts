@@ -183,6 +183,18 @@ function sessionFile(): string {
   return join(app.getPath('userData'), 'session.json');
 }
 
+/**
+ * Where the generator library shared by every project lives.
+ *
+ * Beside the session file under `userData`, and for the same reason: it belongs to the installation
+ * rather than to any project, and it has to survive every project being closed. §5.6 asks for this
+ * alongside the project's own `generators/`, and only the project's existed — so every new project
+ * started with none at all.
+ */
+function libraryRoot(): string {
+  return join(app.getPath('userData'), 'generators');
+}
+
 async function rememberProject(root: string): Promise<void> {
   try {
     await mkdir(app.getPath('userData'), { recursive: true });
@@ -281,6 +293,55 @@ function registerHandlers(): void {
     // into an uncaught rejection in the main process.
     if (session.root === '') return undefined;
     const absolute = resolveInProject(requireProject(), requireString(path));
+    try {
+      const { readFile } = await import('node:fs/promises');
+      return await readFile(absolute, 'utf8');
+    } catch {
+      return undefined;
+    }
+  });
+
+  /*
+   * The shared library, per §5.6.
+   *
+   * Under `userData` rather than in a project, because that is what "global" means here: generators a
+   * user installs once and has in every project they open afterwards. It is created on first read so
+   * a fresh install has somewhere to put things rather than an error to work out.
+   *
+   * Guarded exactly like the project handlers, against its own root. A library path is still a path a
+   * renderer asked for, and `..` reaches the rest of `userData` — the session file included.
+   */
+  ipcMain.handle(IPC.libraryPath, async (): Promise<string> => libraryRoot());
+
+  ipcMain.handle(IPC.listLibrary, async (_event, path: unknown): Promise<readonly FolderEntry[]> => {
+    const root = libraryRoot();
+    await mkdir(root, { recursive: true }).catch(() => undefined);
+
+    const requested = path === '' || path === undefined ? '' : requireString(path);
+    const target = requested === '' ? root : resolveInProject(root, requested);
+
+    const entries = await readdir(target, { withFileTypes: true }).catch(() => undefined);
+    if (entries === undefined) return [];
+
+    const results: FolderEntry[] = [];
+    for (const entry of entries) {
+      const absolute = join(target, entry.name);
+      const relative = toProjectRelative(root, absolute);
+      if (relative === undefined) continue;
+
+      const size = entry.isFile() ? await stat(absolute).catch(() => undefined) : undefined;
+      results.push({
+        path: relative,
+        name: entry.name,
+        kind: entry.isDirectory() ? 'folder' : 'file',
+        ...(size !== undefined ? { sizeBytes: size.size } : {}),
+      });
+    }
+    return results;
+  });
+
+  ipcMain.handle(IPC.readLibraryFile, async (_event, path: unknown): Promise<string | undefined> => {
+    const absolute = resolveInProject(libraryRoot(), requireString(path));
     try {
       const { readFile } = await import('node:fs/promises');
       return await readFile(absolute, 'utf8');

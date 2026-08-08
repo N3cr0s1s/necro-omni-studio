@@ -1637,6 +1637,7 @@ export function App(): ReactNode {
             onChangeDocument={commitDocument}
             registry={library.registry}
             libraryProblems={library.problems}
+            libraryPath={library.libraryPath}
             runtime={runtime}
             playhead={playhead}
             sidecar={sidecar}

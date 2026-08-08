@@ -37,6 +37,9 @@ const bridge: DesktopBridge = {
   readTextFile: (path) => ipcRenderer.invoke(IPC.readTextFile, path),
   writeTextFile: (path, contents) => ipcRenderer.invoke(IPC.writeTextFile, path, contents),
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),
+  listLibrary: (path) => ipcRenderer.invoke(IPC.listLibrary, path),
+  readLibraryFile: (path) => ipcRenderer.invoke(IPC.readLibraryFile, path),
+  libraryPath: () => ipcRenderer.invoke(IPC.libraryPath),
   // Each push channel gets its own named subscription. Exposing `ipcRenderer.on` instead would let
   // any renderer bug listen to every channel the main process ever sends on, which is the same
   // mistake as a generic `invoke` in the other direction.

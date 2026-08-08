@@ -48,6 +48,10 @@ export const IPC = {
   sidecarInfo: 'sidecar:info',
   /** The project this application last had open, remembered across launches. */
   lastProject: 'project:last',
+  /** The generator library shared by every project, per §5.6. */
+  listLibrary: 'library:list',
+  readLibraryFile: 'library:read',
+  libraryPath: 'library:path',
   /** Reveals a project-relative path in the OS file manager. */
   revealInFolder: 'shell:reveal',
   /** Opens a web link in the user's browser, never in this window. */
@@ -211,6 +215,23 @@ export interface DesktopBridge {
   trashEntry(path: string): Promise<FileOperation>;
   writeTextFile(path: string, contents: string): Promise<void>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
+
+  /**
+   * The generator library shared by every project.
+   *
+   * §5.6 asks for the project's `generators/` folder **and a global library**, and only the first
+   * existed — so every new project started with no generators at all and the manifests had to be
+   * copied into each one by hand. This is the other half: a folder outside any project, read on
+   * startup like the project's, holding the generators a user installs once.
+   *
+   * Its own three methods rather than a root the existing ones could take, because the guard that
+   * keeps `listFolder` inside the open project is the reason it is safe — and a parameter that could
+   * switch it off would be that guard's undoing.
+   */
+  listLibrary(path: string): Promise<readonly FolderEntry[]>;
+  readLibraryFile(path: string): Promise<string | undefined>;
+  /** Where it is, so the panel can tell a user where to put things. */
+  libraryPath(): Promise<string>;
 
   /**
    * Subscribes to project folder changes. Returns an unsubscribe function.

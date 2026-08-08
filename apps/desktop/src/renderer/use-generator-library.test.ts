@@ -15,10 +15,20 @@ interface Files {
   readonly [path: string]: string;
 }
 
-function bridgeWith(files: Files, options: { unreadable?: readonly string[] } = {}): DesktopBridge {
+function bridgeWith(
+  files: Files,
+  options: { unreadable?: readonly string[]; library?: Files } = {},
+): DesktopBridge {
   const unreadable = new Set(options.unreadable ?? []);
+  const library = options.library ?? {};
 
   return {
+    async listLibrary(): Promise<readonly FolderEntry[]> {
+      return Object.keys(library).map((name) => ({ path: name, name, kind: 'file' as const }));
+    },
+    async readLibraryFile(path: string): Promise<string | undefined> {
+      return library[path];
+    },
     async listFolder(path: string): Promise<readonly FolderEntry[]> {
       if (path !== GENERATORS_FOLDER) return [];
       return Object.keys(files).map((name) => ({
@@ -143,5 +153,68 @@ describe('a graph that is not a graph', () => {
     const result = await loadLibrary(bridgeWith({ 'flow.json': 'not json' }));
     expect(result.graphs.size).toBe(0);
     expect(result.problems[0]?.detail).toContain('not valid JSON');
+  });
+});
+
+/**
+ * The shared library.
+ *
+ * §5.6 asks for "the project's `generators/` folder **and the global library**", and only the first
+ * was ever read — so every new project opened with no generators at all and the manifests had to be
+ * copied into each one by hand.
+ */
+describe('the library beside the project', () => {
+  const manifest = (id: string, name: string) =>
+    JSON.stringify({
+      id,
+      name,
+      backend: 'comfyui',
+      graph: 'g.json',
+      produces: 'audio',
+      consumes: [],
+      duration: 'declared',
+      outputs: [{ key: 'a', type: 'audio', node: '1' }],
+      params: [],
+    });
+
+  it('loads a generator the project does not have', async () => {
+    const result = await loadLibrary(
+      bridgeWith({}, { library: { 'shared.manifest.json': manifest('shared', 'Shared') } }),
+    );
+    expect(result.manifests.map((entry) => entry.id)).toEqual(['shared']);
+  });
+
+  it('loads both, so a project adds to the library rather than replacing it', async () => {
+    const result = await loadLibrary(
+      bridgeWith(
+        { 'local.manifest.json': manifest('local', 'Local') },
+        { library: { 'shared.manifest.json': manifest('shared', 'Shared') } },
+      ),
+    );
+    expect(result.manifests.map((entry) => entry.id).sort()).toEqual(['local', 'shared']);
+  });
+
+  it('lets the project override an id the library already has', async () => {
+    // A project shipping its own version of a generator means to use that one.
+    const result = await loadLibrary(
+      bridgeWith(
+        { 'sfx.manifest.json': manifest('sfx', 'Project SFX') },
+        { library: { 'sfx.manifest.json': manifest('sfx', 'Library SFX') } },
+      ),
+    );
+
+    expect(result.manifests).toHaveLength(1);
+    expect(result.manifests[0]?.name).toBe('Project SFX');
+  });
+
+  it('says which one a bad file came from', async () => {
+    // `sfx.manifest.json` in two places is otherwise one filename and two possible fixes.
+    const result = await loadLibrary(bridgeWith({}, { library: { 'bad.manifest.json': '{"id":""}' } }));
+    expect(result.problems[0]?.file).toBe('library/bad.manifest.json');
+  });
+
+  it('works with no library at all, which is a fresh install', async () => {
+    const result = await loadLibrary(bridgeWith({ 'local.manifest.json': manifest('local', 'Local') }));
+    expect(result.manifests.map((entry) => entry.id)).toEqual(['local']);
   });
 });

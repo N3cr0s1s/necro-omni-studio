@@ -95,6 +95,8 @@ export interface RightPanelProps {
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
   readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
   readonly libraryProblems: readonly LibraryProblem[];
+  /** Where the shared library lives, so the empty state can name a folder to drop a manifest into. */
+  readonly libraryPath: string | undefined;
   readonly runtime: GeneratorRuntime;
   readonly playhead: FrameIndex;
   /** Where the sidecar serves project files, so a generated variant can be auditioned. */
@@ -364,6 +366,7 @@ function InspectorTab({
 function GenerateTab({
   registry,
   libraryProblems,
+  libraryPath,
   runtime,
   playhead,
   projectTree,
@@ -419,9 +422,13 @@ function GenerateTab({
   if (records.length === 0) {
     return (
       <div className="flex flex-col gap-2 p-4">
-        <p className="font-mono text-xs text-muted-foreground">
-          no manifests in the project&apos;s generators/ folder
-        </p>
+        {/* Both folders are read, so both are named. An empty state that mentions only the project's
+            teaches the user to copy manifests into every new project, which is the work the shared
+            library exists to remove. */}
+        <p className="font-mono text-xs text-muted-foreground">no manifests in generators/</p>
+        {libraryPath !== undefined && (
+          <p className="font-mono text-xs break-all text-muted-foreground">shared library: {libraryPath}</p>
+        )}
         {libraryProblems.map((problem) => (
           <p key={problem.file} className="flex items-start gap-1.5 font-mono text-xs text-destructive">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
