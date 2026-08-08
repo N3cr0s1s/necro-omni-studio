@@ -287,17 +287,46 @@ export function createComfyUiBackend(options: ComfyUiBackendOptions): GeneratorB
       for (const [nodeClass, node] of Object.entries(info.value)) {
         const required = node?.input?.required ?? {};
         for (const [inputName, spec] of Object.entries(required)) {
-          // An enum input is declared as `[[option, ...], {...}]`; anything else is a scalar type.
-          const options = Array.isArray(spec) ? spec[0] : undefined;
-          if (Array.isArray(options) && options.every((value) => typeof value === 'string')) {
-            enumOptions.set(`${nodeClass}/${inputName}`, options as readonly string[]);
-          }
+          const options = enumOptionsOf(spec);
+          if (options !== undefined) enumOptions.set(`${nodeClass}/${inputName}`, options);
         }
       }
 
       return ok({ nodeClasses, enumOptions });
     },
   };
+}
+
+/**
+ * The options of an enum input, in either shape ComfyUI declares them.
+ *
+ * It has two. The long-standing one puts the options where the type goes — `[[a, b, c], {…}]` — and
+ * newer versions name the type and move the options into the metadata: `['COMBO', { options: […] }]`.
+ *
+ * Only the first was understood, and the consequence was quiet and total: against a current
+ * ComfyUI *every* live dropdown in the application was empty, so a manifest that deferred its
+ * options to the backend produced a control with nothing in it. The report was that a generator's
+ * resolution could not be set; the cause was that no live enum anywhere could be.
+ *
+ * Both are accepted rather than the newer one alone, because the two exist in the wild at once and a
+ * client that only understood the current one would break against the next long-term release.
+ */
+export function enumOptionsOf(spec: unknown): readonly string[] | undefined {
+  if (!Array.isArray(spec)) return undefined;
+
+  const [type, metadata] = spec as [unknown, unknown];
+  if (Array.isArray(type) && type.every((value) => typeof value === 'string')) {
+    return type as readonly string[];
+  }
+
+  if (metadata !== null && typeof metadata === 'object') {
+    const options = (metadata as { options?: unknown }).options;
+    if (Array.isArray(options) && options.every((value) => typeof value === 'string')) {
+      return options as readonly string[];
+    }
+  }
+
+  return undefined;
 }
 
 interface ObjectInfoNode {

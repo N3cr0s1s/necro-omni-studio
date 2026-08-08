@@ -398,6 +398,7 @@ function GenerateTab({
             ? { capabilityOptions: runtime.capabilities.enumOptions }
             : {})}
           assetChoices={assetChoices}
+          projectShape={document.resolution}
           frameGrab={{
             describe: frameGrab.available,
             busy: frameGrab.busy,

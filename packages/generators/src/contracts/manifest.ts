@@ -73,6 +73,15 @@ export interface GeneratorParam {
   readonly max?: number;
   readonly step?: number;
   readonly default?: string | number | boolean;
+  /**
+   * A default the *application* supplies, named by what it derives from.
+   *
+   * For anything whose sensible value depends on the project rather than the graph. The example that
+   * forced it: a generator's output aspect: 1:1 in a 16:9 sequence is pillarboxed the moment it
+   * lands on the timeline, and a manifest cannot know the sequence. Resolved by
+   * `resolveDerivedDefault`; a value the manifest also declares is the fallback when it cannot be.
+   */
+  readonly defaultFrom?: string;
   /** Static list, or a live one from the backend. */
   readonly options?: readonly string[] | CapabilityOptions;
   readonly required?: boolean;

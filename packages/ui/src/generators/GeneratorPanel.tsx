@@ -6,6 +6,7 @@ import {
   type GeneratorParam,
   type RegistryRecord,
   choicesFor,
+  defaultFor,
   describeBlockers,
   describeConstraint,
   describeRecord,
@@ -54,6 +55,14 @@ export interface GeneratorPanelProps {
    * the kind of round trip that makes a tool feel like several tools.
    */
   readonly frameGrab?: FrameGrabOffer;
+  /**
+   * The project's shape, for parameters whose sensible default depends on it.
+   *
+   * A generator defaulting to a square output in a 16:9 sequence is pillarboxed the moment it lands
+   * on the timeline — which is what "it generates badly" turns out to mean. The manifest cannot know
+   * the sequence, so it declares what to derive from and this supplies the project.
+   */
+  readonly projectShape?: { readonly width: number; readonly height: number };
 
   readonly onChangeParam?: (key: string, value: string | number | boolean) => void;
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
@@ -86,6 +95,7 @@ export function GeneratorPanel({
   capabilityOptions,
   assetChoices,
   frameGrab,
+  projectShape,
   onChangeParam,
   onChangePreset,
   onChangeVariantCount,
@@ -99,7 +109,21 @@ export function GeneratorPanel({
 
   // The plan drives the variant control, so the panel and the queue cannot disagree about how many runs a
   // click will produce.
-  const values = useMemo(() => ({ ...defaults, ...params }), [defaults, params]);
+  // Derived defaults resolve against the project and the options the backend actually offers, and
+  // beat the manifest's literal when they resolve — they were chosen knowing the sequence and it
+  // was not. A value the user has set beats both, which is what makes this a default and not a rule.
+  const derived = useMemo(() => {
+    if (projectShape === undefined) return {};
+    const resolved: Record<string, string | number | boolean> = {};
+    for (const param of shown) {
+      if (param.defaultFrom === undefined) continue;
+      const value = defaultFor(param, projectShape, enumOptionsFor(param, capabilityOptions));
+      if (value !== undefined) resolved[param.key] = value;
+    }
+    return resolved;
+  }, [capabilityOptions, projectShape, shown]);
+
+  const values = useMemo(() => ({ ...defaults, ...derived, ...params }), [defaults, derived, params]);
 
   // What is standing between the user and a run, as a value the button and the fields both read, so a
   // greyed button and an unmarked field cannot disagree about which input is missing.
@@ -318,6 +342,14 @@ function ParamControl({
   readonly capabilityOptions?: ReadonlyMap<string, readonly string[]>;
   readonly choices?: readonly AssetChoice[];
   readonly frameGrab?: FrameGrabOffer;
+  /**
+   * The project's shape, for parameters whose sensible default depends on it.
+   *
+   * A generator defaulting to a square output in a 16:9 sequence is pillarboxed the moment it lands
+   * on the timeline — which is what "it generates badly" turns out to mean. The manifest cannot know
+   * the sequence, so it declares what to derive from and this supplies the project.
+   */
+  readonly projectShape?: { readonly width: number; readonly height: number };
   readonly seedLocked?: boolean;
   readonly onChange?: (key: string, value: string | number | boolean) => void;
   readonly onToggleSeedLock?: () => void;
@@ -504,6 +536,14 @@ function AssetField({
   readonly choices: readonly AssetChoice[];
   readonly paramKey: string;
   readonly frameGrab?: FrameGrabOffer;
+  /**
+   * The project's shape, for parameters whose sensible default depends on it.
+   *
+   * A generator defaulting to a square output in a 16:9 sequence is pillarboxed the moment it lands
+   * on the timeline — which is what "it generates badly" turns out to mean. The manifest cannot know
+   * the sequence, so it declares what to derive from and this supplies the project.
+   */
+  readonly projectShape?: { readonly width: number; readonly height: number };
   readonly onChange?: (value: string) => void;
 }): ReactNode {
   // A value the project no longer contains is kept as its own option rather than silently snapping

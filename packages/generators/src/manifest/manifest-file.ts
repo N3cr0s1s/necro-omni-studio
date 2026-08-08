@@ -100,6 +100,7 @@ function parseParam(value: unknown, path: string): Validated<GeneratorParam> {
     options?: readonly string[] | CapabilityOptions;
     required?: boolean;
     transport?: string;
+    default_from?: string;
   }>({
     key: vString,
     label: vOptional(vString),
@@ -114,6 +115,7 @@ function parseParam(value: unknown, path: string): Validated<GeneratorParam> {
     options: vOptional(vOptions),
     required: vOptional(vBoolean),
     transport: vOptional(vString),
+    default_from: vOptional(vString),
   })(value, path);
 
   if (!shape.ok) return shape;
@@ -133,6 +135,7 @@ function parseParam(value: unknown, path: string): Validated<GeneratorParam> {
     ...(parsed.options !== undefined ? { options: parsed.options } : {}),
     ...(parsed.required !== undefined ? { required: parsed.required } : {}),
     ...(parsed.transport !== undefined ? { transport: parsed.transport } : {}),
+    ...(parsed.default_from !== undefined ? { defaultFrom: parsed.default_from } : {}),
   });
 }
 
@@ -339,6 +342,7 @@ function serializeParam(param: GeneratorParam): Readonly<Record<string, unknown>
     ...(options !== undefined ? { options } : {}),
     ...(param.required !== undefined ? { required: param.required } : {}),
     ...(param.transport !== undefined ? { transport: param.transport } : {}),
+    ...(param.defaultFrom !== undefined ? { default_from: param.defaultFrom } : {}),
   };
 }
 

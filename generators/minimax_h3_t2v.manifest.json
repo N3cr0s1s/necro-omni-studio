@@ -46,6 +46,7 @@
       "key": "aspect_ratio",
       "label": "Aspect ratio",
       "type": "enum",
+      "default_from": "project_aspect_ratio",
       "default": "16:9 (Widescreen)",
       "bind": "/115/inputs/aspect_ratio",
       "options": { "from": "capabilities", "node_class": "ResolutionSelector", "input": "aspect_ratio" }
@@ -53,12 +54,12 @@
 
     {
       "key": "megapixels",
-      "label": "Megapixels",
+      "label": "Size (megapixels)",
       "type": "float",
       "min": 0.1,
-      "max": 2,
+      "max": 16,
       "step": 0.1,
-      "default": 0.4,
+      "default": 0.2,
       "bind": "/115/inputs/megapixels"
     },
 

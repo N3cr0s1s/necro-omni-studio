@@ -5,6 +5,7 @@ import {
   type ComfyUiSocket,
   type ComfyUiTransport,
   createComfyUiBackend,
+  enumOptionsOf,
   parseSocketEvent,
   viewQuery,
 } from './comfyui-backend.js';
@@ -86,6 +87,37 @@ const defaultUpload: Upload = async ({ path, key }) => {
   // ComfyUI files an upload under its own name, which is what a graph must reference.
   return { ok: true, value: { name: `stored_${path.split('/').pop() ?? path}` } };
 };
+
+describe('reading an enum input’s options', () => {
+  // ComfyUI declares them two ways, and only the older was understood. Against a current ComfyUI the
+  // consequence was quiet and total: every live dropdown in the application was empty, so a manifest
+  // deferring its options to the backend produced a control with nothing in it. The report was that a
+  // generator's resolution could not be set; the cause was that no live enum anywhere could be.
+  it('reads the long-standing shape, where the options stand in for the type', () => {
+    expect(enumOptionsOf([['euler', 'dpmpp_2m'], { default: 'euler' }])).toEqual(['euler', 'dpmpp_2m']);
+  });
+
+  it('reads the newer shape, where the type is named and the options are metadata', () => {
+    const spec = ['COMBO', { tooltip: 'The aspect ratio', options: ['1:1 (Square)', '16:9 (Widescreen)'] }];
+    expect(enumOptionsOf(spec)).toEqual(['1:1 (Square)', '16:9 (Widescreen)']);
+  });
+
+  it('is nothing for a scalar input', () => {
+    expect(enumOptionsOf(['FLOAT', { default: 1, min: 0.1, max: 16 }])).toBeUndefined();
+    expect(enumOptionsOf(['INT', { default: 8 }])).toBeUndefined();
+  });
+
+  it('is nothing for an input that is not a declaration at all', () => {
+    expect(enumOptionsOf(undefined)).toBeUndefined();
+    expect(enumOptionsOf('IMAGE')).toBeUndefined();
+    expect(enumOptionsOf([])).toBeUndefined();
+  });
+
+  it('refuses a mixed list rather than passing non-strings to a select', () => {
+    expect(enumOptionsOf([['a', 3], {}])).toBeUndefined();
+    expect(enumOptionsOf(['COMBO', { options: ['a', null] }])).toBeUndefined();
+  });
+});
 
 describe('submit', () => {
   it('posts the graph and returns the prompt id', async () => {
