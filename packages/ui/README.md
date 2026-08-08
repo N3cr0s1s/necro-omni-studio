@@ -38,6 +38,33 @@ import { cn } from '@nos/ui/lib/utils';
 2. **No Tailwind override of a shadcn component's own styling.** A `className` on a shadcn component
    is for layout — where it sits, how much room it takes — not for repainting it.
 3. **Light and dark are `next-themes`' job.** Nothing in this package reads the current mode.
+4. **`style` is for arithmetic, never for appearance.** The timeline computes a clip's `left` and
+   `width` per frame from zoom and scroll; there is no class for a number that changes on every
+   pointer move. Everything that is _not_ a computed position is a class.
+
+### Where a role goes
+
+- `primary` — the playhead, the transport, the thing a click confirms.
+- `destructive` — a refusal, a failure, a removal. Never a warning that is merely worth reading.
+- `muted` / `muted-foreground` — surfaces behind content, and secondary text.
+- `chart-1…5` — **categories**, not states: an asset type, a track kind, a clip's provenance. Asset
+  types are categories, so they must not borrow `primary` or `destructive`, whose meanings are taken.
+- `chart-4` in particular means **a generator made this**, everywhere: the browser glyph, the clip
+  body, the variant picker's edge, the seed readout.
+
+There is no "warning" role in the theme, and one has not been invented. Where a state sits between
+fine and broken — a meter above −6 dBFS — it is a softened `destructive`, which stays correct under
+any palette in a way a hand-picked amber would not.
+
+## Two literal colours, and why they are not styling
+
+- `apps/desktop/src/main/main.ts` — the `BrowserWindow` background. The main process runs unbundled
+  and cannot read a stylesheet; this only colours the frame between the window opening and the
+  renderer painting. It mirrors the preset's dark background, and is the one value outside
+  `globals.css` that has to follow a palette change.
+- `apps/desktop/src/renderer/clip-strips.ts` — the waveform body. That is _pixels_: rasterised into a
+  PNG and cached beside the audio, so it cannot follow a theme that changes at runtime any more than
+  a video frame can.
 
 ## Deviations from the registry as shipped
 

@@ -12,7 +12,17 @@ import type { WaveformPeaks } from '@nos/media';
  * what an empty file looks like, and that a clip narrower than one bucket still draws something.
  */
 
-/** Colour of the waveform body. Matches the audio-domain accent the mockups use. */
+/**
+ * Colour of the waveform body.
+ *
+ * A literal, and one of only two left in the application — because this is not styling. The waveform
+ * is *pixels*, rasterised into a PNG and cached on disk beside the audio, so it cannot follow a theme
+ * that changes at runtime any more than a video frame can: switching to light mode would have to
+ * invalidate every cached strip to make a class name of it.
+ *
+ * Chosen to sit near the `chart-2` role audio uses elsewhere, so the strip reads as the same family
+ * of thing as the clip it is drawn inside.
+ */
 export const WAVEFORM_COLOUR = '#38c1a4';
 
 export interface WaveformImageOptions {

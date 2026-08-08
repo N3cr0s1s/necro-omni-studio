@@ -511,7 +511,11 @@ function createWindow(): void {
   const window = new BrowserWindow({
     width: 1920,
     height: 1080,
-    backgroundColor: '#0d0e11',
+    // The preset's own dark background, `oklch(0.147 0.004 49.3)`, written as a hex literal because
+    // the main process runs unbundled and cannot read a stylesheet. It is here only to colour the
+    // frame between the window opening and the renderer painting; the theme itself is next-themes'.
+    // If the palette changes, this is the one place outside `globals.css` that has to follow.
+    backgroundColor: '#0c0a09',
     // Shown once painted: an empty white frame while the bundle loads reads as a broken application.
     show: false,
     webPreferences: {
