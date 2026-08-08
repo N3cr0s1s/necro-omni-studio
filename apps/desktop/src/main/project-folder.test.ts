@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   PROJECT_SUBFOLDERS,
   ProjectPathError,
@@ -12,8 +12,24 @@ import {
   writeProjectFile,
 } from './project-folder.js';
 
+/**
+ * Every temporary root this file made, removed when it is done.
+ *
+ * Tracked rather than cleaned up per test, because several tests deliberately leave a folder in a
+ * particular state and read it back. Without this the suite leaked one directory per call — a full
+ * checkout's worth of runs had left 1288 of them under `/tmp`, which is the sort of thing nobody
+ * notices until a disk fills.
+ */
+const roots: string[] = [];
+
+afterAll(async () => {
+  await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+});
+
 async function temporaryRoot(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'nos-project-'));
+  const root = await mkdtemp(join(tmpdir(), 'nos-project-'));
+  roots.push(root);
+  return root;
 }
 
 describe('containment', () => {
