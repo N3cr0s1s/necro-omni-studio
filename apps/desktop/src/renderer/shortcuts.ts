@@ -98,6 +98,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: 'Pointer',
     shortcuts: [
       { keys: ['Drag'], action: 'Move a clip', note: 'from its body' },
+      { keys: ['Drag'], action: 'Scrub', note: 'on the ruler — audible unless turned off' },
       { keys: ['Alt', 'Drag'], action: 'Slip a clip', note: 'the content moves, the clip does not' },
       { keys: ['Drag'], action: 'Trim', note: 'from a clip edge' },
       { keys: ['Shift', 'Drag'], action: 'Roll a cut', note: 'from a shared edge' },

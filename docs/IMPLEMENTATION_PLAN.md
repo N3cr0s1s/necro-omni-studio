@@ -311,7 +311,9 @@ empty queue and an idle GPU. The socket adapter woke only on a `message`, so a b
 parked the progress loop on a promise nothing would resolve. **Any stream a job waits on must end when
 its source dies**, or the job waits forever and reports nothing.
 
-Five fields found this way and closed since: `track.gain` and `track.pan` — the mix plan multiplied
+Six capabilities found this way and closed since: the audio engine's `scrub` — a grain with a fade at
+each end, taking only the loudest source, on the hook's interface and never called, so §6.2's "audio mix
+**and scrub**" was half built — `track.gain` and `track.pan` — the mix plan multiplied
 one into every clip on the track and combined the other with each clip's, and both sat at unity and
 centre for the life of every project — `Transition.params` — the compositor read it and the
 built-in wipe declares a `softness`, so every wipe sat at the manifest default — `marker.label` and `marker.color` — drawn by the ruler,
@@ -751,6 +753,9 @@ so it can gate a release:
 - Faders **clamp**, they do not refuse. The useful behaviour at the end of the travel is
   to stop, and a rejection there is a dialog in the middle of a drag. A non-finite value
   floors: `Number('')` is 0, and a cleared field must not quietly become silence.
+- Scrub audio plays **only when the transport is parked**. The engine stops playback to
+  make room for a grain, which is right at rest and wrong mid-playback: a click on the
+  ruler should move the play position, not replace the sound with a blip.
 - A clip's level and its track's belong beside each other. A level is read *against*
   something, and "this clip is at −3, what is the track doing to it?" is unanswerable
   with the two numbers a metre apart.
