@@ -249,9 +249,13 @@ backend reports **1102 installed node classes**, and all five manifests validate
 as `ready` with their parameters, presets and capability badges rendered entirely
 from JSON. No page errors.
 
-Next: the preview surface (the compositor is built and GL-verified but not yet
-mounted in the shell), drag-to-move on the timeline, and landing a chosen variant
-onto the timeline as a clip.
+The **preview** is mounted: the same compositor the export uses, fed by textures
+decoded from the sidecar's file endpoint. Verified end to end against a real clip
+— the frame composites at the playhead and the canvas measures 16:9.
+
+Next: drag-to-move on the timeline, landing a chosen variant onto the timeline as
+a clip, and playback (the audio engine and the mix planner are built and tested
+but not yet driven by a transport).
 
 ### Editing rules (keep these)
 
@@ -1093,3 +1097,24 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   against the live ComfyUI (1102 node classes) and renders each generator's
   parameters, presets and capability badges from its JSON alone — which is the
   framework's central claim, demonstrated rather than asserted.
+
+- 2026-08-08: The preview surface. It is the same compositor the export uses —
+  that is the spec's WYSIWYG rule and the reason there is one implementation
+  rather than a fast path and a correct one. This component supplies the two
+  things it cannot get itself: a GL context, and textures for decoded frames.
+
+  Decoding is best-effort by design. A layer whose frame has not arrived is
+  skipped and *counted*, never waited for: a preview that blocks on a seek turns a
+  slow decode into a frozen window, and `layersSkipped` is what tells the user a
+  frame is still coming rather than leaving them looking at unexplained black.
+
+  Running it surfaced a real gap in the render-plan contract. The plan's video
+  source carried `sourceFrame` "in the source's own rate" but not the rate itself,
+  so the executor had to guess — and a 24 fps clip on a 30 fps timeline is seeked
+  25% away from the right moment, an error that grows with the clip and appears
+  nowhere in the plan. `sourceRate` is now on the plan, with a test.
+
+  And a CSS one worth recording because it is easy to repeat: `max-width` and
+  `max-height` constrain independently, so a 16:9 canvas in a 2:1 box is squashed
+  rather than letterboxed. `aspect-ratio` is what keeps it honest. A preview that
+  misreports framing is worse than no preview in an editor.
