@@ -2,7 +2,7 @@ node_modules
 dist
 **/dist
 package-lock.json
-docs/comfy
+docs
 generators/*.json
 !generators/*.manifest.json
 apps/sidecar
