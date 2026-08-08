@@ -1,0 +1,29 @@
+{
+  "name": "@nos/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Electron shell: window, sidecar lifecycle, project folder access.",
+  "main": "dist/main/main.js",
+  "dependencies": {
+    "@nos/audio": "*",
+    "@nos/compositor": "*",
+    "@nos/core": "*",
+    "@nos/editing": "*",
+    "@nos/effects": "*",
+    "@nos/export": "*",
+    "@nos/generators": "*",
+    "@nos/masks": "*",
+    "@nos/media": "*",
+    "@nos/sidecar-client": "*",
+    "@nos/ui": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "build:main": "tsc --build && node -e \"const{copyFileSync}=require('fs');copyFileSync('dist/preload/preload.js','dist/preload/preload.mjs')\"",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "dev": "vite",
+    "start": "npm run build && electron ."
+  }
+}

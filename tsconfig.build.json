@@ -42,6 +42,9 @@
     },
     {
       "path": "packages/smoke"
+    },
+    {
+      "path": "apps/desktop"
     }
   ]
 }

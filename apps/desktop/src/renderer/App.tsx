@@ -1,0 +1,325 @@
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ClipId,
+  type FrameIndex,
+  type TimelineDocument,
+  FRAME_RATES,
+  createDocument,
+  createDocumentStore,
+  frameIndex,
+  loadDocument,
+  locateClip,
+  projectId,
+  saveDocument,
+  sequenceId,
+  trackId,
+} from '@nos/core';
+import { buildTree } from '@nos/media';
+import { moveClip, splitClip, trimClipEnd, trimClipStart } from '@nos/editing';
+import { Button, MediaBrowser, PanelHeader, SectionCaption, Timeline, createViewport } from '@nos/ui';
+import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
+import { useProjectTree } from './use-project-tree.js';
+
+/**
+ * The application shell.
+ *
+ * Composition only. Every decision it makes — what an edit does, how a frame is planned, what a
+ * generator can run — belongs to a package, and this file's job is to hold the pieces together and own
+ * the small amount of state that is genuinely about *this window*: which clip is selected, where the
+ * playhead is, how far the timeline is zoomed.
+ *
+ * That division is what has kept the packages testable in Node, and it is why this file is short.
+ */
+
+const TRACKS = { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') };
+
+function emptyProject(name: string): TimelineDocument {
+  return createDocument({
+    id: projectId('project'),
+    sequenceId: sequenceId('main'),
+    name,
+    frameRate: FRAME_RATES.WEB_30,
+    resolution: { width: 1920, height: 1080 },
+    trackIds: TRACKS,
+  });
+}
+
+/** The bridge, or `undefined` when the UI runs in a plain browser (the visual harness). */
+function bridge(): DesktopBridge | undefined {
+  return (globalThis as { nos?: DesktopBridge }).nos;
+}
+
+export function App(): ReactNode {
+  const [project, setProject] = useState<ProjectInfo | undefined>(undefined);
+  const [sidecar, setSidecar] = useState<SidecarInfo | undefined>(undefined);
+  const [playhead, setPlayhead] = useState<FrameIndex>(frameIndex(0));
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [snap, setSnap] = useState(true);
+  const [ripple, setRipple] = useState(false);
+  const [widthPx, setWidthPx] = useState(1200);
+  const [framesPerPixel, setFramesPerPixel] = useState(1);
+  const [scrollFrame, setScrollFrame] = useState<FrameIndex>(frameIndex(0));
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
+  const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
+  useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
+
+  const tree = useProjectTree(project?.root);
+  const laneRef = useRef<HTMLDivElement | null>(null);
+
+  // The lane width drives every frame-to-pixel conversion, so it is measured rather than assumed —
+  // a hard-coded width would misplace the playhead on any window that is not exactly that size.
+  useEffect(() => {
+    const element = laneRef.current;
+    if (element === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setWidthPx(Math.max(200, entry.contentRect.width - 148));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const viewport = useMemo(
+    () => createViewport({ framesPerPixel, scrollFrame, widthPx, frameRate: document.frameRate }),
+    [framesPerPixel, scrollFrame, widthPx, document.frameRate],
+  );
+
+  const openProject = useCallback(async () => {
+    const api = bridge();
+    if (api === undefined) {
+      setError('the desktop bridge is unavailable — this build is running outside Electron');
+      return;
+    }
+
+    const opened = await api.openProject();
+    if (opened === undefined) return;
+    setProject(opened);
+    setSidecar(await api.sidecarInfo());
+
+    if (opened.document === undefined) {
+      // A folder with no `project.json` is a *new* project, not a broken one.
+      store.reset(emptyProject(opened.name));
+      return;
+    }
+
+    const loaded = loadDocument(opened.document);
+    if (loaded.ok) {
+      store.reset(loaded.value.document);
+      setError(undefined);
+    } else {
+      // Never silently replaced with an empty timeline: that reads as "my project is gone".
+      setError(`${opened.name}/project.json could not be read`);
+    }
+  }, [store]);
+
+  const save = useCallback(async () => {
+    const api = bridge();
+    if (api === undefined || project === undefined) return;
+    await api.saveProject(saveDocument(store.getDocument()));
+    store.markSaved();
+  }, [project, store]);
+
+  /**
+   * Nudges the selected clip by a number of frames.
+   *
+   * The keyboard path to the same operation a drag performs, and the one that makes the rejection rule
+   * visible: a move onto a neighbour is refused with its reason rather than resolved by displacing
+   * material the user cannot see.
+   */
+  const nudge = useCallback(
+    (delta: number) => {
+      const target = [...selected][0];
+      if (target === undefined) return;
+
+      store.commit('move clip', (current) => {
+        const located = locateClip(current, target as ClipId);
+        if (located === undefined) return current;
+
+        const result = moveClip(
+          current,
+          target as ClipId,
+          TRACKS.video,
+          frameIndex(Math.max(0, located.clip.span.start + delta)),
+        );
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        setError(undefined);
+        return result.value;
+      });
+    },
+    [selected, store],
+  );
+
+  const razor = useCallback(() => {
+    const target = [...selected][0];
+    if (target === undefined) return;
+    store.commit('split clip', (current) => {
+      const result = splitClip(current, target as ClipId, playhead, `${target}_b` as ClipId);
+      return result.ok ? result.value : current;
+    });
+  }, [playhead, selected, store]);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: 'var(--nos-bg-app)',
+        color: 'var(--nos-text-primary)',
+        font: '400 12px system-ui, sans-serif',
+      }}
+    >
+      <TitleBar
+        project={project}
+        sidecar={sidecar}
+        dirty={store.getSnapshot().dirty}
+        onOpen={() => void openProject()}
+        onSave={() => void save()}
+      />
+
+      {error !== undefined && (
+        <div
+          role="alert"
+          style={{
+            padding: '6px 16px',
+            background: 'rgba(255, 107, 107, 0.12)',
+            color: 'var(--nos-danger)',
+            font: '500 11px ui-monospace, monospace',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        <MediaBrowser tree={tree.tree ?? buildTree([])} watcher={tree.watcher} onActivate={() => undefined} />
+
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div
+            style={{
+              flex: 1,
+              background: 'var(--nos-bg-canvas)',
+              display: 'grid',
+              placeItems: 'center',
+              color: 'var(--nos-text-ghost)',
+            }}
+          >
+            <SectionCaption>Preview</SectionCaption>
+          </div>
+
+          <div ref={laneRef} style={{ flex: 'none' }}>
+            <Timeline
+              document={document}
+              viewport={viewport}
+              playhead={playhead}
+              selectedClips={selected}
+              snapEnabled={snap}
+              rippleEnabled={ripple}
+              onScrub={setPlayhead}
+              onSelectClip={(clip, additive) =>
+                setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
+              }
+              onToggleSnap={() => setSnap((value) => !value)}
+              onToggleRipple={() => setRipple((value) => !value)}
+              onZoom={(next, anchorPx) => {
+                setFramesPerPixel(next);
+                setScrollFrame(frameIndex(Math.max(0, scrollFrame + anchorPx * (framesPerPixel - next))));
+              }}
+            />
+          </div>
+        </main>
+
+        <aside
+          style={{
+            width: 340,
+            flex: 'none',
+            borderLeft: '1px solid var(--nos-border)',
+            background: 'var(--nos-bg-panel)',
+          }}
+        >
+          <PanelHeader caption="Inspector" />
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button onClick={razor} disabled={selected.size === 0}>
+              Split at playhead
+            </Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button onClick={() => nudge(-1)} disabled={selected.size === 0} title="Nudge one frame left">
+                ◀ 1f
+              </Button>
+              <Button onClick={() => nudge(1)} disabled={selected.size === 0} title="Nudge one frame right">
+                1f ▶
+              </Button>
+            </div>
+            <Button onClick={() => store.undo()} disabled={!store.getSnapshot().canUndo}>
+              Undo
+            </Button>
+            <Button onClick={() => store.redo()} disabled={!store.getSnapshot().canRedo}>
+              Redo
+            </Button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function TitleBar({
+  project,
+  sidecar,
+  dirty,
+  onOpen,
+  onSave,
+}: {
+  readonly project: ProjectInfo | undefined;
+  readonly sidecar: SidecarInfo | undefined;
+  readonly dirty: boolean;
+  readonly onOpen: () => void;
+  readonly onSave: () => void;
+}): ReactNode {
+  return (
+    <header
+      style={{
+        height: 44,
+        flex: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '0 16px',
+        background: 'var(--nos-bg-panel)',
+        borderBottom: '1px solid var(--nos-border)',
+      }}
+    >
+      <SectionCaption>Necro Omni Studio</SectionCaption>
+      <span style={{ color: 'var(--nos-text-secondary)' }}>
+        {project?.name ?? 'no project open'}
+        {dirty ? ' •' : ''}
+      </span>
+      <div style={{ flex: 1 }} />
+      {/* The sidecar's state is shown rather than hidden: without it there are no proxies, no
+          waveforms and no export, and a user who cannot see that will blame the application. */}
+      <span
+        style={{
+          font: '500 11px ui-monospace, monospace',
+          color: sidecar?.available === true ? 'var(--nos-ok)' : 'var(--nos-warn)',
+        }}
+        title={sidecar?.detail ?? ''}
+      >
+        {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
+      </span>
+      <Button onClick={onOpen}>Open project</Button>
+      <Button tone="primary" onClick={onSave} disabled={project === undefined}>
+        Save
+      </Button>
+    </header>
+  );
+}
+
+function describeEdit(error: { readonly kind: string }): string {
+  return `the edit was rejected: ${error.kind.replace(/-/g, ' ')}`;
+}
+
+export { trimClipEnd, trimClipStart };
