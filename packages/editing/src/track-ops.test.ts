@@ -24,7 +24,9 @@ import {
   nextTrackName,
   removeTrack,
   renameTrack,
+  setTrackHeight,
   toggleTrackFlag,
+  TRACK_HEIGHT_RANGE,
 } from './track-ops.js';
 
 /**
@@ -269,6 +271,56 @@ describe('renaming', () => {
     const document = documentOf();
     const result = renameTrack(document, trackId('v1'), 'V1');
     expect(result.ok && result.value).toBe(document);
+  });
+});
+
+describe('track height', () => {
+  it('resizes a track', () => {
+    const result = setTrackHeight(documentOf(), trackId('v1'), 120);
+    expect(result.ok && result.value.sequence.tracks[0]?.height).toBe(120);
+  });
+
+  it('keeps a row tall enough to hold its own controls', () => {
+    const result = setTrackHeight(documentOf(), trackId('v1'), 2);
+    expect(result.ok && result.value.sequence.tracks[0]?.height).toBe(TRACK_HEIGHT_RANGE.min);
+  });
+
+  it('stops one track from filling the window and hiding every other', () => {
+    // The failure a free-form drag produces within about two seconds of being discovered.
+    const result = setTrackHeight(documentOf(), trackId('v1'), 5000);
+    expect(result.ok && result.value.sequence.tracks[0]?.height).toBe(TRACK_HEIGHT_RANGE.max);
+  });
+
+  it('rounds, because a row cannot be half a pixel tall', () => {
+    const result = setTrackHeight(documentOf(), trackId('v1'), 100.6);
+    expect(result.ok && result.value.sequence.tracks[0]?.height).toBe(101);
+  });
+
+  it('resizes a locked track, since its height is not on it', () => {
+    const base = documentOf();
+    const locked: TimelineDocument = {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        tracks: base.sequence.tracks.map((track) =>
+          track.id === 'v1' ? ({ ...track, locked: true } as Track) : track,
+        ),
+      },
+    };
+
+    expect(setTrackHeight(locked, trackId('v1'), 120).ok).toBe(true);
+  });
+
+  it('is a no-op at the height it already has', () => {
+    const document = documentOf();
+    const height = document.sequence.tracks[0]!.height;
+    const result = setTrackHeight(document, trackId('v1'), height);
+
+    expect(result.ok && result.value).toBe(document);
+  });
+
+  it('names a track that is not there', () => {
+    expect(setTrackHeight(documentOf(), trackId('nope'), 100).ok).toBe(false);
   });
 });
 

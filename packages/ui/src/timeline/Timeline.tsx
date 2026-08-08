@@ -106,6 +106,13 @@ export interface TimelineProps {
   readonly onTrackRemove?: (track: TrackId) => void;
   /** Renames a track. `A2 · music` is how an editor says which row holds what. */
   readonly onTrackRename?: (track: TrackId, name: string) => void;
+  /**
+   * Resizes a track, by dragging the bottom edge of its header.
+   *
+   * `phase` is what lets a whole drag become one undo step: the shell opens a gesture on the first
+   * move and closes it on `end`, the same rule every other drag in this application follows.
+   */
+  readonly onTrackResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
   /** Adds a track of a kind. The toolbar offers one button per kind the spec allows N of. */
   readonly onAddTrack?: (kind: TrackKind) => void;
 
@@ -181,7 +188,6 @@ export function Timeline(props: TimelineProps): ReactNode {
   const anySoloed = document.sequence.tracks.some((track) => track.solo);
   const marquee = useMarquee({
     viewport,
-    laneAreaRef,
     tracks: document.sequence.tracks,
     ...(props.onSelectRegion !== undefined ? { onSelect: props.onSelectRegion } : {}),
   });
@@ -201,28 +207,12 @@ export function Timeline(props: TimelineProps): ReactNode {
     >
       <TimelineToolbar {...props} totalFrames={totalFrames} clipCount={clipCount(document)} />
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <TrackHeaderColumn
-          tracks={document.sequence.tracks}
-          anySoloed={anySoloed}
-          {...(props.onTrackMute !== undefined ? { onMute: props.onTrackMute } : {})}
-          {...(props.onTrackSolo !== undefined ? { onSolo: props.onTrackSolo } : {})}
-          {...(props.onTrackLock !== undefined ? { onLock: props.onTrackLock } : {})}
-          {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
-          {...(props.onTrackRename !== undefined ? { onRename: props.onTrackRename } : {})}
-        />
-
-        <div
-          ref={laneAreaRef}
-          onWheel={handleWheel}
-          style={{
-            flex: 1,
-            position: 'relative',
-            minWidth: 0,
-            overflow: 'hidden',
-            background: token.bgCanvas,
-          }}
-        >
+      {/* The ruler is pinned and the tracks scroll under it. Before this the whole area was a fixed
+          height with `overflow: hidden`, so the moment a project had more tracks than fitted — which
+          the toolbar's own `+ V/A/T` buttons make easy — the rest were invisible and unreachable. */}
+      <div style={{ display: 'flex', flex: 'none' }}>
+        <div style={{ width: token.trackHeaderWidth, flex: 'none' }} />
+        <div ref={laneAreaRef} style={{ flex: 1, position: 'relative', minWidth: 0, overflow: 'hidden' }}>
           <TimelineRuler
             ticks={ticks}
             viewport={viewport}
@@ -231,7 +221,32 @@ export function Timeline(props: TimelineProps): ReactNode {
             onPointerDown={handleRulerPointerDown}
             {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
           />
+        </div>
+      </div>
 
+      {/* Headers and lanes scroll as one element, which is the only way they stay aligned: two
+          scrollers kept in sync by hand drift the moment either is scrolled by anything but a wheel. */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+        <TrackHeaderColumn
+          tracks={document.sequence.tracks}
+          anySoloed={anySoloed}
+          {...(props.onTrackMute !== undefined ? { onMute: props.onTrackMute } : {})}
+          {...(props.onTrackSolo !== undefined ? { onSolo: props.onTrackSolo } : {})}
+          {...(props.onTrackLock !== undefined ? { onLock: props.onTrackLock } : {})}
+          {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
+          {...(props.onTrackRename !== undefined ? { onRename: props.onTrackRename } : {})}
+          {...(props.onTrackResize !== undefined ? { onResize: props.onTrackResize } : {})}
+        />
+
+        <div
+          onWheel={handleWheel}
+          style={{
+            flex: 1,
+            position: 'relative',
+            minWidth: 0,
+            background: token.bgCanvas,
+          }}
+        >
           <div
             style={{ position: 'relative' }}
             onPointerDown={marquee.begin}
@@ -449,6 +464,7 @@ function TrackHeaderColumn({
   onLock,
   onRemove,
   onRename,
+  onResize,
 }: {
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
@@ -457,6 +473,7 @@ function TrackHeaderColumn({
   readonly onLock?: (track: TrackId) => void;
   readonly onRemove?: (track: TrackId) => void;
   readonly onRename?: (track: TrackId, name: string) => void;
+  readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
 }): ReactNode {
   return (
     <div
@@ -484,6 +501,7 @@ function TrackHeaderColumn({
           {...(onLock !== undefined ? { onLock } : {})}
           {...(onRemove !== undefined ? { onRemove } : {})}
           {...(onRename !== undefined ? { onRename } : {})}
+          {...(onResize !== undefined ? { onResize } : {})}
         />
       ))}
     </div>
@@ -507,6 +525,7 @@ function TrackHeader({
   onLock,
   onRemove,
   onRename,
+  onResize,
 }: {
   readonly track: Track;
   readonly audible: boolean;
@@ -515,6 +534,7 @@ function TrackHeader({
   readonly onLock?: (track: TrackId) => void;
   readonly onRemove?: (track: TrackId) => void;
   readonly onRename?: (track: TrackId, name: string) => void;
+  readonly onResize?: (track: TrackId, height: number, phase: 'move' | 'end') => void;
 }): ReactNode {
   const stacked = track.height >= STACKED_HEADER_MIN_HEIGHT;
 
@@ -534,8 +554,10 @@ function TrackHeader({
         background: audible ? 'transparent' : token.trackActive,
         boxSizing: 'border-box',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
+      {onResize !== undefined && <ResizeHandle track={track} onResize={onResize} />}
       <EditableName
         value={track.name}
         tone={trackLabelColor(track)}
@@ -600,12 +622,16 @@ interface MarqueeRect {
  */
 function useMarquee(options: {
   readonly viewport: TimelineViewport;
-  readonly laneAreaRef: React.RefObject<HTMLDivElement | null>;
   readonly tracks: readonly Track[];
   readonly onSelect?: (region: SelectionRegion, additive: boolean) => void;
 }): { readonly rect: MarqueeRect | undefined; begin: (event: React.PointerEvent<HTMLElement>) => void } {
   const [rect, setRect] = useState<MarqueeRect | undefined>(undefined);
-  const origin = useRef<{ x: number; y: number; additive: boolean } | undefined>(undefined);
+  // The element the gesture started on, remembered rather than looked up: it is the lane container,
+  // and measuring against anything else — the ruler's column, say — offsets every rectangle by the
+  // height of whatever sits between them.
+  const origin = useRef<{ x: number; y: number; additive: boolean; element: HTMLElement } | undefined>(
+    undefined,
+  );
 
   const latest = useRef(options);
   latest.current = options;
@@ -624,6 +650,7 @@ function useMarquee(options: {
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
       additive: event.shiftKey || event.metaKey,
+      element: event.currentTarget,
     };
     setRect({ left: origin.current.x, top: origin.current.y, width: 0, height: 0 });
   }, []);
@@ -633,12 +660,11 @@ function useMarquee(options: {
 
     function onMove(event: PointerEvent): void {
       const start = origin.current;
-      const area = latest.current.laneAreaRef.current;
-      if (start === undefined || area === null) return;
+      if (start === undefined) return;
 
-      const bounds = area.getBoundingClientRect();
+      const bounds = start.element.getBoundingClientRect();
       const x = event.clientX - bounds.left;
-      const y = event.clientY - bounds.top - rulerHeightPx(area);
+      const y = event.clientY - bounds.top;
       setRect({
         left: Math.min(start.x, x),
         top: Math.min(start.y, y),
@@ -741,12 +767,6 @@ export function assetDropTarget(
   return undefined;
 }
 
-/** The lane area's own ruler offset, so a rectangle's top is measured from the first track. */
-function rulerHeightPx(area: HTMLElement): number {
-  const ruler = area.querySelector('[role="slider"]');
-  return ruler === null ? 0 : ruler.getBoundingClientRect().height;
-}
-
 /**
  * Converts a pixel rectangle into the frames and tracks it covers.
  *
@@ -774,6 +794,63 @@ export function regionFor(
     span: spanFromBounds(frameIndex(Math.max(0, from)), frameIndex(Math.max(1, to + 1))),
     tracks: covered,
   };
+}
+
+/**
+ * The grip along a header's bottom edge.
+ *
+ * On the header rather than on the lane, because the lane is covered in clips whose own drags mean
+ * something else entirely. Reported live rather than on release: a row that only resized when the
+ * pointer came up would be adjusted by trial and error.
+ */
+function ResizeHandle({
+  track,
+  onResize,
+}: {
+  readonly track: Track;
+  readonly onResize: (track: TrackId, height: number, phase: 'move' | 'end') => void;
+}): ReactNode {
+  const origin = useRef<{ y: number; height: number } | undefined>(undefined);
+
+  return (
+    <div
+      role="separator"
+      aria-label={`Resize ${track.name}`}
+      aria-orientation="horizontal"
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        origin.current = { y: event.clientY, height: track.height };
+        // Best-effort: capture keeps the drag alive when the pointer leaves the five-pixel grip, but
+        // an environment without it must still resize rather than throw.
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const start = origin.current;
+        if (start === undefined) return;
+        onResize(track.id, start.height + (event.clientY - start.y), 'move');
+      }}
+      onPointerUp={(event) => {
+        const start = origin.current;
+        origin.current = undefined;
+        // Reported *before* releasing: a gesture that ended without saying so would leave the shell's
+        // undo entry open for the rest of the session, swallowing every later edit into it.
+        if (start !== undefined) onResize(track.id, start.height + (event.clientY - start.y), 'end');
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+      }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 5,
+        cursor: 'ns-resize',
+        // Invisible until pointed at: a permanent line on every header would read as a divider the
+        // user is meant to notice, when it is only there for the moment they reach for it.
+        background: 'transparent',
+      }}
+    />
+  );
 }
 
 /**

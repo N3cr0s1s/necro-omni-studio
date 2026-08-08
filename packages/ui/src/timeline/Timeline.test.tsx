@@ -437,6 +437,79 @@ describe('what a rectangle covers', () => {
   });
 });
 
+describe('many tracks', () => {
+  it('scrolls the tracks rather than hiding them', () => {
+    // The toolbar's own + V/A/T buttons make it easy to have more tracks than fit; before this the
+    // area was a fixed height with overflow hidden, so the rest were invisible and unreachable.
+    renderTimeline();
+    const lane = document.querySelector('[data-track-id]') as HTMLElement;
+    const scroller = lane.closest('[style*="overflow-y"]') as HTMLElement | null;
+
+    expect(scroller?.style.overflowY).toBe('auto');
+    // The headers scroll with the lanes rather than beside them: two scrollers kept in sync by hand
+    // drift the moment either is scrolled by anything but a wheel.
+    expect(scroller?.contains(document.querySelector('[data-track-header]'))).toBe(true);
+  });
+
+  it('keeps the ruler out of the scrolling area, so it stays put', () => {
+    renderTimeline();
+    const ruler = screen.getByRole('slider', { name: 'Playhead position' });
+    const lane = document.querySelector('[data-track-id]') as HTMLElement;
+
+    expect(ruler.contains(lane)).toBe(false);
+    expect(lane.closest('[role="slider"]')).toBeNull();
+  });
+});
+
+describe('resizing a track', () => {
+  it('offers a grip only when something can handle it', () => {
+    renderTimeline();
+    expect(screen.queryByLabelText('Resize V1')).toBeNull();
+  });
+
+  it('reports while the drag is in flight, not only on release', () => {
+    // A row that only resized when the pointer came up would be adjusted by trial and error. The
+    // height itself is arithmetic on coordinates jsdom does not carry; what is asserted is the phase,
+    // and `setTrackHeight` covers the clamping.
+    const onTrackResize = vi.fn();
+    renderTimeline({ onTrackResize });
+
+    const grip = screen.getByLabelText('Resize V1');
+    fireEvent.pointerDown(grip, { pointerId: 1 });
+    fireEvent.pointerMove(grip, { pointerId: 1 });
+
+    expect(onTrackResize.mock.calls.at(-1)?.[2]).toBe('move');
+  });
+
+  it('closes the gesture when the pointer comes up, so a drag is one undo step', () => {
+    const onTrackResize = vi.fn();
+    renderTimeline({ onTrackResize });
+
+    const grip = screen.getByLabelText('Resize V1');
+    fireEvent.pointerDown(grip, { pointerId: 1 });
+    fireEvent.pointerUp(grip, { pointerId: 1 });
+
+    expect(onTrackResize.mock.calls.at(-1)?.[2]).toBe('end');
+  });
+
+  it('reports nothing at all without a drag having started', () => {
+    const onTrackResize = vi.fn();
+    renderTimeline({ onTrackResize });
+
+    fireEvent.pointerMove(screen.getByLabelText('Resize V1'), { pointerId: 1 });
+    expect(onTrackResize).not.toHaveBeenCalled();
+  });
+
+  it('does not start a marquee or a scrub', () => {
+    // The grip sits on a header, but a stray gesture reaching the lanes would be worse than useless.
+    const onSelectRegion = vi.fn();
+    renderTimeline({ onTrackResize: vi.fn(), onSelectRegion });
+
+    fireEvent.pointerDown(screen.getByLabelText('Resize V1'), { clientY: 100, pointerId: 1 });
+    expect(onSelectRegion).not.toHaveBeenCalled();
+  });
+});
+
 describe('renaming a track', () => {
   it('is a label until asked, so the header keeps its width for controls', () => {
     renderTimeline({ onTrackRename: vi.fn() });

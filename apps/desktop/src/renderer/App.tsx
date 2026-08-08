@@ -36,6 +36,7 @@ import {
   nextTrackId,
   removeTrack,
   renameTrack,
+  setTrackHeight,
   toggleTrackFlag,
   trimClipEnd,
   trimClipStart,
@@ -435,6 +436,8 @@ export function App(): ReactNode {
   // One clip open at a time. Several would push the tracks below it off screen, and the lanes of two
   // clips on different tracks cannot be compared anyway — they are read against their own clip.
   const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
+  /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
+  const resizing = useRef(false);
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
@@ -658,6 +661,22 @@ export function App(): ReactNode {
                   }
                   return result.value;
                 });
+              }}
+              onTrackResize={(id, height, phase) => {
+                // One undo step for the whole drag, the rule every gesture here follows: the store's
+                // gesture is opened on the first move and closed when the pointer comes up.
+                if (!resizing.current) {
+                  store.beginGesture('resize track');
+                  resizing.current = true;
+                }
+                store.commit('resize track', (current) => {
+                  const result = setTrackHeight(current, id, height);
+                  return result.ok ? result.value : current;
+                });
+                if (phase === 'end') {
+                  store.endGesture();
+                  resizing.current = false;
+                }
               }}
               onTrackMute={(id) => toggleTrack(id, 'muted')}
               onTrackSolo={(id) => toggleTrack(id, 'solo')}

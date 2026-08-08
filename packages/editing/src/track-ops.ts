@@ -137,6 +137,39 @@ export function renameTrack(
   return ok({ ...document, sequence: { ...document.sequence, tracks } });
 }
 
+/**
+ * The range a track's height may take.
+ *
+ * The floor keeps a row tall enough to hold its own controls; the ceiling stops one track from
+ * filling the window and hiding every other, which is the failure a free-form drag produces within
+ * about two seconds of a user discovering it.
+ */
+export const TRACK_HEIGHT_RANGE = { min: 28, max: 220 } as const;
+
+/**
+ * Resizes a track.
+ *
+ * Persisted on the document because the spec says so — a layout that reset on every open would be
+ * re-made every session. A **locked** track resizes like any other: locking protects what is on a
+ * track, and its height is not on it.
+ */
+export function setTrackHeight(
+  document: TimelineDocument,
+  id: TrackId,
+  height: number,
+): Result<TimelineDocument, EditError> {
+  const index = document.sequence.tracks.findIndex((track) => track.id === id);
+  const track = document.sequence.tracks[index];
+  if (track === undefined) return err({ kind: 'track-not-found', track: id });
+
+  const clamped = Math.round(Math.min(TRACK_HEIGHT_RANGE.max, Math.max(TRACK_HEIGHT_RANGE.min, height)));
+  if (track.height === clamped) return ok(document);
+
+  const tracks = [...document.sequence.tracks];
+  tracks[index] = { ...track, height: clamped } as Track;
+  return ok({ ...document, sequence: { ...document.sequence, tracks } });
+}
+
 /** How many clips a removal would take with it, so the caller can say so before doing it. */
 export function clipsOnTrack(document: TimelineDocument, id: TrackId): number {
   const track = document.sequence.tracks.find((candidate) => candidate.id === id);

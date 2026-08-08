@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1903 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1917 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1978,3 +1978,28 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   1: a round trip that looks lossless while the position has in fact moved. The
   first implementation did exactly that and reported nothing was lost; a test that
   expected a loss is what caught it.
+
+- 2026-08-08: The timeline scrolls vertically, and tracks can be resized. A defect
+  the `+ V/A/T` buttons created two days ago and nothing had caught: the track area
+  was a fixed height with `overflow: hidden`, so the moment a project had more
+  tracks than fitted, the rest were **invisible and unreachable** — no scroll, no
+  way back to them. The ruler is now pinned and the tracks scroll under it.
+
+  Headers and lanes scroll as **one element**, which is the only arrangement that
+  keeps them aligned: two scrollers kept in sync by hand drift the moment either is
+  scrolled by anything other than a wheel.
+
+  Track height was persisted in the document from M1 and could not be changed. The
+  grip is on the header's bottom edge rather than on the lane, because the lane is
+  covered in clips whose own drags mean something else entirely, and it reports
+  live rather than on release — a row that only resized when the pointer came up
+  would be adjusted by trial and error. Bounded at both ends: a floor that keeps a
+  row tall enough for its own controls, and a ceiling that stops one track filling
+  the window and hiding every other, which is what a free-form drag produces within
+  seconds of being discovered.
+
+  A whole drag is one undo step, through the store's gesture, and the end is
+  reported **before** the pointer capture is released. A gesture that ended without
+  saying so would leave the undo entry open for the rest of the session and swallow
+  every later edit into it — which is exactly what happened in the test environment,
+  where `releasePointerCapture` does not exist and threw first.
