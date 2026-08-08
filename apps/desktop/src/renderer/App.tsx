@@ -49,7 +49,13 @@ import {
   updateMarker,
   type TrackFlag,
 } from '@nos/editing';
-import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
+import {
+  type GeneratorManifest,
+  type RecalledRun,
+  type SelectionOutcome,
+  placeholderLength,
+  recallRun,
+} from '@nos/generators';
 import {
   FilmIcon,
   FolderOpenIcon,
@@ -120,7 +126,7 @@ import { describeProxies, useProxies } from './use-proxies.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
-import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
+import { type AssetDetail, useAssetDetail, useCacheListing } from './use-asset-detail.js';
 import { useProvenanceWriter } from './use-provenance-writer.js';
 import { useProjectFiles } from './use-project-files.js';
 import { useMaskWorkspace } from './use-mask-workspace.js';
@@ -131,7 +137,7 @@ import { useClipDrag } from './use-clip-drag.js';
 import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
 import { defaultRange, describeTiming, useExportRun } from './use-export.js';
-import { RightPanel } from './RightPanel.js';
+import { type PanelTab, RightPanel } from './RightPanel.js';
 import { useGeneratorLibrary } from './use-generator-library.js';
 import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
@@ -689,6 +695,44 @@ export function App(): ReactNode {
     [audio, scrubAudio, transport],
   );
 
+  /**
+   * A generated file's settings, loaded back into the generator panel.
+   *
+   * The provenance contract records the generator, the preset, the seed and every parameter *so that*
+   * a result can be reproduced — and all of it could only be read. A seed you cannot feed back is a
+   * receipt rather than a tool.
+   *
+   * A new object per recall even when the values are identical, because the panel applies it on
+   * change: recalling the same take twice has to land twice.
+   */
+  const [recalled, setRecalled] = useState<RecalledRun | undefined>(undefined);
+
+  const recallGeneration = useCallback(
+    (asset: AssetDetail, reproduce: boolean) => {
+      const record = asset.provenance;
+      const manifest = library.registry?.manifestFor(record?.generator as never);
+      if (record === undefined || manifest === undefined) {
+        // Said rather than ignored: the generator that made this file is no longer installed, and a
+        // button that did nothing would read as a broken button rather than a missing manifest.
+        setError(`${record?.generatorName ?? 'that generator'} is not installed any more`);
+        return;
+      }
+
+      const run = recallRun({ provenance: record, manifest, reproduce });
+      setRecalled(run);
+      setRightTab('generate');
+
+      confirmation.say(
+        run.dropped.length === 0
+          ? `loaded ${record.generatorName}${reproduce ? ` at seed ${String(record.seed)}` : ''}`
+          : // Named, because a recall that quietly dropped three settings would set up a run that is
+            // not the one the user pointed at.
+            `loaded ${record.generatorName} — ${run.dropped.join(', ')} no longer exist`,
+      );
+    },
+    [confirmation, library.registry],
+  );
+
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   /*
@@ -753,7 +797,9 @@ export function App(): ReactNode {
 
   // Held here because the points are placed on the preview and the run is started in the inspector,
   // and those are siblings — a session owned by either could not be drawn by the other.
-  const [rightTab, setRightTab] = useState<string>('inspector');
+  // Owned here, not mirrored: the shell switches it — a clip rename opens the inspector, a recall
+  // opens the generate panel — and a copy it could only read made both of those silently do nothing.
+  const [rightTab, setRightTab] = useState<PanelTab>('inspector');
   const selectedClip = [...selected][0];
   const masks = useMaskWorkspace(document, selectedClip, playhead, sidecar);
   // The overlay only while the segmentation panel is open. A preview that was click-to-place at all
@@ -1236,6 +1282,7 @@ export function App(): ReactNode {
                 // Through the shell, so a link in a note opens in the system browser rather than
                 // navigating this window away from the editor.
                 onOpenLink={(href) => void bridge()?.openExternal(href)}
+                onRecall={recallGeneration}
               />
             }
             menu={browserMenu}
@@ -1432,7 +1479,9 @@ export function App(): ReactNode {
             projectTree={tree.tree}
             masks={masks}
             maskChoices={maskChoices}
+            tab={rightTab}
             onTabChange={setRightTab}
+            recalled={recalled}
             onRenameClip={renameClip}
             renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
             document={document}

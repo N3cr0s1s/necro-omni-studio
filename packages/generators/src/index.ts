@@ -15,6 +15,7 @@ export * from './queue/job-queue.js';
 export * from './panel/asset-inputs.js';
 export * from './panel/derived-defaults.js';
 export * from './provenance/asset-provenance.js';
+export * from './provenance/recall.js';
 export * from './staging/placeholder.js';
 export * from './staging/variant-selection.js';
 export * from './backends/mock-backend.js';

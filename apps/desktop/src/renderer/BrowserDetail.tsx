@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { DatabaseIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import { DatabaseIcon, RotateCcwIcon, SparklesIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { provenanceRows } from '@nos/generators';
 import { AssetDetail, MediaPreview, NoteView } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
@@ -29,6 +29,15 @@ export interface BrowserDetailProps {
    * window with no back button.
    */
   readonly onOpenLink?: ((href: string) => void) | undefined;
+  /**
+   * Loads a generated file's settings back into the generator panel.
+   *
+   * Absent leaves the provenance read-only, which is what it was: the record names the generator, the
+   * preset, the seed and every parameter *precisely* so a result can be reproduced, and none of it
+   * could be fed back. `reproduce` keeps the seed for the same file again; without it only the seed
+   * moves, which is how a variation is asked for.
+   */
+  readonly onRecall?: ((asset: AssetDetailValue, reproduce: boolean) => void) | undefined;
 }
 
 /**
@@ -39,7 +48,13 @@ export interface BrowserDetailProps {
  * room and wraps; everything else is a tight label/value pair, because a result is recognised by its
  * prompt long before it is recognised by its step count.
  */
-function Provenance({ asset }: { readonly asset: AssetDetailValue }): ReactNode {
+function Provenance({
+  asset,
+  onRecall,
+}: {
+  readonly asset: AssetDetailValue;
+  readonly onRecall: BrowserDetailProps['onRecall'];
+}): ReactNode {
   const record = asset.provenance;
   if (record === undefined) return null;
 
@@ -67,11 +82,42 @@ function Provenance({ asset }: { readonly asset: AssetDetailValue }): ReactNode 
           ))}
         </div>
       </ScrollArea>
+
+      {onRecall !== undefined && (
+        <div className="flex gap-2">
+          {/* Two buttons rather than one with a modifier: they answer different questions, and which
+              one a user wants is the whole decision. "Again" is the rarer of the two — a take is
+              usually recalled to make another like it, not to make it twice. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onRecall(asset, false)}
+            title="Load these settings into the generator, leaving the seed free so the result varies"
+          >
+            <SparklesIcon />
+            Make another
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={record.seed === undefined}
+            onClick={() => onRecall(asset, true)}
+            title={
+              record.seed === undefined
+                ? 'This generator recorded no seed, so the run cannot be reproduced exactly'
+                : `Reproduce this exact file, pinned to seed ${record.seed}`
+            }
+          >
+            <RotateCcwIcon />
+            Again
+          </Button>
+        </div>
+      )}
     </>
   );
 }
 
-export function BrowserDetail({ asset, cache, onOpenLink }: BrowserDetailProps): ReactNode {
+export function BrowserDetail({ asset, cache, onOpenLink, onRecall }: BrowserDetailProps): ReactNode {
   return (
     <div className="flex flex-col gap-3">
       {asset === undefined ? (
@@ -104,7 +150,7 @@ export function BrowserDetail({ asset, cache, onOpenLink }: BrowserDetailProps):
         </>
       )}
 
-      {asset?.provenance !== undefined && <Provenance asset={asset} />}
+      {asset?.provenance !== undefined && <Provenance asset={asset} onRecall={onRecall} />}
 
       <Separator />
       <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">

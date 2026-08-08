@@ -29,6 +29,7 @@ import {
   UndoIcon,
 } from 'lucide-react';
 import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
+import type { RecalledRun } from '@nos/generators';
 import type { ClipId } from '@nos/core';
 import type { MaskChoice } from './ClipInspector.js';
 import { Button } from '@nos/ui/components/ui/button';
@@ -79,7 +80,16 @@ export interface RightPanelProps {
   /** What an effect on the selected clip may bind its `mask` slot to. Empty until one is segmented. */
   readonly maskChoices?: readonly MaskChoice[] | undefined;
   /** Which panel is open, so the preview knows whether it is placing mask points. */
-  readonly onTabChange?: (tab: string) => void;
+  /**
+   * Which tab is open, and how to change it.
+   *
+   * **Controlled by the shell**, because the shell has reasons to switch it: renaming a clip from the
+   * timeline's menu opens the inspector, recalling a generation opens the generate panel. It used to
+   * own the tab and merely *report* changes upward, so the shell held a mirror it could write to with
+   * no effect — both of those actions ran, said they had, and left the panel where it was.
+   */
+  readonly tab: PanelTab;
+  readonly onTabChange: (tab: PanelTab) => void;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
   readonly onAuthorManifest: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
@@ -110,6 +120,13 @@ export interface RightPanelProps {
   readonly onAddText: () => void;
   /** Reports an edit the document layer refused, so the shell can show its reason. */
   readonly onReject: (reason: string) => void;
+  /**
+   * Settings recalled from a generated file, to be loaded into the generate panel.
+   *
+   * Applied when the value changes rather than read every render, so the user can adjust what was
+   * recalled without the panel snapping back to it. The caller mints a new object per recall.
+   */
+  readonly recalled?: RecalledRun | undefined;
   /** Renames a clip. Absent leaves its name read-only rather than offering a field that does nothing. */
   readonly onRenameClip?: ((clip: ClipId, name: string) => void) | undefined;
   /** Opens the clip's name field, for a rename asked for from the timeline's context menu. */
@@ -117,19 +134,13 @@ export interface RightPanelProps {
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
-  const [tab, setTab] = useState<PanelTab>('inspector');
-
-  // Reported upward because the preview changes behaviour with it: mask points are placed on the
-  // picture, and only while the panel that uses them is open.
-  useEffect(() => {
-    props.onTabChange?.(tab);
-  }, [props, tab]);
+  const { tab, onTabChange } = props;
 
   return (
     <aside aria-label="Inspector" className="flex h-full min-h-0 min-w-0 flex-col">
       <Tabs
         value={tab}
-        onValueChange={(next) => setTab(next as typeof tab)}
+        onValueChange={(next) => onTabChange(next as PanelTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
         <div className="flex h-8.5 flex-none items-center px-2">
@@ -354,6 +365,7 @@ function GenerateTab({
   projectTree,
   document,
   sidecar,
+  recalled,
   onAuthorManifest,
 }: RightPanelProps): ReactNode {
   const records = registry?.all() ?? [];
@@ -365,6 +377,21 @@ function GenerateTab({
   const [variantCount, setVariantCount] = useState<number | undefined>(undefined);
   const [lockedSeed, setLockedSeed] = useState<number | undefined>(undefined);
   const [destination, setDestination] = useState<'media-browser' | 'timeline'>('media-browser');
+
+  /*
+   * A recall lands here, once per recall.
+   *
+   * The seed is set from it too — `undefined` unlocks, which is what "make another" means, and a
+   * number pins, which is what "again" means. Both have to be written, or a recall after a
+   * reproduction would silently keep the previous pin.
+   */
+  useEffect(() => {
+    if (recalled === undefined) return;
+    setSelectedId(recalled.generator);
+    setPreset(recalled.preset);
+    setParams(recalled.params);
+    setLockedSeed(recalled.lockedSeed);
+  }, [recalled]);
 
   const record: RegistryRecord | undefined =
     records.find((entry) => entry.manifest.id === selectedId) ?? records[0];
