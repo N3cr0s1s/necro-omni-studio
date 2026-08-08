@@ -116,6 +116,21 @@ export function VariantPicker({
       <CardContent className="flex flex-col gap-3 px-3">
         <ToggleGroup
           aria-label="Variant"
+          /*
+           * Arrows are taken here, before the group's own roving focus consumes them.
+           *
+           * The moment a user clicks a chip, focus is inside this group — which is exactly when they
+           * are comparing takes and reaching for the arrow keys. Left to the group, an arrow moved
+           * focus between chips and changed nothing, so the comparison the card's handler describes
+           * stopped working precisely when it was wanted. Captured on the way down, an arrow steps the
+           * selection like it does anywhere else in the picker.
+           */
+          onKeyDownCapture={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            step(event.key === 'ArrowRight' ? 1 : -1);
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           value={current === undefined ? [] : [current.key]}
           onValueChange={(value) => {
             const chosen = value.at(-1);

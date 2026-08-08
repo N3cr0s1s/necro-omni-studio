@@ -199,6 +199,18 @@ describe('interaction', () => {
     expect(onSelect).toHaveBeenCalledWith('r2#0');
   });
 
+  it('steps with the arrows while a chip has focus, which is when comparing happens', async () => {
+    // The moment after a click the focus is inside the toggle group, and its own roving focus ate the
+    // arrows — so the back-and-forth stopped working exactly when a user was doing it.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderPicker({ onSelect });
+
+    screen.getByRole('button', { name: 'Variant 1' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onSelect).toHaveBeenCalledWith('r2#0');
+  });
+
   it('says nothing when there is nowhere to step', async () => {
     // One ready variant: reporting the same key would be a state change the caller has to no-op.
     const user = userEvent.setup();
