@@ -152,8 +152,13 @@ function Channel({
       <div className="flex items-center gap-2">
         {/* The name lives in a wrapping label, not in an `aria-label`. The slider spreads its props
             onto its root, and the control that needs naming is the range input inside its thumb — so
-            an attribute here reached nothing and all five of these were nameless. The visible row
-            label says the same word, which is why this copy is `sr-only`. */}
+            an attribute here reached nothing and all five of these were nameless.
+
+            An `sr-only` copy rather than the arrangement the effect panel uses, where the visible name
+            sits inside the label: here the name shares a row with the unit, the current value and the
+            animate toggle, and pulling it down to the slider would move it away from all three. The
+            cost is the word appearing twice in the DOM — read once by a screen reader, since only one
+            of the two is a label. */}
         <Label className="flex-1">
           <span className="sr-only">{spec.label}</span>
           <Slider

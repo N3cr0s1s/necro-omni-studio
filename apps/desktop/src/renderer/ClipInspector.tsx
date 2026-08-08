@@ -440,6 +440,31 @@ function EffectPicker({
  * keyframe lane, and editing one in two places would need a rule about which wins.
  */
 /**
+ * A parameter's name, written exactly once.
+ *
+ * It lives inside the label that wraps the control, which is the only arrangement that both shows the
+ * name and reaches the input. The shadcn slider spreads its props onto its **root**, so an `aria-label`
+ * or an `id` here names a `div` and the range input inside the thumb stays anonymous — which is how
+ * every slider in this panel, and all five that position a clip, came to have no accessible name at
+ * all. Writing it in a `<span>` above *and* an `sr-only` copy inside would name the control but put the
+ * word in the document twice, so "find the control called softness" becomes ambiguous.
+ */
+function ParamName({
+  param,
+  animated,
+}: {
+  readonly param: { readonly key: string };
+  readonly animated: boolean;
+}): ReactNode {
+  return (
+    <span className="text-xs font-medium">
+      {param.key}
+      {animated ? ' · animated' : ''}
+    </span>
+  );
+}
+
+/**
  * The part of an effect or a transition that a parameter panel needs.
  *
  * Written as its own interface so both can use one panel. They are different things in the document —
@@ -522,14 +547,6 @@ function EffectParams({
 
         return (
           <Field key={param.key} className="gap-1">
-            {/* Not a `<label>`: the control it would name is wrapped in its own below, and a second
-                label pointing at a slider root that cannot be labelled named nothing while making the
-                parameter look like it had two. */}
-            <span className="text-xs font-medium">
-              {param.key}
-              {animated ? ' · animated' : ''}
-            </span>
-
             {param.keyframable === true && (
               // Animating is an explicit act. A parameter silently becoming keyframed on first edit
               // would surprise anyone who only meant to change its value once.
@@ -560,23 +577,19 @@ function EffectParams({
             )}
 
             {param.type === 'bool' ? (
-              <Switch
-                id={`param-${instance.id}-${param.key}`}
-                disabled={animated}
-                checked={readNumber(value, param.default) >= 0.5}
-                onCheckedChange={(next) =>
-                  onParams({ ...instance.params, [param.key]: constant(next ? 1 : 0) })
-                }
-                className="self-start"
-              />
+              <Label className="flex items-center gap-2">
+                <ParamName param={param} animated={animated} />
+                <Switch
+                  disabled={animated}
+                  checked={readNumber(value, param.default) >= 0.5}
+                  onCheckedChange={(next) =>
+                    onParams({ ...instance.params, [param.key]: constant(next ? 1 : 0) })
+                  }
+                />
+              </Label>
             ) : (
-              /* Wrapped in a label rather than given an `aria-label`. The slider spreads its props
-                 onto its root, and the control that needs a name is the range input inside its thumb —
-                 so every parameter slider in this panel had no accessible name at all, and neither the
-                 `id` and the `aria-label` that used to be here reached nothing. Implicit association
-                 is what reaches the input, so the name lives in the label. */
-              <Label className="w-full">
-                <span className="sr-only">{param.key}</span>
+              <Label className="flex w-full flex-col items-stretch gap-1">
+                <ParamName param={param} animated={animated} />
                 <Slider
                   disabled={animated}
                   min={param.min ?? 0}

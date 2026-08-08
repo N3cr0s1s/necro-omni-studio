@@ -587,6 +587,10 @@ export function App(): ReactNode {
     [store],
   );
 
+  // Held in a ref so the listener above is attached once rather than re-bound on every document change.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
   const [authoring, setAuthoring] = useState(false);
 
@@ -665,6 +669,25 @@ export function App(): ReactNode {
   // both end in the same place.
   const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  /*
+   * `Ctrl+S` saves, which every editor binds and this one did not.
+   *
+   * Autosave and the toolbar button both existed, so nothing was ever *lost* — but a user who has just
+   * made a change they care about presses this, and a key that does nothing teaches them the work is
+   * not safe. It is also what the browser would otherwise take for "save this page".
+   */
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key.toLowerCase() !== 's' || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+      // Not guarded against text fields: a title being typed is exactly when someone reaches for this.
+      event.preventDefault();
+      void saveRef.current();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   /*
    * `?` opens the reference, which is where every application that has one puts it.

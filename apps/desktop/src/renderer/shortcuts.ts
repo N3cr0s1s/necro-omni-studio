@@ -72,6 +72,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['F'], action: 'Fit the sequence in the window' },
       { keys: ['?'], action: 'Show this list' },
       { keys: ['Ctrl', 'F'], action: 'Filter the project folder' },
+      { keys: ['Ctrl', 'S'], action: 'Save the project' },
     ],
   },
   {
