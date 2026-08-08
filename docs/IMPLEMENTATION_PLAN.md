@@ -531,6 +531,19 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 - The browser's tree is **not** the place to ask what is on disk. It hides `.nos.json`
   records deliberately, so a rule that needs them finds nothing; read the folder.
 
+- Generators are read from the project's folder **and the shared library**, per §5.6, with
+  the project winning on an id collision — a project shipping its own version of a
+  generator means to use that one. Reading the library needs its own channels: the project
+  ones resolve against an open project, and the case that matters is having none.
+- A library path is still a path a renderer asked for. `..` from the library root reaches
+  the rest of `userData`, the session file included, so its handlers are guarded exactly
+  as the project's are.
+- A loader that promises **not to throw** must wrap the bridge call, not `.catch()` it. A
+  bridge missing a method throws *synchronously*, which a promise catch never sees — what
+  a stub bridge in a test does, and what an older preload would do.
+- A folder the application reads from has to be **named on screen**. One written down
+  nowhere is one nobody puts a file in, which is the shared library reduced to dead code.
+
 - Provenance exists to be **fed back**, not only read. `recallRun` turns a record into a
   request: with the seed it reproduces, without it only the seed moves and everything
   that made the take is kept.
