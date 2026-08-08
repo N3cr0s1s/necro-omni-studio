@@ -9,15 +9,19 @@ import {
   type BackendResponse,
   type FolderEntry,
   type ProjectInfo,
+  type RecoverySnapshot,
   type SidecarInfo,
 } from './ipc-contract.js';
 import {
   ProjectPathError,
   ensureLayout,
   readProjectFile,
+  readRecoveryFile,
+  removeRecoveryFile,
   resolveInProject,
   toProjectRelative,
   writeProjectFile,
+  writeRecoveryFile,
 } from './project-folder.js';
 import {
   baseUrl,
@@ -145,6 +149,18 @@ function registerHandlers(): void {
     requireProject();
     if (typeof contents !== 'string') throw new TypeError('project contents must be a string');
     await writeProjectFile(session.root, contents);
+  });
+
+  ipcMain.handle(IPC.saveRecovery, async (_event, contents: unknown): Promise<void> => {
+    await writeRecoveryFile(requireProject(), requireString(contents));
+  });
+
+  ipcMain.handle(IPC.loadRecovery, async (): Promise<RecoverySnapshot | undefined> => {
+    return readRecoveryFile(requireProject());
+  });
+
+  ipcMain.handle(IPC.clearRecovery, async (): Promise<void> => {
+    await removeRecoveryFile(requireProject());
   });
 
   ipcMain.handle(IPC.readTextFile, async (_event, path: unknown): Promise<string | undefined> => {

@@ -22,6 +22,12 @@ export const IPC = {
   loadProject: 'project:load',
   /** Writes `project.json`. */
   saveProject: 'project:save',
+  /** Writes the crash-recovery sibling, atomically. */
+  saveRecovery: 'project:save-recovery',
+  /** Reads the recovery sibling and the timestamps needed to decide whether it is stale. */
+  loadRecovery: 'project:load-recovery',
+  /** Deletes the recovery sibling after a clean save or an explicit discard. */
+  clearRecovery: 'project:clear-recovery',
   /** Reads a project-relative text file, e.g. a manifest or a note. */
   readTextFile: 'project:read-text',
   /** Writes a project-relative text file. */
@@ -50,6 +56,21 @@ export interface ProjectInfo {
   readonly name: string;
   /** Contents of `project.json`, or `undefined` for a folder that has none yet. */
   readonly document?: string;
+}
+
+/**
+ * What startup found beside `project.json`.
+ *
+ * The timestamps come with the contents rather than being fetched separately, because the decision
+ * they feed — is this recovery file newer than the saved project? — is only correct if both were read
+ * from the same moment. Two round trips could straddle a save and offer the user older work.
+ */
+export interface RecoverySnapshot {
+  readonly contents: string;
+  /** Epoch milliseconds the recovery file was last written. */
+  readonly modifiedAt: number;
+  /** Epoch milliseconds `project.json` was last written, absent when there is none. */
+  readonly projectModifiedAt?: number;
 }
 
 export interface SidecarInfo {
@@ -98,6 +119,9 @@ export interface DesktopBridge {
   openProject(): Promise<ProjectInfo | undefined>;
   loadProject(root: string): Promise<ProjectInfo | undefined>;
   saveProject(contents: string): Promise<void>;
+  saveRecovery(contents: string): Promise<void>;
+  loadRecovery(): Promise<RecoverySnapshot | undefined>;
+  clearRecovery(): Promise<void>;
   readTextFile(path: string): Promise<string | undefined>;
   writeTextFile(path: string, contents: string): Promise<void>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;

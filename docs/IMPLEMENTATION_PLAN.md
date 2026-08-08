@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1595 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1613 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1096,7 +1096,7 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   in Node from M1.
 
   Two security decisions are worth stating because both are easy to erode by
-  accident. The preload exposes **eight named methods**, not a generic
+  accident. The preload exposes a **fixed list of named methods**, not a generic
   `invoke(channel, payload)`: a generic bridge hands the whole main-process surface
   to any renderer bug that lets an attacker choose the channel name, and the named
   list is the entire trust boundary in one reviewable place. And the sidecar token
@@ -1110,8 +1110,10 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   on a slow machine and never on the developer's.
 
   Verified by launching it: the window paints the editor, `window.require` is
-  `undefined`, the bridge exposes exactly its eight methods, and no page errors are
-  raised.
+  `undefined`, the bridge exposes exactly the methods the contract names, and no
+  page errors are raised. (The list has grown as capabilities landed — frame
+  streaming for export, the recovery channels for autosave — but never as a generic
+  escape hatch, which is the property that matters.)
 
 - 2026-08-08: `npm run verify` — format, lint, typecheck and the full suite — is
   green: **1339 TypeScript tests, 136 Python tests, 22/22 compositor GL assertions
@@ -1465,3 +1467,36 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   produced a 21–51 readout and a bar 21 px in and 31 px wide at 1 f/px, `M` left a
   flag at 51, playback stopped at the out point, plain `X` did nothing and `Alt+X`
   cleared the range. No page errors.
+
+- 2026-08-08: Autosave and crash recovery — spec §8, and the third unwired
+  subsystem in a row. `@nos/core/patch/autosave.ts` had the whole policy with its
+  own tests: write only when dirty and no gesture is open, never touch
+  `project.json`, offer a recovery file only when it is newer than the saved
+  project. Nothing in the application had ever called it. **A 30 s autosave that
+  never runs is indistinguishable from no autosave**, and losing an afternoon's
+  work is the one failure an editor cannot apologise its way out of.
+
+  What could not live in `@nos/core` — it must stay free of I/O so it runs in a
+  worker — is the persistence seam, so that is what was added: three narrow
+  channels on the trust boundary (`saveRecovery`, `loadRecovery`, `clearRecovery`)
+  and a hook implementing `DocumentPersistence` over them.
+
+  Two decisions are load-bearing. The recovery write is **atomic** for a sharper
+  reason than `project.json`'s: a recovery file exists precisely because the process
+  may die at any moment, and one that dies mid-write leaves a torn file the next
+  launch would offer as the user's unsaved work — worse than none. And
+  `loadRecovery` returns **both timestamps in one call**, because the decision they
+  feed is only sound if they describe the same moment; two round trips could
+  straddle a save and offer work older than what is already on disk.
+
+  The offer is a banner, not a modal, and nothing is preselected: "is this newer
+  than what I have?" cannot be answered from a dialog covering the answer. A
+  recovery file that cannot be parsed is neither offered nor deleted — deleting it
+  would destroy the only copy of work the user might still salvage by hand.
+  Accepting *resets* the store rather than committing, because stacking recovered
+  work on the history of a document the user never saw makes undo nonsense.
+
+  Verified against a real crash: edited without saving, let the autosave land,
+  killed the process with `SIGKILL`, relaunched. The banner offered the work with
+  its timestamp, "Restore it" brought the in/out range back, and an explicit save
+  removed the recovery file so the next launch offers nothing. No page errors.

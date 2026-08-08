@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type AutosaveStatus,
   type Clip,
   type ClipId,
   type FrameIndex,
@@ -35,6 +36,7 @@ import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
+import { describeAutosave, useAutosave } from './use-autosave.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
@@ -103,6 +105,10 @@ export function App(): ReactNode {
   });
   useTransportKeys(transport);
   const playhead = transport.frame;
+
+  // Autosave writes a recovery *sibling*, never `project.json`: an autosave that overwrote the file
+  // would destroy the last state the user deliberately saved, the moment they started experimenting.
+  const autosave = useAutosave({ store, projectRoot: project?.root, bridge: bridge() });
 
   const tree = useProjectTree(project?.root);
   // The runtime probes ComfyUI once and reports which backend is actually in use; the registry then
@@ -218,7 +224,10 @@ export function App(): ReactNode {
     if (api === undefined || project === undefined) return;
     await api.saveProject(saveDocument(store.getDocument()));
     store.markSaved();
-  }, [project, store]);
+    // The recovery file described work that is now on disk. Leaving it would make the next launch
+    // offer to "recover" the file the user just saved.
+    await autosave.clear();
+  }, [autosave, project, store]);
 
   /**
    * Nudges the selected clip by a number of frames.
@@ -429,7 +438,12 @@ export function App(): ReactNode {
         onOpen={() => void openProject()}
         onSave={() => void save()}
         onExport={openExport}
+        autosaveStatus={autosave.status}
       />
+
+      {autosave.offer !== undefined && (
+        <RecoveryOffer savedAt={autosave.offeredAt} onAccept={autosave.accept} onDiscard={autosave.discard} />
+      )}
 
       {authoring && (
         <ManifestAuthoring
@@ -581,6 +595,7 @@ function TitleBar({
   onOpen,
   onSave,
   onExport,
+  autosaveStatus,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -591,6 +606,7 @@ function TitleBar({
   readonly onOpen: () => void;
   readonly onSave: () => void;
   readonly onExport: () => void;
+  readonly autosaveStatus: AutosaveStatus;
 }): ReactNode {
   return (
     <header
@@ -667,6 +683,7 @@ function TitleBar({
       >
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
       </span>
+      {project !== undefined && <AutosaveChip status={autosaveStatus} />}
       <Button onClick={onOpen}>Open project</Button>
       <Button onClick={onSave} disabled={project === undefined}>
         Save
@@ -675,6 +692,77 @@ function TitleBar({
         Export
       </Button>
     </header>
+  );
+}
+
+/**
+ * How stale the last recovery point is.
+ *
+ * It owns its own tick so that "autosaved 12s ago" keeps counting. A component of its own, rather
+ * than a timer in the application root, because that timer would re-render the timeline, the preview
+ * and the inspector once a second to update eleven characters.
+ */
+function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNode {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = globalThis.setInterval(() => setNow(Date.now()), 1000);
+    return () => globalThis.clearInterval(timer);
+  }, []);
+
+  return (
+    <span
+      style={{
+        font: '500 11px ui-monospace, monospace',
+        color: status.state === 'failed' ? 'var(--nos-danger)' : 'var(--nos-text-faint)',
+      }}
+      title="Autosave writes a recovery file beside the project; it never overwrites project.json"
+    >
+      {describeAutosave(status, now)}
+    </span>
+  );
+}
+
+/**
+ * The offer to restore work from a session that did not exit cleanly.
+ *
+ * A banner rather than a modal, and neither choice is preselected. The user has to be able to look at
+ * the timeline behind it to decide — "is this newer than what I have?" is not answerable from a
+ * dialog that covers the answer. Nothing is deleted until they say so.
+ */
+function RecoveryOffer({
+  savedAt,
+  onAccept,
+  onDiscard,
+}: {
+  readonly savedAt: number | undefined;
+  readonly onAccept: () => void;
+  readonly onDiscard: () => void;
+}): ReactNode {
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Unsaved work was recovered"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '8px 16px',
+        background: 'rgba(255, 176, 32, 0.14)',
+        color: 'var(--nos-warn)',
+        font: '500 11px ui-monospace, monospace',
+      }}
+    >
+      <span>
+        unsaved work from {savedAt === undefined ? 'a previous session' : new Date(savedAt).toLocaleString()}{' '}
+        was recovered
+      </span>
+      <div style={{ flex: 1 }} />
+      <Button tone="primary" onClick={onAccept}>
+        Restore it
+      </Button>
+      <Button onClick={onDiscard}>Discard</Button>
+    </div>
   );
 }
 
