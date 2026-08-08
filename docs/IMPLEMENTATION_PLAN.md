@@ -283,6 +283,10 @@ manifest inspector — so a new generative capability really is a JSON file
 authored from inside the application, with no code. Verified against a real
 ComfyUI graph.
 
+**Text clips are in**: created on the text track, styled through an inspector,
+rasterized into the compositor, and animated by presets that write ordinary
+keyframes into lanes the user can edit. Verified in the running application.
+
 ### Editing rules (keep these)
 
 - Every operation is a pure `TimelineDocument -> Result<TimelineDocument,
@@ -1285,3 +1289,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   A new generative capability, created from a ComfyUI export, inside the
   application, with no code written.
+
+- 2026-08-08: Text clips — the last spec feature with an engine but no way in.
+
+  `@nos/text` already had the rasterizer, the presets and the typewriter advance
+  mechanism. What was missing was creation, a properties panel, and the step that
+  turns a raster into a texture the compositor can sample. The presets keep the
+  rule that makes them worth having: **a preset generates keyframes**, and they
+  appear in the lane as ordinary markers. So the keyframe lanes had to grow beyond
+  effect parameters to cover the clip's own transform and a text clip's `reveal`
+  channel — `reveal` is separate from the transform because typewriter changes the
+  *number of visible glyphs*, which no transform can express.
+
+  Two bugs that only running it could find, both of the silent kind.
+
+  A title rasterized correctly, uploaded without complaint, and was **invisible**.
+  This GL backend refuses an `OffscreenCanvas` as a texture source without raising
+  anything the caller sees: the texture existed and sampled fully transparent, so
+  the layer was not even counted as skipped. A DOM canvas fixes it; a `getError()`
+  check after the upload and an ink-coverage assertion on the raster mean the same
+  class of failure now produces a sentence instead of a blank frame.
+
+  And the first working title filled the whole screen, because the compositor draws
+  every layer as a fullscreen quad — correct for video, which fills the frame, and
+  wrong for a title, whose `size` control consequently meant nothing. The raster is
+  now composed onto a frame-sized surface at its natural pixel size, which keeps
+  the compositor's model intact and makes the size a real pixel size.
