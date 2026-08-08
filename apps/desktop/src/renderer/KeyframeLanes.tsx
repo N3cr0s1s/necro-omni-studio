@@ -108,6 +108,23 @@ export function KeyframeLanes({
       }
     }
 
+    // Level and pan. Not transform channels and not effect parameters — they belong to the clip, and
+    // an audio clip has no transform at all, so without these an audio fade could be set but never
+    // shaped.
+    if (located.clip.kind === 'audio') {
+      for (const channel of AUDIO_CHANNELS) {
+        const value = located.clip[channel];
+        if (!isAnimated(value)) continue;
+        found.push({
+          id: `audio-${channel}`,
+          label: `audio · ${channel}`,
+          param: value,
+          write: (target, next) => writeAudioChannel(target, clipKey, channel, next),
+          read: (target) => readAudioChannel(target, clipKey, channel),
+        });
+      }
+    }
+
     // `reveal` is its own channel, not a transform: typewriter changes the number of visible glyphs,
     // which no transform can express.
     if (
@@ -256,6 +273,10 @@ const TRANSFORM_CHANNELS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;
 
 type TransformChannel = (typeof TRANSFORM_CHANNELS)[number];
 
+const AUDIO_CHANNELS = ['gain', 'pan'] as const;
+
+type AudioChannel = (typeof AUDIO_CHANNELS)[number];
+
 function clipTransformOf(clip: Clip): ClipTransform | undefined {
   return clip.kind === 'audio' ? undefined : clip.transform;
 }
@@ -297,6 +318,27 @@ function readTransform(
   const transform = located === undefined ? undefined : clipTransformOf(located.clip);
   const value = transform?.[channel];
   return value !== undefined && isAnimated(value) ? value : undefined;
+}
+
+function writeAudioChannel(
+  document: TimelineDocument,
+  clipKey: string,
+  channel: AudioChannel,
+  value: AnimatableNumber,
+): TimelineDocument {
+  return mapClip(document, clipKey, (clip) => (clip.kind === 'audio' ? { ...clip, [channel]: value } : clip));
+}
+
+function readAudioChannel(
+  document: TimelineDocument,
+  clipKey: string,
+  channel: AudioChannel,
+): AnimatedParam | undefined {
+  const located = locateClip(document, clipKey as never);
+  const clip = located?.clip;
+  if (clip === undefined || clip.kind !== 'audio') return undefined;
+  const value = clip[channel];
+  return isAnimated(value) ? value : undefined;
 }
 
 function writeReveal(document: TimelineDocument, clipKey: string, value: AnimatableNumber): TimelineDocument {

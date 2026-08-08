@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1630 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1654 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1542,3 +1542,34 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   `project.recovery.json` is now hidden from the browser on both sides of the
   shared vocabulary: it appears and disappears on its own schedule, so showing it
   made the tree flicker a file in and out while the user worked.
+
+- 2026-08-08: Level and pan for audio clips. The document has carried `gain` and
+  `pan` as animatable parameters since the model was written, the mix graph samples
+  both, equal-power panning is implemented and the export honours it — and nothing
+  could **set** either. Selecting an audio clip gave an empty inspector: the effect
+  stack applies to video and images, so every audio decision was unreachable from
+  the application.
+
+  Gain is stored linear and shown in **decibels**, because that is the unit the
+  work is done in — "6 dB down" is something an editor means, "0.5 gain" is not.
+  The conversion lives at this one boundary; the mix plan, the export and the
+  meters all keep reading the linear value.
+
+  Three rules the control needed to be usable rather than merely present. The
+  slider bottoms out at the mix graph's own floor, where gain is *defined* to be
+  zero, so it can mute a clip rather than approach silence. Unity and centre have
+  explicit buttons, because returning a fader to exactly 0.0 dB by hand is a coin
+  flip and being half a decibel off is inaudible until it is summed with everything
+  else. And pan has a detent at centre, with a readout that says `L35` rather than
+  `−0.35` — the first tells the user what they will hear.
+
+  Animating is an explicit act, matching how effect parameters already behave, and
+  un-animating keeps the value **at the playhead**: the number on screen when the
+  button is pressed is the one the user means to keep. The keyframe lanes gained
+  `audio · gain` and `audio · pan`, without which a fade could be switched on and
+  never shaped — an audio clip has no transform to hide those channels in and its
+  gain is not an effect parameter.
+
+  Verified in the running app: selecting the linked audio clip shows both controls,
+  driving them writes −12.0 dB and L60, pressing animate produces an
+  `audio · gain` lane, and double-clicking the lane lands a marker.

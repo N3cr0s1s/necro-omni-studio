@@ -16,6 +16,7 @@ import {
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
 import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
 import { type EffectStackEntry, Button, EffectStack, Mono, SectionCaption } from '@nos/ui';
+import { AudioMix } from './AudioMix.js';
 import { token } from '@nos/ui';
 
 /**
@@ -36,6 +37,8 @@ export interface ClipInspectorProps {
   readonly document: TimelineDocument;
   readonly clip?: string | undefined;
   readonly effects: EffectRegistry;
+  /** Where the playhead is, so an animated value reads as what is heard or seen right now. */
+  readonly playhead: number;
   readonly onChange: (label: string, next: TimelineDocument) => void;
   /** Surfaces a rejected edit, since a transition can legitimately be refused. */
   readonly onReject?: ((reason: string) => void) | undefined;
@@ -45,6 +48,7 @@ export function ClipInspector({
   document,
   clip,
   effects,
+  playhead,
   onChange,
   onReject,
 }: ClipInspectorProps): ReactNode {
@@ -123,6 +127,8 @@ export function ClipInspector({
           }}
         />
       )}
+
+      <AudioMix document={document} clip={located.clip} playhead={playhead} onChange={onChange} />
 
       <Transitions
         document={document}

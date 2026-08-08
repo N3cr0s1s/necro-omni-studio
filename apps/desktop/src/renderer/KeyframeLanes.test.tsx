@@ -68,7 +68,7 @@ function videoClip(overrides: Partial<VideoClip> = {}): VideoClip {
   };
 }
 
-function documentWith(clip: Clip, kind: 'video' | 'text' = 'video'): TimelineDocument {
+function documentWith(clip: Clip, kind: 'video' | 'text' | 'audio' = 'video'): TimelineDocument {
   const base = createDocument({
     id: projectId('p'),
     sequenceId: sequenceId('s'),
@@ -185,6 +185,54 @@ describe('which lanes appear', () => {
     renderLanes(documentWith(title, 'text'));
 
     expect(laneLabels()).toEqual(['text · reveal keyframes']);
+  });
+
+  it('shows level and pan for an audio clip, which has no transform to hide them in', () => {
+    // Without these an audio fade could be switched on in the inspector and never shaped, because an
+    // audio clip has no transform and its gain is not an effect parameter.
+    const clip = {
+      kind: 'audio',
+      id: clipId('c1'),
+      span: spanFromBounds(frameIndex(0), frameIndex(300)),
+      label: 'tone.flac',
+      enabled: true,
+      effects: [],
+      source: {
+        asset: assetPath('media/tone.flac'),
+        sourceIn: frameIndex(0),
+        sourceRate: FRAME_RATES.WEB_30,
+      },
+      speed: { factor: 1, preservePitch: true },
+      gain: curve(1, 0),
+      pan: curve(-1, 1),
+    } as unknown as Clip;
+
+    renderLanes(documentWith(clip, 'audio'));
+
+    expect(laneLabels()).toEqual(['audio · gain keyframes', 'audio · pan keyframes']);
+  });
+
+  it('leaves a constant level alone, so a lane means something is animated', () => {
+    const clip = {
+      kind: 'audio',
+      id: clipId('c1'),
+      span: spanFromBounds(frameIndex(0), frameIndex(300)),
+      label: 'tone.flac',
+      enabled: true,
+      effects: [],
+      source: {
+        asset: assetPath('media/tone.flac'),
+        sourceIn: frameIndex(0),
+        sourceRate: FRAME_RATES.WEB_30,
+      },
+      speed: { factor: 1, preservePitch: true },
+      gain: staticNumber(1),
+      pan: staticNumber(0),
+    } as unknown as Clip;
+
+    renderLanes(documentWith(clip, 'audio'));
+
+    expect(laneLabels()).toEqual([]);
   });
 
   it('puts the clip´s own channels before its effects', () => {

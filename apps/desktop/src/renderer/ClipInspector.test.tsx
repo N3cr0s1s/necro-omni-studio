@@ -85,6 +85,7 @@ function renderInspector(document = single(), clip = 'c1'): Harness {
       document={document}
       clip={clip}
       effects={effects}
+      playhead={0}
       onChange={onChange}
       onReject={onReject}
     />,
@@ -288,7 +289,7 @@ describe('transitions', () => {
 
 describe('with nothing selected', () => {
   it('says so rather than showing an empty form', () => {
-    render(<ClipInspector document={single()} effects={effects} onChange={vi.fn()} />);
+    render(<ClipInspector document={single()} effects={effects} playhead={0} onChange={vi.fn()} />);
     expect(screen.getByText('no clip selected')).toBeDefined();
   });
 });

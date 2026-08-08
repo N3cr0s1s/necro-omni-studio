@@ -112,6 +112,7 @@ function InspectorTab({
   document,
   effects,
   onChangeDocument,
+  playhead,
   selectedClip,
   canUndo,
   canRedo,
@@ -136,6 +137,7 @@ function InspectorTab({
         document={document}
         {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
         effects={effects}
+        playhead={playhead}
         onChange={onChangeDocument}
         onReject={onReject}
       />
