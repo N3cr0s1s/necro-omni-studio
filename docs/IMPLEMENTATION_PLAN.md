@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1869 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1874 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1892,3 +1892,25 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   with `event.button !== 0`, which rejects a synthetic pointer event that carries no
   button at all. A missing button is not a right-click, and it is now read as
   "primary unless stated otherwise".
+
+- 2026-08-08: Material can be dragged onto the timeline. The browser's rows had
+  been `draggable` since M2 and reported `onDragStart` to a shell that did nothing
+  with it; the timeline was not a drop target at all, so the only way to place
+  anything was to double-click and take whatever position the playhead happened to
+  be at. Dragging exists precisely to say *where*.
+
+  The asset travels on the drag itself, under a custom MIME type, rather than in
+  application state — a drop then knows what it received without the two sides
+  agreeing on a variable a cancelled drag would leave stale, and a fragment of text
+  dragged in from another application is refused rather than imported as nothing.
+
+  A drop onto a track that cannot hold the material is **not** refused. The
+  gesture said *where*, and the kind of the media decides *which row*; answering
+  "wrong track" for a video dropped on an audio row would be technically true and
+  unhelpful, so it falls back to the default track of its own kind.
+
+  jsdom has no `DragEvent`, so a drop cannot be dispatched at a React handler
+  there. Rather than assert on a gesture the environment cannot express, the
+  decision — which track and which frame — is a pure exported function with its own
+  tests, and what remains in the component is reading the payload and calling it.
+  The same split now covers the marquee's geometry.

@@ -22,7 +22,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { Timeline, regionFor } from './Timeline.js';
+import { Timeline, assetDropTarget, regionFor } from './Timeline.js';
 import { clipAccessibleLabel } from './ClipBody.js';
 import { createViewport } from './viewport.js';
 
@@ -343,6 +343,35 @@ describe('the marquee', () => {
     fireEvent.pointerUp(window);
 
     expect(document.querySelector('[data-marquee]')).toBeNull();
+  });
+});
+
+describe('where a drop lands', () => {
+  // Tested directly: jsdom has no `DragEvent`, so a drop cannot be dispatched at a React handler
+  // there. What is left in the component is reading the payload and calling this.
+  const viewport = createViewport({ framesPerPixel: 4, widthPx: 1000, frameRate: FRAME_RATES.WEB_30 });
+  const tracks = makeDocument([]).sequence.tracks;
+
+  it('lands on the track under the pointer, not the first one', () => {
+    // Material goes where it was put, which is the whole reason to drag rather than double-click.
+    expect(assetDropTarget(tracks, viewport, { x: 0, y: 100 })?.track).toBe('a1');
+  });
+
+  it('lands on the first track when the pointer is in it', () => {
+    expect(assetDropTarget(tracks, viewport, { x: 0, y: 10 })?.track).toBe('v1');
+  });
+
+  it('converts the horizontal offset to a frame', () => {
+    expect(assetDropTarget(tracks, viewport, { x: 100, y: 10 })?.frame).toBe(400);
+  });
+
+  it('clamps a drop left of the start rather than refusing it', () => {
+    expect(assetDropTarget(tracks, viewport, { x: -50, y: 10 })?.frame).toBe(0);
+  });
+
+  it('reports nothing below the last track', () => {
+    // Guessing the nearest row would put material where the user was not pointing.
+    expect(assetDropTarget(tracks, viewport, { x: 0, y: 10_000 })).toBeUndefined();
   });
 });
 

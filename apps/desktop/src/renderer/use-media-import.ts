@@ -26,8 +26,14 @@ import type { SidecarInfo } from '../main/ipc-contract.js';
 export interface MediaImport {
   readonly importing: boolean;
   readonly error: string | undefined;
-  /** Imports an asset, returning the id of the clip a user would think of as "the" clip. */
-  run(asset: AssetPath, at: FrameIndex): Promise<string | undefined>;
+  /**
+   * Imports an asset, returning the id of the clip a user would think of as "the" clip.
+   *
+   * `onto` names the track a drop landed on. Honoured only when it accepts the media — dropping a
+   * video onto an audio track means "put this here", and the nearest honest reading of *here* is the
+   * default track of its own kind, not a refusal.
+   */
+  run(asset: AssetPath, at: FrameIndex, onto?: TrackId): Promise<string | undefined>;
 }
 
 export interface MediaImportOptions {
@@ -52,7 +58,7 @@ export function useMediaImport(options: MediaImportOptions): MediaImport {
   const [error, setError] = useState<string | undefined>(undefined);
 
   const run = useCallback(
-    async (asset: AssetPath, at: FrameIndex): Promise<string | undefined> => {
+    async (asset: AssetPath, at: FrameIndex, onto?: TrackId): Promise<string | undefined> => {
       if (sidecar === undefined || !sidecar.available) {
         setError('the media sidecar is not running, so this file cannot be read');
         return undefined;
@@ -82,9 +88,14 @@ export function useMediaImport(options: MediaImportOptions): MediaImport {
           1,
           Math.round((probe.duration_seconds ?? 0) * frameRateToNumberSafe(document)),
         );
+        // The dropped track when it can hold this, the configured one otherwise.
+        const target =
+          trackFor(document, probe.type, onto) ?? (probe.type === 'audio' ? audioTrack : videoTrack);
+        const partner = probe.type === 'audio' ? videoTrack : audioTrack;
+
         const landing = firstFreeFrame(
           document,
-          hasAudio || probe.type === 'audio' ? [videoTrack, audioTrack] : [videoTrack],
+          hasAudio || probe.type === 'audio' ? [target, partner] : [target],
           at,
           frames,
         );
@@ -98,8 +109,8 @@ export function useMediaImport(options: MediaImportOptions): MediaImport {
             : {}),
           hasAudio,
           at: landing,
-          videoTrack,
-          audioTrack,
+          videoTrack: probe.type === 'audio' ? videoTrack : target,
+          audioTrack: probe.type === 'audio' ? target : audioTrack,
           label: asset.slice(asset.lastIndexOf('/') + 1),
           id: clipId(base),
           ...(hasAudio ? { linkedId: clipId(`${base}_audio`) } : {}),
@@ -120,6 +131,26 @@ export function useMediaImport(options: MediaImportOptions): MediaImport {
   );
 
   return { importing, error, run };
+}
+
+/**
+ * The track a drop should land on, when the dropped one will take it.
+ *
+ * Returns nothing rather than a refusal for a mismatch: the user's gesture said *where*, and the
+ * kind of material decides *which row* — telling them "wrong track" for a video dropped on an audio
+ * row would be technically true and unhelpful.
+ */
+function trackFor(
+  document: TimelineDocument,
+  type: ProbeResult['type'],
+  onto: TrackId | undefined,
+): TrackId | undefined {
+  if (onto === undefined) return undefined;
+  const track = document.sequence.tracks.find((candidate) => candidate.id === onto);
+  if (track === undefined) return undefined;
+
+  const wanted = type === 'audio' ? 'audio' : 'video';
+  return track.kind === wanted ? track.id : undefined;
 }
 
 async function probeAsset(sidecar: SidecarInfo, asset: AssetPath): Promise<ProbeResult | undefined> {

@@ -27,6 +27,7 @@ import {
   spanFromBounds,
   trackClips,
 } from '@nos/core';
+import { ASSET_DRAG_TYPE } from '../media-browser/MediaBrowser.js';
 import { Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
 import { token } from '../tokens/tokens.js';
 import { ClipBody } from './ClipBody.js';
@@ -84,6 +85,13 @@ export interface TimelineProps {
   readonly onScrollBy?: (deltaPx: number) => void;
   /** Frames the whole sequence, or the marked range when there is one. */
   readonly onFit?: () => void;
+  /**
+   * An asset dropped from the media browser.
+   *
+   * Reported with the track and frame it landed on, so material goes where it was put rather than
+   * wherever the playhead happened to be — which is the whole reason to drag rather than double-click.
+   */
+  readonly onDropAsset?: (asset: string, track: TrackId, frame: FrameIndex) => void;
   readonly onTrackMute?: (track: TrackId) => void;
   readonly onTrackSolo?: (track: TrackId) => void;
   readonly onTrackLock?: (track: TrackId) => void;
@@ -217,7 +225,31 @@ export function Timeline(props: TimelineProps): ReactNode {
             {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
           />
 
-          <div style={{ position: 'relative' }} onPointerDown={marquee.begin}>
+          <div
+            style={{ position: 'relative' }}
+            onPointerDown={marquee.begin}
+            onDragOver={(event) => {
+              if (props.onDropAsset === undefined) return;
+              if (!event.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
+              // Preventing the default is what makes an element a drop target at all, and the effect
+              // is what turns the cursor from "no" into "copy" while the pointer is over a track.
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={(event) => {
+              const asset = event.dataTransfer.getData(ASSET_DRAG_TYPE);
+              if (props.onDropAsset === undefined || asset === '') return;
+              event.preventDefault();
+
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const target = assetDropTarget(document.sequence.tracks, viewport, {
+                x: event.clientX - bounds.left,
+                y: event.clientY - bounds.top,
+              });
+              if (target === undefined) return;
+              props.onDropAsset(asset, target.track, target.frame);
+            }}
+          >
             {marquee.rect !== undefined && (
               <div
                 data-marquee="true"
@@ -630,6 +662,33 @@ function useMarquee(options: {
   }, [rect]);
 
   return { rect, begin };
+}
+
+/**
+ * Where a drop lands.
+ *
+ * Exported and pure, so the decision can be tested directly: jsdom has no `DragEvent`, which makes a
+ * drop impossible to dispatch at a React handler there. The three lines left in the component read
+ * the payload and call this.
+ *
+ * The frame is floored and clamped at zero — dropping left of the timeline's start means the start,
+ * which is the only position there is, and refusing instead would make a near miss feel broken.
+ */
+export function assetDropTarget(
+  tracks: readonly Track[],
+  viewport: TimelineViewport,
+  offset: { readonly x: number; readonly y: number },
+): { readonly track: TrackId; readonly frame: FrameIndex } | undefined {
+  let top = 0;
+  for (const track of tracks) {
+    top += track.height;
+    if (offset.y < top) {
+      return { track: track.id, frame: frameIndex(Math.max(0, pxToFrameFloor(viewport, offset.x))) };
+    }
+  }
+  // Below the last track: nothing to drop onto, and guessing the nearest would put material on a row
+  // the user was not pointing at.
+  return undefined;
 }
 
 /** The lane area's own ruler offset, so a rectangle's top is measured from the first track. */

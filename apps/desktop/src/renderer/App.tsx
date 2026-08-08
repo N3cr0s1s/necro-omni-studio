@@ -670,6 +670,13 @@ export function App(): ReactNode {
               }
               // A marquee reports frames and tracks; which clips that touches is the document's
               // question, answered in the editing layer rather than in the component.
+              // Dropped material lands where it was dropped — which is the only reason to drag
+              // rather than double-click, and what the browser's draggable rows had been promising.
+              onDropAsset={(asset, track, frame) => {
+                void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
+                  if (id !== undefined) setSelected(new Set([id]));
+                });
+              }}
               onSelectRegion={(region, additive) =>
                 setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))
               }

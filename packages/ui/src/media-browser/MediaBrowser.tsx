@@ -48,6 +48,14 @@ export interface MediaBrowserProps {
   readonly onRescan?: () => void;
 }
 
+/**
+ * MIME type the browser puts an asset path on when a row is dragged.
+ *
+ * A custom type rather than `text/plain`: a drop target must be able to tell a project asset from a
+ * fragment of text dragged in from another application, and refuse the second.
+ */
+export const ASSET_DRAG_TYPE = 'application/x-nos-asset';
+
 /** Folders open by default: the ones a user works in, not the derived ones. */
 const DEFAULT_EXPANDED: readonly string[] = ['media', 'generated', 'notes'];
 
@@ -286,7 +294,14 @@ function TreeRow({
       }}
       onDoubleClick={activate}
       onKeyDown={handleKeyDown}
-      onDragStart={() => onDragStart?.(node.path as AssetPath)}
+      onDragStart={(event) => {
+        // The asset travels on the drag itself rather than in application state, so a drop knows what
+        // it received without the two sides having to agree on a shared variable that a cancelled
+        // drag would leave stale.
+        event.dataTransfer.setData(ASSET_DRAG_TYPE, node.path);
+        event.dataTransfer.effectAllowed = 'copy';
+        onDragStart?.(node.path as AssetPath);
+      }}
       style={rowStyle}
     >
       <span
