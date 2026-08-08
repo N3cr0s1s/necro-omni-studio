@@ -594,7 +594,12 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   two long texts differing past the truncation point otherwise collide, and a
   colliding key renders the wrong text from cache.
 
-### Verification harnesses (three of them now)
+### Verification harnesses (four of them now)
+
+`apps/desktop/exportcheck` is the newest and the only one that drives the whole application:
+`node apps/desktop/exportcheck/run.mjs` launches the shell, lets it reopen a fixture project, exports,
+and reads the delivered mp4 back with ffmpeg. It exists because the export dropping every title was
+invisible to every unit test — each side was correct alone, and only the seam was wrong.
 
 Each covers a property that cannot be checked in Vitest, and each exits non-zero
 so it can gate a release:
