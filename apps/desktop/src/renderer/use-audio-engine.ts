@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type AssetPath, type FrameIndex, type TimelineDocument } from '@nos/core';
-import { type AudioEngine, type MeterReading, createWebAudioEngine, hasAudibleContent } from '@nos/audio';
+import {
+  type AudioEngine,
+  type MeterReading,
+  SCRUB_GRAIN_SECONDS,
+  createWebAudioEngine,
+  hasAudibleContent,
+} from '@nos/audio';
 import { type AudioBufferCache, createAudioBufferCache } from './audio-buffers.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 import { fileUrl } from './file-url.js';
@@ -51,6 +57,8 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
   const [frame, setFrame] = useState<FrameIndex | undefined>(undefined);
   const [meters, setMeters] = useState<MeterReading | undefined>(undefined);
   const [playing, setPlaying] = useState(false);
+  // Bumped by each scrub, purely to restart the meter's tail. The count itself means nothing.
+  const [scrubs, setScrubs] = useState(0);
   const [detail, setDetail] = useState('audio starts with the first playback');
 
   // Read by the engine on every tick, so an edit is heard within one lookahead window rather than on the
@@ -119,6 +127,10 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
    * Polling continues briefly after playback stops so the meter *falls* to silence at its own decay
    * rate. Snapping it to zero on stop would hide the last peak, which is exactly the one an editor
    * was watching for.
+   *
+   * A **scrub** restarts that tail. The engine plays an 80 ms grain while the transport is parked, and
+   * the loop is otherwise long finished by then — so the one sound the user is deliberately making
+   * while dragging was the one the meter never showed.
    */
   useEffect(() => {
     if (engine === undefined) return;
@@ -126,12 +138,22 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
       // A few frames of tail, then nothing: a meter polled forever would keep a timer alive for the
       // life of the window to animate a bar that is already empty.
       let remaining = Math.ceil((METER_TAIL_MS / 1000) * 60);
+      /*
+       * Frames polled before the silence check is allowed to end the loop.
+       *
+       * A grain starts a millisecond after `scrub` returns and ramps up over five more, so the first
+       * read is legitimately silent — and ending on it would stop the loop before the sound it was
+       * started for arrived. Long enough to cover the grain and the analyser block behind it.
+       */
+      let grace = Math.ceil((SCRUB_GRAIN_SECONDS + 0.05) * 60);
       let raf = 0;
       const tick = (): void => {
         const reading = engine.readMeters();
         setMeters(reading);
         remaining -= 1;
-        if (remaining > 0 && reading.peaks.some((peak) => peak > METER_FLOOR)) {
+        grace -= 1;
+        const loud = reading.peaks.some((peak) => peak > METER_FLOOR);
+        if (remaining > 0 && (grace > 0 || loud)) {
           raf = requestAnimationFrame(tick);
         } else {
           setMeters(undefined);
@@ -148,7 +170,8 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [engine, playing]);
+    // `scrubs` is a dependency for its side effect only: each bump restarts the tail above.
+  }, [engine, playing, scrubs]);
 
   useEffect(() => () => engine?.dispose(), [engine]);
 
@@ -176,6 +199,9 @@ export function usePlaybackAudio({ document, sidecar }: PlaybackAudioOptions): P
     scrub(at) {
       if (!audible) return;
       ensure()?.scrub(at);
+      // Gives the meter a fresh tail to show the grain in. Without it the loop has long since
+      // stopped, and the one sound the user is deliberately making never registers.
+      setScrubs((count) => count + 1);
     },
     clearClip() {
       // The engine owns the latch, so clearing goes through it rather than through this hook's copy —
