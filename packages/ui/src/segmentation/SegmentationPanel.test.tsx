@@ -73,8 +73,10 @@ describe('rendering', () => {
   });
 
   it('distinguishes an excluding prompt', () => {
+    // Named rather than only coloured: a red dash conveys nothing to a screen reader, and which
+    // prompts exclude is the whole content of this list.
     renderPanel({ session: addPrompt(base(), point(10, false)) });
-    expect(screen.getByText('−')).toBeDefined();
+    expect(screen.getByRole('img', { name: 'exclude' })).toBeDefined();
   });
 });
 
@@ -179,7 +181,7 @@ describe('interaction', () => {
     renderPanel({ session: addPrompt(withPoint(), point(40)), onRemovePrompt });
 
     const rows = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('listitem');
-    await user.click(within(rows[1]!).getByRole('button', { name: '×' }));
+    await user.click(within(rows[1]!).getByRole('button', { name: /^Remove prompt/ }));
     expect(onRemovePrompt).toHaveBeenCalledWith(1);
   });
 

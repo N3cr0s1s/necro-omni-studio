@@ -1,7 +1,18 @@
 import { type KeyboardEvent, type ReactNode, useCallback, useRef, useState } from 'react';
+import {
+  CircleAlertIcon,
+  EyeIcon,
+  EyeOffIcon,
+  GripVerticalIcon,
+  PlusIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from 'lucide-react';
 import type { EffectInstance, EffectInstanceId } from '@nos/core';
-import { Badge, DashedAction, Mono, SectionCaption, StatusDot } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Alert, AlertTitle } from '@nos/ui/components/ui/alert';
+import { Button } from '@nos/ui/components/ui/button';
+import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@nos/ui/components/ui/item';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * The clip's effect stack.
@@ -90,23 +101,22 @@ export function EffectStack({
   }, []);
 
   return (
-    <section
-      aria-label="Effect stack"
-      style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Effect stack</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <Mono tone={overBudget ? token.warn : token.textFaint}>
+    <section aria-label="Effect stack" className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Effect stack</span>
+        <span className={cn('ml-auto font-mono text-xs', overBudget ? 'text-destructive' : 'text-muted-foreground')}>
           {enabledCount} / {passWarningThreshold} passes
-        </Mono>
+        </span>
       </div>
 
       {overBudget && (
-        <Badge tone="warn">Above {passWarningThreshold} passes — preview may not hold realtime</Badge>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Above {passWarningThreshold} passes — preview may not hold realtime</AlertTitle>
+        </Alert>
       )}
 
-      <div
+      <ItemGroup
         ref={listRef}
         role="list"
         onPointerMove={(event) => {
@@ -118,10 +128,10 @@ export function EffectStack({
         onPointerLeave={() => {
           if (dragIndex !== undefined) finishDrag();
         }}
-        style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}
+        className="gap-2"
       >
         {entries.length === 0 ? (
-          <Mono tone={token.textGhost}>No effects on this clip</Mono>
+          <p className="font-mono text-xs text-muted-foreground">No effects on this clip</p>
         ) : (
           entries.map((entry, index) => (
             <EffectRow
@@ -143,9 +153,12 @@ export function EffectStack({
             />
           ))
         )}
-      </div>
+      </ItemGroup>
 
-      <DashedAction onClick={onAdd}>+ Add effect from registry</DashedAction>
+      <Button variant="outline" size="sm" onClick={onAdd} className="w-full border-dashed">
+        <PlusIcon />
+        Add effect from registry
+      </Button>
     </section>
   );
 }
@@ -195,9 +208,13 @@ function EffectRow({
     }
   };
 
+  const HealthIcon = broken ? CircleAlertIcon : entry.instance.enabled ? EyeIcon : EyeOffIcon;
+
   return (
-    <div
+    <Item
       role="listitem"
+      variant="outline"
+      size="xs"
       data-effect-row={entry.instance.id}
       data-index={index}
       aria-label={`${entry.label}, pass ${index + 1} of ${total}`}
@@ -205,103 +222,70 @@ function EffectRow({
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={() => onSelect?.(entry.instance.id)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: token.space3,
-        padding: `${token.space3} ${token.space4}`,
-        borderRadius: token.radiusCard,
-        background: selected ? token.surfaceSelected : token.surface1,
-        border: `1px solid ${dropTarget ? token.accent : selected ? token.accent : token.border}`,
-        // The dragged row dims rather than following the pointer: a floating copy over a 340 px panel
+      className={cn(
+        (selected || dropTarget) && 'border-ring bg-accent',
+        // The dragged row dims rather than following the pointer: a floating copy over a narrow panel
         // obscures the very targets the user is aiming at.
-        opacity: dragging ? 0.45 : entry.instance.enabled ? 1 : 0.5,
-        cursor: 'default',
-      }}
+        dragging ? 'opacity-45' : !entry.instance.enabled && 'opacity-50',
+      )}
     >
-      <span
-        data-drag-handle
-        aria-hidden="true"
-        onPointerDown={(event) => {
-          event.stopPropagation();
-          onPointerDownHandle();
-        }}
-        style={{
-          font: `400 11px ${token.fontUi}`,
-          color: token.textGhost,
-          cursor: 'grab',
-          padding: `0 ${token.space1}`,
-          touchAction: 'none',
-        }}
-      >
-        ⠿
-      </span>
+      <ItemMedia>
+        <span
+          data-drag-handle
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onPointerDownHandle();
+          }}
+          className="cursor-grab touch-none text-muted-foreground"
+        >
+          <GripVerticalIcon className="size-3.5" />
+        </span>
+      </ItemMedia>
 
-      <span
-        style={{
-          font: `500 11.5px ${token.fontUi}`,
-          color: broken ? token.danger : token.textBright,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {entry.label}
-      </span>
+      <ItemContent className="min-w-0">
+        <ItemTitle className={cn('truncate', broken && 'text-destructive')}>{entry.label}</ItemTitle>
+      </ItemContent>
 
-      <div style={{ flex: 1 }} />
+      <ItemActions className="gap-1.5">
+        <span className="font-mono text-xs text-muted-foreground">
+          {entry.keyframeCount > 0 ? `${entry.keyframeCount} kf` : '—'}
+        </span>
 
-      {entry.keyframeCount > 0 && <Mono tone={token.textFaint}>{entry.keyframeCount} kf</Mono>}
-      {entry.keyframeCount === 0 && <Mono tone={token.textGhost}>—</Mono>}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`${entry.instance.enabled ? 'Disable' : 'Enable'} ${entry.label}`}
+          aria-pressed={entry.instance.enabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleEnabled?.(entry.instance.id, !entry.instance.enabled);
+          }}
+          title={healthTitle(entry)}
+        >
+          {/* The icon carries the health as well as the action, and names it: a bare dot conveys
+              nothing to a screen reader, and a broken shader is the one state worth announcing. */}
+          <HealthIcon role="img" aria-label={healthTitle(entry)} className={cn(broken && 'text-destructive')} />
+        </Button>
 
-      <button
-        type="button"
-        aria-label={`${entry.instance.enabled ? 'Disable' : 'Enable'} ${entry.label}`}
-        aria-pressed={entry.instance.enabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleEnabled?.(entry.instance.id, !entry.instance.enabled);
-        }}
-        title={healthTitle(entry)}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          cursor: 'pointer',
-        }}
-      >
-        <StatusDot
-          color={broken ? token.danger : entry.instance.enabled ? token.ok : token.textGhost}
-          label={healthTitle(entry)}
-        />
-      </button>
-
-      <button
-        type="button"
-        aria-label={`Remove ${entry.label}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove?.(entry.instance.id);
-        }}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          color: token.textGhost,
-          cursor: 'pointer',
-          font: `400 12px ${token.fontUi}`,
-        }}
-      >
-        ×
-      </button>
-    </div>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Remove ${entry.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove?.(entry.instance.id);
+          }}
+        >
+          <XIcon />
+        </Button>
+      </ItemActions>
+    </Item>
   );
 }
 
 /**
- * Health description for the status dot.
+ * Health description for the status icon.
  *
  * A broken shader reports its compiler message, which the spec requires to be visible with its line
  * number — it is the only feedback a shader author gets, and hiding it makes authoring impractical.

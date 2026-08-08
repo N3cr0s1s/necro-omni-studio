@@ -1,4 +1,13 @@
 import { type MouseEvent, type ReactNode } from 'react';
+import {
+  CircleSlashIcon,
+  MinusIcon,
+  PlayIcon,
+  PlusIcon,
+  ScanIcon,
+  SquareDashedIcon,
+  XIcon,
+} from 'lucide-react';
 import { type FrameIndex, type FrameSpan, endExclusive, frameIndex, spanFromBounds } from '@nos/core';
 import {
   type MaskPrompt,
@@ -7,8 +16,13 @@ import {
   coveredSpans,
   describeSession,
 } from '@nos/masks';
-import { Badge, Button, Mono, PanelHeader, SectionCaption } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
+import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia } from '@nos/ui/components/ui/item';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * Segmentation (mockup 1e).
@@ -49,38 +63,38 @@ export function SegmentationPanel({
   return (
     <section
       aria-label="Segmentation"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: token.space4,
-        // Fills its column rather than dictating it: the panel is mounted inside a resizable inspector,
-        // and a fixed width there overflows by exactly the padding.
-        width: '100%',
-        maxWidth: token.inspectorWidth,
-        background: token.bgPanel,
-        borderLeft: `1px solid ${token.border}`,
+      className={cn(
+        'flex w-full flex-col gap-4',
         // Readable while greyed: the point is that the user can see what is wrong, not merely that
         // something is.
-        opacity: unavailable ? 0.75 : 1,
-      }}
+        unavailable && 'opacity-75',
+      )}
     >
-      <PanelHeader
-        caption="Segmentation"
-        trailing={
-          <Badge tone={unavailable ? 'danger' : 'mask'}>{unavailable ? 'unavailable' : 'SAM 2'}</Badge>
-        }
-      />
+      <div className="flex h-9 flex-none items-center gap-3 px-4">
+        <ScanIcon className="size-3.5 text-chart-4" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Segmentation</span>
+        <Badge variant={unavailable ? 'destructive' : 'secondary'} className="ml-auto">
+          {unavailable ? 'unavailable' : 'SAM 2'}
+        </Badge>
+      </div>
+      <Separator className="-mt-4" />
 
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: token.space4, padding: `0 ${token.space5}` }}
-      >
+      <div className="flex flex-col gap-4 px-4">
         {unavailable && (
-          <Mono tone={token.danger}>{capabilities?.detail ?? 'segmentation is unavailable'}</Mono>
+          <p className="flex items-start gap-1.5 font-mono text-xs text-destructive">
+            <CircleSlashIcon className="mt-0.5 size-3.5 shrink-0" />
+            {capabilities?.detail ?? 'segmentation is unavailable'}
+          </p>
         )}
 
-        <Mono tone={session.error !== undefined ? token.danger : token.textFaint}>
+        <p
+          className={cn(
+            'font-mono text-xs',
+            session.error !== undefined ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
           {describeSession(session)}
-        </Mono>
+        </p>
 
         <PromptList
           prompts={session.track.prompts}
@@ -95,17 +109,20 @@ export function SegmentationPanel({
           {...(onChangePropagation !== undefined ? { onChange: onChangePropagation } : {})}
         />
 
-        <div style={{ display: 'flex', gap: token.space2 }}>
+        <div className="flex gap-2">
           <Button
-            tone="primary"
+            size="sm"
             disabled={!canRun}
             onClick={onRun}
             title={runTitle(session, unavailable)}
-            style={{ flex: 1, justifyContent: 'center' }}
+            className="flex-1"
           >
+            <PlayIcon />
             {session.frames.size > 0 ? 'Re-run' : 'Segment'}
           </Button>
           <Button
+            variant="outline"
+            size="sm"
             disabled={!session.running}
             onClick={onCancel}
             title="Stop, keeping the frames already masked"
@@ -142,53 +159,64 @@ function PromptList({
   readonly onSeek?: (frame: FrameIndex) => void;
 }): ReactNode {
   if (prompts.length === 0) {
-    return <Mono tone={token.textGhost}>click the object on the preview — alt-click to exclude</Mono>;
+    return (
+      <p className="font-mono text-xs text-muted-foreground">
+        click the object on the preview — alt-click to exclude
+      </p>
+    );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <SectionCaption>Prompts</SectionCaption>
-      <ul aria-label="Prompts" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {prompts.map((prompt, index) => (
-          <li
-            key={`${prompt.kind}-${prompt.frame}-${index}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: token.space2,
-              height: token.controlHeightSm,
-            }}
-          >
-            <Badge tone={prompt.kind === 'point' && !prompt.include ? 'danger' : 'mask'}>
-              {prompt.kind === 'point' ? (prompt.include ? '+' : '−') : '□'}
-            </Badge>
-            <button
-              type="button"
-              onClick={() => onSeek?.(prompt.frame)}
-              style={{
-                flex: 1,
-                textAlign: 'left',
-                background: 'none',
-                border: 'none',
-                color: token.textSecondary,
-                font: token.textMeta,
-                cursor: 'pointer',
-                padding: 0,
-              }}
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Prompts</span>
+      <ItemGroup aria-label="Prompts" role="list" className="gap-0.5">
+        {prompts.map((prompt, index) => {
+          const excluding = prompt.kind === 'point' && !prompt.include;
+          const PromptIcon = prompt.kind !== 'point' ? SquareDashedIcon : excluding ? MinusIcon : PlusIcon;
+          // Named, not merely coloured: which prompts include and which exclude is the whole content of
+          // this list, and a red dash says nothing to a screen reader.
+          const kind = prompt.kind !== 'point' ? 'box' : excluding ? 'exclude' : 'include';
+
+          return (
+            <Item
+              key={`${prompt.kind}-${prompt.frame}-${index}`}
+              role="listitem"
+              size="xs"
+              className="py-0.5"
             >
-              frame {prompt.frame}
-            </button>
-            <Button
-              disabled={disabled}
-              onClick={() => onRemove?.(index)}
-              title="Remove this prompt"
-              style={{ height: token.controlHeightSm, padding: `0 ${token.space2}` }}
-            >
-              ×
-            </Button>
-          </li>
-        ))}
-      </ul>
+              <ItemMedia>
+                <PromptIcon
+                  role="img"
+                  aria-label={kind}
+                  className={cn('size-3.5', excluding ? 'text-destructive' : 'text-chart-4')}
+                />
+              </ItemMedia>
+              <ItemContent>
+                <Button
+                  variant="link"
+                  size="xs"
+                  onClick={() => onSeek?.(prompt.frame)}
+                  className="h-auto justify-start px-0 font-mono text-xs text-muted-foreground"
+                >
+                  frame {prompt.frame}
+                </Button>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={disabled}
+                  onClick={() => onRemove?.(index)}
+                  title="Remove this prompt"
+                  aria-label={`Remove prompt at frame ${prompt.frame}`}
+                >
+                  <XIcon />
+                </Button>
+              </ItemActions>
+            </Item>
+          );
+        })}
+      </ItemGroup>
     </div>
   );
 }
@@ -199,6 +227,10 @@ function PromptList({
  * Shows three things at once: the clip's range, the sub-range that will be propagated, and which frames
  * already have a mask. The third is what makes a long run bearable — the fill grows as the work lands, so
  * a stalled propagation is visible immediately rather than after the timeout.
+ *
+ * Drawn from absolute positions rather than assembled from registry parts, because there is no component
+ * for "three overlapping ranges over one axis" and inventing one out of `Progress` would be a worse lie
+ * than a plain box. The colours are still only roles.
  */
 export function PropagationBar({
   session,
@@ -221,38 +253,22 @@ export function PropagationBar({
   const end = endExclusive(session.propagation);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Propagate</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textFaint}>{`${start}–${end}`}</Mono>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Propagate</span>
+        <span className="ml-auto font-mono text-xs text-muted-foreground">{`${start}–${end}`}</span>
       </div>
 
       <div
         role="group"
         aria-label="Propagation range"
-        style={{
-          position: 'relative',
-          width,
-          height,
-          background: token.surface1,
-          border: `1px solid ${token.borderControl}`,
-          borderRadius: token.radiusInset,
-          overflow: 'hidden',
-        }}
+        className="relative overflow-hidden rounded-md border border-input bg-muted"
+        style={{ width, height }}
       >
         <div
           role="presentation"
-          style={{
-            position: 'absolute',
-            left: toX(start),
-            width: Math.max(2, toX(end) - toX(start)),
-            top: 0,
-            bottom: 0,
-            background: 'rgba(255, 122, 82, 0.14)',
-            borderLeft: `1px solid ${token.mask}`,
-            borderRight: `1px solid ${token.mask}`,
-          }}
+          className="absolute inset-y-0 border-x border-chart-4 bg-chart-4/15"
+          style={{ left: toX(start), width: Math.max(2, toX(end) - toX(start)) }}
         />
 
         {coveredSpans(session).map((span) => (
@@ -260,38 +276,29 @@ export function PropagationBar({
             key={`${span.start}-${span.duration}`}
             role="presentation"
             data-testid="covered-span"
+            className="absolute bottom-0 h-1 bg-chart-4"
             style={{
-              position: 'absolute',
               left: toX(span.start),
               width: Math.max(1, toX(endExclusive(span)) - toX(span.start)),
-              bottom: 0,
-              height: 5,
-              background: token.mask,
             }}
           />
         ))}
 
         <div
           role="presentation"
-          style={{
-            position: 'absolute',
-            left: toX(session.frame),
-            top: 0,
-            bottom: 0,
-            width: 1,
-            background: token.accent,
-          }}
+          className="absolute inset-y-0 w-px bg-primary"
+          style={{ left: toX(session.frame) }}
         />
       </div>
 
-      <div style={{ display: 'flex', gap: token.space2 }}>
-        <NumberField
+      <div className="flex gap-2">
+        <FrameField
           label="From"
           value={start}
           disabled={disabled === true}
           onChange={(value) => onChange?.(spanFromBounds(frameIndex(value), frameIndex(end)))}
         />
-        <NumberField
+        <FrameField
           label="To"
           value={end}
           disabled={disabled === true}
@@ -302,7 +309,7 @@ export function PropagationBar({
   );
 }
 
-function NumberField({
+function FrameField({
   label,
   value,
   disabled,
@@ -314,25 +321,19 @@ function NumberField({
   readonly onChange: (value: number) => void;
 }): ReactNode {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-      <span style={{ font: token.textLabel, color: token.textSoft }}>{label}</span>
-      <input
+    <Field orientation="horizontal" className="w-auto gap-2">
+      <FieldLabel htmlFor={`propagate-${label}`} className="shrink-0 text-xs">
+        {label}
+      </FieldLabel>
+      <Input
+        id={`propagate-${label}`}
         type="number"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        style={{
-          width: 72,
-          height: token.controlHeightSm,
-          background: token.surface1,
-          border: `1px solid ${token.borderControl}`,
-          borderRadius: token.radiusControl,
-          color: token.textBright,
-          font: token.textValue,
-          padding: `0 ${token.space2}`,
-        }}
+        className="h-7 w-20 font-mono tabular-nums"
       />
-    </label>
+    </Field>
   );
 }
 
@@ -384,7 +385,8 @@ export function MaskPointOverlay({
       role="group"
       aria-label="Mask points"
       onClick={handleClick}
-      style={{ position: 'relative', width, height, cursor: disabled ? 'default' : 'crosshair' }}
+      className={cn('relative', disabled ? 'cursor-default' : 'cursor-crosshair')}
+      style={{ width, height }}
     >
       {onFrame.map(({ prompt, index }) => {
         if (prompt.kind !== 'point') return null;
@@ -398,21 +400,11 @@ export function MaskPointOverlay({
               event.stopPropagation();
               if (!disabled) onRemovePrompt?.(index);
             }}
-            style={{
-              position: 'absolute',
-              left: `${prompt.x * 100}%`,
-              top: `${prompt.y * 100}%`,
-              transform: 'translate(-50%, -50%)',
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: prompt.include ? token.mask : 'transparent',
-              borderWidth: 2,
-              borderStyle: 'solid',
-              borderColor: prompt.include ? '#ffd0be' : token.danger,
-              cursor: 'pointer',
-              padding: 0,
-            }}
+            className={cn(
+              'absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 p-0',
+              prompt.include ? 'border-chart-4/60 bg-chart-4' : 'border-destructive bg-transparent',
+            )}
+            style={{ left: `${prompt.x * 100}%`, top: `${prompt.y * 100}%` }}
           />
         );
       })}
