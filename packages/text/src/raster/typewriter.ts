@@ -1,5 +1,5 @@
 import type { GlyphAdvances, LineAdvances } from '../contracts/text-raster.js';
-import { clamp01 } from '@nos/core';
+import { type TypewriterCut, clamp01 } from '@nos/core';
 
 /**
  * The typewriter reveal.
@@ -80,6 +80,62 @@ export function typewriterAt(advances: GlyphAdvances, reveal: number): Typewrite
   }
 
   return { revealedCharacters: revealed, lines, complete: revealed >= total };
+}
+
+/**
+ * Where the raster was placed on the frame, so advances measured in raster pixels can be located.
+ *
+ * The compositor draws every layer as a fullscreen quad, so a title is composed onto a frame-sized
+ * surface before upload. The advances are still in the *measured* raster's coordinates, and this is
+ * the offset that reconciles the two.
+ */
+export interface RasterPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly frameWidth: number;
+  readonly frameHeight: number;
+}
+
+/**
+ * The cut for a reveal fraction, or nothing when the whole text is visible.
+ *
+ * `undefined` for a complete reveal is what keeps this free for the overwhelmingly common case: a
+ * title with no typewriter animation is complete at every frame, and the renderer skips the cut
+ * entirely rather than paying for a no-op clip on every layer of every frame.
+ */
+export function typewriterCut(
+  advances: GlyphAdvances,
+  reveal: number,
+  placement: RasterPlacement,
+): TypewriterCut | undefined {
+  const state = typewriterAt(advances, reveal);
+  if (state.complete) return undefined;
+
+  /*
+   * `buildAdvances` puts the first baseline exactly one line height down, so the first line's baseline
+   * *is* the line spacing. Deriving it rather than carrying it keeps the advance table to what a
+   * rasterizer can actually measure.
+   */
+  const spacing = advances.lines[0]?.baselineY ?? placement.frameHeight;
+
+  const index = state.lines.findIndex((line) => line.visibleCharacters < line.line.text.length);
+  const partial = state.lines[index];
+  if (partial === undefined) return undefined;
+
+  const top = placement.y + spacing * index;
+  /*
+   * The band runs a third of a line past the baseline so descenders survive. A `g` on the line being
+   * typed hangs below its own baseline, and a band that stopped there would shave the tails off while
+   * the line was mid-word and restore them when the next line started — a flicker that reads as a
+   * font problem rather than as a clipping rule.
+   */
+  const bottom = placement.y + spacing * (index + 1) + spacing * 0.3;
+
+  return {
+    doneV: 1 - top / placement.frameHeight,
+    lineV: [1 - bottom / placement.frameHeight, 1 - top / placement.frameHeight],
+    lineU: (placement.x + partial.line.originX + partial.visibleWidth) / placement.frameWidth,
+  };
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GlyphAdvances } from '../contracts/text-raster.js';
-import { buildAdvances, toCumulativeAdvances, typewriterAt, wrapText } from './typewriter.js';
+import { buildAdvances, toCumulativeAdvances, typewriterAt, typewriterCut, wrapText } from './typewriter.js';
 
 /** Every character 10 px wide, so expected advances are readable by inspection. */
 const CHAR_WIDTH = 10;
@@ -214,5 +214,58 @@ describe('reveal against wrapped text', () => {
 
     const counts = [0, 0.2, 0.5, 0.9, 1].map((reveal) => typewriterAt(advances, reveal).revealedCharacters);
     expect(counts).toEqual([0, 1, 3, 5, 6]);
+  });
+});
+
+describe('the quad cut a reveal turns into', () => {
+  // 1000x500 frame with the raster dropped at (100, 200), so every expectation below can be checked
+  // by hand: line spacing is 20 * 1.2 = 24.
+  const placement = { x: 100, y: 200, frameWidth: 1000, frameHeight: 500 };
+
+  it('is nothing at all when every character is visible', () => {
+    // The common case by far — a title with no typewriter is complete at every frame — and it has to
+    // cost nothing, or every layer of every frame pays for a clip that removes no pixels.
+    expect(typewriterCut(advancesFor(['hello']), 1, placement)).toBeUndefined();
+  });
+
+  it('cuts at the advance after the last visible character', () => {
+    // 2 of 4 characters: 20 px of line, from an origin 100 px into a 1000 px frame.
+    const cut = typewriterCut(advancesFor(['abcd']), 0.5, placement);
+    expect(cut?.lineU).toBeCloseTo((100 + 20) / 1000);
+  });
+
+  it('accounts for where the raster was placed, not just the advance', () => {
+    // The bug this exists for: advances are in raster pixels, the texture is frame-sized, and a
+    // centred title placed without its offset cuts half a frame away from its own text.
+    const left = typewriterCut(advancesFor(['abcd']), 0.5, { ...placement, x: 0 });
+    const right = typewriterCut(advancesFor(['abcd']), 0.5, placement);
+    expect((right?.lineU ?? 0) - (left?.lineU ?? 0)).toBeCloseTo(0.1);
+  });
+
+  it('puts earlier lines at a greater v, because the texture is uploaded bottom-up', () => {
+    // Getting this backwards types from the bottom line upward, which looks deliberate enough to
+    // survive a glance at the preview.
+    const first = typewriterCut(advancesFor(['aaaa', 'bbbb']), 0.1, placement);
+    const second = typewriterCut(advancesFor(['aaaa', 'bbbb']), 0.75, placement);
+    expect(second?.doneV).toBeLessThan(first?.doneV ?? 0);
+  });
+
+  it('hides a line that has not started and draws one that is finished', () => {
+    // Reading order: at 0.75 the first line is whole and the second is mid-word.
+    const cut = typewriterCut(advancesFor(['aaaa', 'bbbb']), 0.75, placement);
+    // Top of the second line: 200 + 24 = 224 of 500.
+    expect(cut?.doneV).toBeCloseTo(1 - 224 / 500);
+    // Its band runs a third of a line past the baseline, so descenders are not shaved.
+    expect(cut?.lineV[0]).toBeCloseTo(1 - (200 + 24 * 2 + 24 * 0.3) / 500);
+  });
+
+  it('hides everything at a reveal of zero rather than showing the first line', () => {
+    const cut = typewriterCut(advancesFor(['abcd']), 0, placement);
+    // The cut sits exactly at the line's origin, so no character survives it.
+    expect(cut?.lineU).toBeCloseTo(100 / 1000);
+  });
+
+  it('is nothing for text with no characters, which would otherwise divide by zero', () => {
+    expect(typewriterCut(advancesFor([]), 0.5, placement)).toBeUndefined();
   });
 });

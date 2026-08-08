@@ -1,4 +1,4 @@
-import type { MaskId, Resolution } from '@nos/core';
+import type { MaskId, Resolution, TypewriterCut } from '@nos/core';
 import type {
   EffectPass,
   LayerSource,
@@ -31,6 +31,18 @@ export interface TextureProvider {
   textureFor(source: LayerSource): WebGLTexture | undefined;
   /** Texture for a cached mask, or `undefined` if it has not been generated yet. */
   maskTexture(mask: MaskId): WebGLTexture | undefined;
+  /**
+   * How much of a text layer to draw, for the typewriter's quad cut.
+   *
+   * Returned as plain texture coordinates rather than as anything the compositor could interpret,
+   * which is the point: the provider owns the rasterizer and knows where each character ends, and the
+   * compositor stays ignorant of fonts. `undefined` — for every non-text layer, and for text that is
+   * fully revealed — means draw the layer whole.
+   *
+   * Optional so a provider written before the typewriter existed still satisfies the interface, and
+   * so the harnesses that stub this out do not have to answer a question they have no fonts for.
+   */
+  revealCut?(source: LayerSource): TypewriterCut | undefined;
 }
 
 export interface RenderStats {
@@ -181,8 +193,22 @@ export function createGlCompositor(options: GlCompositorOptions): GlCompositor {
     bindTarget(pingPong.read, plan.resolution);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(builtins.passthrough.program);
-    bindSamplers(builtins.passthrough, new Map([['source', sourceTexture]]), sourceTexture);
+
+    /*
+     * A title mid-typewriter is cut here, in the seed, rather than in a pass of its own: the copy
+     * happens for every layer anyway, so the reveal is free, and doing it *before* the effect chain is
+     * what makes a glow light up the characters that have been typed rather than the whole line.
+     */
+    const cut = textures.revealCut?.(layer.source);
+    const seed = cut === undefined ? builtins.passthrough : builtins.reveal;
+    gl.useProgram(seed.program);
+    bindSamplers(seed, new Map([['source', sourceTexture]]), sourceTexture);
+    if (cut !== undefined) {
+      setUniform(seed, 'u_reveal_done_v', { kind: 'float', value: cut.doneV });
+      setUniform(seed, 'u_reveal_line_v', { kind: 'vec2', value: [cut.lineV[0], cut.lineV[1]] });
+      setUniform(seed, 'u_reveal_line_u', { kind: 'float', value: cut.lineU });
+    }
+
     gl.disable(gl.BLEND);
     drawFullscreen();
 

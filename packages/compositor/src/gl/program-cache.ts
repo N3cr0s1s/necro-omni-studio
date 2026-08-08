@@ -10,6 +10,7 @@ import {
   COMPOSITE_FRAGMENT_SHADER,
   FULLSCREEN_VERTEX_SHADER,
   PASSTHROUGH_FRAGMENT_SHADER,
+  REVEAL_FRAGMENT_SHADER,
   assembleFragmentShader,
   parseShaderLog,
 } from '../shader/shader-source.js';
@@ -199,14 +200,16 @@ function collectUniforms(
 }
 
 /**
- * The two programs the compositor always needs.
+ * The programs the compositor always needs.
  *
  * `passthrough` is the fallback for a broken effect and the copy operation between targets;
- * `composite` draws a layer onto the accumulator with its transform and opacity.
+ * `composite` draws a layer onto the accumulator with its transform and opacity; `reveal` replaces
+ * the passthrough when seeding a layer that is mid-typewriter, which is why the cut costs no pass.
  */
 export interface BuiltinPrograms {
   readonly passthrough: GlProgram;
   readonly composite: GlProgram;
+  readonly reveal: GlProgram;
   dispose(): void;
 }
 
@@ -242,13 +245,16 @@ export function createBuiltinPrograms(gl: WebGL2RenderingContext): BuiltinProgra
 
   const passthrough = build(PASSTHROUGH_FRAGMENT_SHADER, ['source'], 'passthrough');
   const composite = build(COMPOSITE_FRAGMENT_SHADER, ['source'], 'composite');
+  const reveal = build(REVEAL_FRAGMENT_SHADER, ['source'], 'reveal');
 
   return {
     passthrough,
     composite,
+    reveal,
     dispose(): void {
       gl.deleteProgram(passthrough.program);
       gl.deleteProgram(composite.program);
+      gl.deleteProgram(reveal.program);
       gl.deleteShader(vertex.shader);
     },
   };

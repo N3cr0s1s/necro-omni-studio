@@ -51,6 +51,23 @@
                   "a": 1
                 }
               }
+            },
+            "reveal": {
+              "kind": "animated",
+              "keyframes": [
+                {
+                  "id": "reveal_0",
+                  "frame": 0,
+                  "value": 0,
+                  "ease": "linear"
+                },
+                {
+                  "id": "reveal_1",
+                  "frame": 20,
+                  "value": 1,
+                  "ease": "linear"
+                }
+              ]
             }
           }
         ]

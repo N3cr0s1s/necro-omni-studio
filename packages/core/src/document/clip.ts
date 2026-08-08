@@ -198,6 +198,29 @@ export interface TextClip extends ClipBase {
   readonly reveal?: AnimatableNumber;
 }
 
+/**
+ * The quad cut a `reveal` fraction turns into, in texture coordinates.
+ *
+ * Here rather than in the text package or the compositor because it is the seam *between* them: the
+ * side that owns the fonts computes it, the side that owns the GL applies it, and neither should have
+ * to depend on the other to name the thing they pass. Everything in it is a plain texture coordinate,
+ * with no notion of a glyph left in it.
+ *
+ * Three regions rather than a per-line list, which falls out of the reveal running in reading order:
+ * at any instant some lines are fully typed, **exactly one** is mid-word, and the rest have not
+ * started. That describes any line count in three numbers, where a list would need a bound.
+ *
+ * `v` runs bottom-up, as the texture is uploaded, so *earlier* lines have the *greater* `v`.
+ */
+export interface TypewriterCut {
+  /** Fragments above this — `v` greater — are fully typed and drawn whole. */
+  readonly doneV: number;
+  /** The mid-word line's band, `[bottom, top]`. Below `bottom` nothing is drawn yet. */
+  readonly lineV: readonly [number, number];
+  /** Within that band, draw only up to this `u`. */
+  readonly lineU: number;
+}
+
 export type Clip = VideoClip | ImageClip | AudioClip | TextClip;
 
 export type ClipKind = Clip['kind'];

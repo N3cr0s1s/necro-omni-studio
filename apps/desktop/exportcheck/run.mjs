@@ -118,18 +118,25 @@ try {
   } else {
     // Read back as raw luminance and find what is lit. A title that reached the file has a bounding
     // box; the bug this guards against produced a frame that was uniformly black.
-    const frame = spawnSync(
-      'ffmpeg',
-      ['-v', 'error', '-i', delivered, '-vframes', '1', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'],
-      { maxBuffer: 1 << 28 },
-    );
-    const pixels = frame.stdout;
     const width = 1920;
     const height = 1080;
 
-    if (pixels.length < width * height) {
-      fail('the delivered file could not be decoded — is ffmpeg installed?');
-    } else {
+    /** One frame of the delivered file, as raw luminance. */
+    const frameAt = (index) =>
+      spawnSync(
+        'ffmpeg',
+        [
+          ...['-v', 'error', '-i', delivered],
+          // `select` rather than a seek: the file is thirty frames long and seeking a sub-second
+          // clip lands on a keyframe, which would silently read frame 0 for every index asked for.
+          ...['-vf', `select=eq(n\\,${index})`, '-vsync', '0', '-vframes', '1'],
+          ...['-f', 'rawvideo', '-pix_fmt', 'gray', '-'],
+        ],
+        { maxBuffer: 1 << 28 },
+      ).stdout;
+
+    /** What is lit in a frame, and how far right it reaches. */
+    const inkOf = (pixels) => {
       let lit = 0;
       let left = width;
       let right = -1;
@@ -142,6 +149,15 @@ try {
           }
         }
       }
+      return { lit, left, right };
+    };
+
+    const pixels = frameAt(25);
+
+    if (pixels.length < width * height) {
+      fail('the delivered file could not be decoded — is ffmpeg installed?');
+    } else {
+      const { lit, left, right } = inkOf(pixels);
 
       const coverage = lit / ((width / 2) * (height / 2));
       // Generous bounds either side. The assertion is "a title is there", not "these exact glyphs":
@@ -155,6 +171,30 @@ try {
       const centre = (left + right) / 2 / width;
       if (Math.abs(centre - 0.5) > 0.1) fail(`the title is off centre at ${centre.toFixed(3)}`);
       else console.log(`✓ the title is where the preview puts it (centre ${centre.toFixed(3)})`);
+
+      /*
+       * The typewriter, read off the delivered file.
+       *
+       * The fixture types its title over the first twenty frames, so frame 4 must show *some* of it
+       * and less of it than frame 25 does. This is the check that would have caught the reveal being
+       * computed and then ignored: every frame was fully typed, and nothing anywhere said so.
+       */
+      const early = frameAt(4);
+      if (early.length < width * height) {
+        fail('the early frame could not be decoded');
+      } else {
+        const partial = inkOf(early);
+        if (partial.lit === 0) {
+          fail('nothing is typed four frames in — the reveal hides the whole title');
+        } else if (partial.lit >= lit) {
+          fail(`the title is not being typed: ${partial.lit} lit early against ${lit} when complete`);
+        } else if (partial.right >= right) {
+          fail(`the reveal is not cutting from the right: reaches ${partial.right} against ${right}`);
+        } else {
+          const share = ((partial.lit / lit) * 100).toFixed(0);
+          console.log(`✓ the typewriter reached the delivered file (${share}% typed at frame 4)`);
+        }
+      }
     }
   }
 } finally {

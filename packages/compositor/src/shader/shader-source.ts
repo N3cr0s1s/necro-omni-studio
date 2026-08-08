@@ -173,6 +173,45 @@ void main() {
 `;
 
 /**
+ * Reveal shader: the passthrough, with the typewriter's quad cut applied.
+ *
+ * Used **in place of** the passthrough when seeding a layer's effect chain, so the cut costs no extra
+ * pass — the seed copy happens for every layer regardless — and, more importantly, it happens *before*
+ * the effects. A glow on a title that is being typed should glow the characters that exist, not the
+ * ones that have not been typed yet; cutting afterwards would light up the whole line and then erase
+ * part of the letters out of the middle of their own halo.
+ *
+ * The three regions come from the reveal being in reading order. See `typewriterCut`.
+ */
+export const REVEAL_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform sampler2D source;
+uniform float u_reveal_done_v;
+uniform vec2  u_reveal_line_v;
+uniform float u_reveal_line_u;
+
+void main() {
+  // Above the line being typed: every character is there, so draw it untouched.
+  if (v_uv.y > u_reveal_done_v) {
+    fragColor = texture(source, v_uv);
+    return;
+  }
+
+  // Below it: not typed yet. Transparent rather than discarded, so the target is cleared uniformly.
+  if (v_uv.y < u_reveal_line_v.x) {
+    fragColor = vec4(0.0);
+    return;
+  }
+
+  fragColor = v_uv.x <= u_reveal_line_u ? texture(source, v_uv) : vec4(0.0);
+}
+`;
+
+/**
  * Composite shader: draws a layer onto the accumulator with a transform and opacity.
  *
  * The inverse transform is applied to the *sampling* coordinate rather than to geometry, so a layer

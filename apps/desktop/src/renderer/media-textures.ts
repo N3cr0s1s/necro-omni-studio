@@ -8,7 +8,13 @@ import {
   frameRateToNumber,
 } from '@nos/core';
 import { type MaskFrame, toRgba } from '@nos/masks';
-import { type RasterizedText, contentCacheKey, createCanvasRasterizer } from '@nos/text';
+import {
+  type RasterPlacement,
+  type RasterizedText,
+  contentCacheKey,
+  createCanvasRasterizer,
+  typewriterCut,
+} from '@nos/text';
 import { textMaxWidth } from './text-plan.js';
 import type { LayerSource, RenderPlan, TextureProvider } from '@nos/compositor';
 import type { SidecarInfo } from '../main/ipc-contract.js';
@@ -134,6 +140,8 @@ export function createMediaTextures(
   const textures = new Map<string, WebGLTexture>();
   /** Rasterized text by cache key, ready to upload. */
   const rasters = new Map<string, RasterizedText>();
+  /** Where each raster sits on its frame, so the typewriter's advances can be located. */
+  const placements = new Map<string, RasterPlacement>();
   /**
    * Mask textures by bound id, with the frame each was uploaded from.
    *
@@ -207,6 +215,19 @@ export function createMediaTextures(
     provider(gl) {
       context = gl;
       return {
+        /*
+         * The typewriter's cut, resolved here because this is where the fonts are. What crosses back
+         * is texture coordinates and nothing else, so the compositor applies a clip without ever
+         * learning that glyphs exist — the same split that keeps `registerText` out of `prepare`.
+         */
+        revealCut(source) {
+          if (source.kind !== 'text' || source.reveal >= 1) return undefined;
+          const raster = rasters.get(source.cacheKey);
+          const placement = placements.get(source.cacheKey);
+          if (raster === undefined || placement === undefined) return undefined;
+          return typewriterCut(raster.advances, source.reveal, placement);
+        },
+
         textureFor(source) {
           if (source.kind === 'text') return textTexture(gl, source.cacheKey);
 
@@ -313,7 +334,8 @@ export function createMediaTextures(
           // layer as a fullscreen quad — right for video, which fills the frame — so a title uploaded at
           // its own dimensions would be stretched to 1080 tall and the `size` control would mean
           // nothing. Placing it here keeps that model intact and makes the size a real pixel size.
-          const raster = composeOntoFrame(measured, clip.content.align, resolution);
+          const composed = composeOntoFrame(measured, clip.content.align, resolution);
+          const raster = composed.raster;
           // An empty raster is always a bug — a missing font, a zero-alpha colour, a measurement that
           // came back blank — and it presents as a title that simply is not there. Cheap to check once
           // per key, and it turns an invisible failure into a sentence.
@@ -322,6 +344,7 @@ export function createMediaTextures(
             throw new Error(`rasterized ${raster.width}x${raster.height} with no visible pixels`);
           }
           rasters.set(key, raster);
+          placements.set(key, composed.placement);
           // The texture is keyed the same way, so a re-render reuses it without touching the canvas.
           textures.delete(key);
         } catch (error) {
@@ -389,13 +412,18 @@ export function createMediaTextures(
     raster: RasterizedText,
     align: TextContent['align'],
     resolution: Resolution,
-  ): RasterizedText {
+  ): { readonly raster: RasterizedText; readonly placement: RasterPlacement } {
     const canvas = Object.assign(document.createElement('canvas'), {
       width: resolution.width,
       height: resolution.height,
     });
     const surface = canvas.getContext('2d');
-    if (surface === null) return raster;
+    if (surface === null) {
+      return {
+        raster,
+        placement: { x: 0, y: 0, frameWidth: resolution.width, frameHeight: resolution.height },
+      };
+    }
 
     const margin = Math.round(resolution.width * 0.05);
     const x =
@@ -407,7 +435,15 @@ export function createMediaTextures(
     const y = Math.round(resolution.height * 0.72 - raster.height / 2);
 
     surface.drawImage(raster.image as CanvasImageSource, x, y);
-    return { ...raster, width: resolution.width, height: resolution.height, image: canvas };
+    /*
+     * The placement is kept, not just applied. The advance list is measured in the *raster's* own
+     * pixels while the texture is frame-sized, so without this offset the typewriter would cut at the
+     * right distance from the wrong origin — which for a centred title is wrong by half the frame.
+     */
+    return {
+      raster: { ...raster, width: resolution.width, height: resolution.height, image: canvas },
+      placement: { x, y, frameWidth: resolution.width, frameHeight: resolution.height },
+    };
   }
 
   function inkCoverage(raster: RasterizedText): number {
