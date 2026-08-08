@@ -37,6 +37,7 @@ import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
+import { describeProxies, useProxies } from './use-proxies.js';
 import { useClipDrag } from './use-clip-drag.js';
 import { useClipStrips } from './use-clip-strips.js';
 import { useMediaImport } from './use-media-import.js';
@@ -385,6 +386,10 @@ export function App(): ReactNode {
   );
   const strips = useClipStrips({ document, sidecar, framesPerPixel, widthForClip });
 
+  // The spec's realtime preview target is "1080p/30 from proxy". The originals are decoded until each
+  // proxy exists, so importing a 4K source shows a picture immediately and gets a cheaper one shortly.
+  const proxies = useProxies({ document, sidecar });
+
   /**
    * The non-error status line.
    *
@@ -394,6 +399,7 @@ export function App(): ReactNode {
    */
   const notice =
     range.notice ??
+    describeProxies(proxies) ??
     (strips.failures.length === 0
       ? undefined
       : strips.failures.length === 1
@@ -520,7 +526,12 @@ export function App(): ReactNode {
         />
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <Preview document={drag.document} frame={playhead} sidecar={sidecar} />
+          <Preview
+            document={drag.document}
+            frame={playhead}
+            sidecar={sidecar}
+            resolveAsset={proxies.resolve}
+          />
 
           <div ref={laneRef} style={{ flex: 'none' }}>
             <Timeline

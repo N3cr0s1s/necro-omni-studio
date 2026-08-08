@@ -64,8 +64,30 @@ export interface TextRasterProblem {
 /** How long to wait for one seek before giving up on it. */
 export const SEEK_TIMEOUT_MS = 5_000;
 
-export function createMediaTextures(sidecar: SidecarInfo | undefined): MediaTextures {
-  const elements = new Map<string, HTMLVideoElement | HTMLImageElement>();
+export interface MediaTextureOptions {
+  /**
+   * Substitutes the asset actually decoded for a source asset.
+   *
+   * The seam editing proxies plug into, and deliberately a *function* rather than a map: the preview
+   * hands in one that redirects to a proxy, the export hands in nothing, and a future mode — full
+   * resolution for the selected clip, a coarser proxy while scrubbing — is another implementation of
+   * the same one-line contract rather than a new branch in here.
+   */
+  readonly resolveAsset?: (asset: AssetPath) => AssetPath;
+}
+
+export function createMediaTextures(
+  sidecar: SidecarInfo | undefined,
+  options: MediaTextureOptions = {},
+): MediaTextures {
+  /**
+   * Decoders by source asset, with the URL each is decoding.
+   *
+   * The URL is held alongside because it can change under a stable asset: a proxy finishing
+   * mid-session redirects the same source to a different file, and the element decoding the original
+   * has to be released rather than left buffering a file nothing will draw again.
+   */
+  const elements = new Map<string, { url: string; element: HTMLVideoElement | HTMLImageElement }>();
   const textures = new Map<string, WebGLTexture>();
   /** Rasterized text by cache key, ready to upload. */
   const rasters = new Map<string, RasterizedText>();
@@ -86,25 +108,29 @@ export function createMediaTextures(sidecar: SidecarInfo | undefined): MediaText
 
   function urlFor(asset: AssetPath): string | undefined {
     if (sidecar === undefined || !sidecar.available) return undefined;
+    const resolved = options.resolveAsset?.(asset) ?? asset;
     // The token travels in the query because `<video src>` cannot send a header — the one reason the
     // sidecar accepts it there at all.
-    return `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(asset)}&token=${encodeURIComponent(sidecar.token)}`;
+    return `${sidecar.baseUrl}/media/file?asset=${encodeURIComponent(resolved)}&token=${encodeURIComponent(sidecar.token)}`;
   }
 
   function elementFor(source: LayerSource): HTMLVideoElement | HTMLImageElement | undefined {
     if (source.kind !== 'video' && source.kind !== 'image') return undefined;
 
-    const existing = elements.get(source.asset);
-    if (existing !== undefined) return existing;
-
     const url = urlFor(source.asset);
     if (url === undefined) return undefined;
+
+    const existing = elements.get(source.asset);
+    if (existing !== undefined && existing.url === url) return existing.element;
+    // A different URL for the same asset means a proxy arrived. The old decoder is released here
+    // rather than at teardown, or every proxied source would hold two open decoders for the session.
+    if (existing !== undefined) release(existing.element);
 
     if (source.kind === 'image') {
       const image = new Image();
       image.crossOrigin = 'anonymous';
       image.src = url;
-      elements.set(source.asset, image);
+      elements.set(source.asset, { url, element: image });
       return image;
     }
 
@@ -113,8 +139,15 @@ export function createMediaTextures(sidecar: SidecarInfo | undefined): MediaText
     video.muted = true;
     video.preload = 'auto';
     video.src = url;
-    elements.set(source.asset, video);
+    elements.set(source.asset, { url, element: video });
     return video;
+  }
+
+  function release(element: HTMLVideoElement | HTMLImageElement): void {
+    if (!(element instanceof HTMLVideoElement)) return;
+    element.pause();
+    element.removeAttribute('src');
+    element.load();
   }
 
   return {
@@ -214,13 +247,7 @@ export function createMediaTextures(sidecar: SidecarInfo | undefined): MediaText
     },
 
     dispose() {
-      for (const element of elements.values()) {
-        if (element instanceof HTMLVideoElement) {
-          element.pause();
-          element.removeAttribute('src');
-          element.load();
-        }
-      }
+      for (const entry of elements.values()) release(entry.element);
       elements.clear();
 
       if (context !== undefined) {

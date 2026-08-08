@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1654 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1677 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1573,3 +1573,43 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Verified in the running app: selecting the linked audio clip shows both controls,
   driving them writes −12.0 dB and L60, pressing animate produces an
   `audio · gain` lane, and double-clicking the lane lands a marker.
+
+- 2026-08-08: Editing proxies. Spec 6.2 asks for realtime 1080p/30 preview **from
+  proxy**, and the sidecar has been able to make them since M2 — `/media/derive`
+  transcodes to a constrained short edge and caches by content hash, verified
+  against real ffmpeg for landscape and portrait alike. Nothing ever asked it to.
+  `DEFAULT_PROXY` had no callers, so a 4K source was decoded at 4K to fill a canvas
+  a thousand pixels wide.
+
+  The substitution is a **function** handed to the decoder, not a lookup inside it.
+  That is what keeps the WYSIWYG guarantee reviewable: the preview passes a
+  resolver, the export passes nothing, and the one place the two could diverge is a
+  single parameter with a test asserting the export has no way to reach a proxy.
+  A future mode — full resolution for the selected clip, a coarser proxy while
+  scrubbing — is another implementation of that one-line contract rather than a new
+  branch in the decoder.
+
+  Three rules, each of which would be a defect the other way round:
+
+  - **The original is decoded until its proxy exists.** A transcode takes as long
+    as it takes; a preview that went blank while it ran would trade a slow picture
+    for no picture.
+  - **A source is proxied only when the proxy would be smaller.** Re-encoding 720p
+    to a 1080p proxy costs a full transcode, loses a generation, and hands the
+    decoder the same pixels. Judged on the *short* edge, so portrait material is
+    not transcoded for nothing.
+  - **Frame rate is deliberately not a reason to proxy.** Dropping 60 fps to 30
+    changes which frame lands on a timeline frame, and a preview showing different
+    frames from the export would break the guarantee proxies exist to protect.
+
+  Transcodes run **one at a time**: it is the heaviest thing this application asks
+  of the machine, and ten in parallel for a ten-clip timeline would starve the
+  preview they serve while finishing no sooner. Wiring it also found a leak worth
+  keeping: the decoder cached elements by asset, so a proxy arriving mid-session
+  would have left the original's `<video>` open and buffering for the rest of the
+  session. It is released when the URL under an asset changes.
+
+  Verified against a real 3840×2160 source: the notice read "building an editing
+  proxy for media/uhd.mp4", the request log shows `media/uhd.mp4` fetched first and
+  `cache/proxy_1080p30q23_….mp4` fetched once it landed, and the cached proxy
+  probes as 1920×1080 at 30/1.

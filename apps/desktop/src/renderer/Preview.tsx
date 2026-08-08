@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { type FrameIndex, type TimelineDocument } from '@nos/core';
+import { type AssetPath, type FrameIndex, type TimelineDocument } from '@nos/core';
 import {
   type GlCompositor,
   type RenderStats,
@@ -32,9 +32,17 @@ export interface PreviewProps {
   readonly frame: FrameIndex;
   /** Where the sidecar serves project files. Without it there is nothing to decode. */
   readonly sidecar: SidecarInfo | undefined;
+  /**
+   * Redirects a source asset to its editing proxy.
+   *
+   * The preview's alone. The export deliberately does not take one: preview and delivery run the
+   * same plan, and encoding the delivery from a downscaled intermediate would break that guarantee
+   * without anything on screen changing.
+   */
+  readonly resolveAsset?: (asset: AssetPath) => AssetPath;
 }
 
-export function Preview({ document: doc, frame, sidecar }: PreviewProps): ReactNode {
+export function Preview({ document: doc, frame, sidecar, resolveAsset }: PreviewProps): ReactNode {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const compositorRef = useRef<GlCompositor | undefined>(undefined);
   const [stats, setStats] = useState<RenderStats | undefined>(undefined);
@@ -46,7 +54,10 @@ export function Preview({ document: doc, frame, sidecar }: PreviewProps): ReactN
   const effects = useMemo(() => createEffectRegistry(BUILTIN_EFFECTS), []);
   // The same decoder the export uses. Two of them would eventually disagree about which frame a source
   // time lands on, and the delivered file would differ from what the user approved.
-  const media = useMemo(() => createMediaTextures(sidecar), [sidecar]);
+  const media = useMemo(
+    () => createMediaTextures(sidecar, resolveAsset === undefined ? {} : { resolveAsset }),
+    [sidecar, resolveAsset],
+  );
   useEffect(() => () => media.dispose(), [media]);
 
   // The context and its programs outlive every frame: compiling a shader per frame would cost more than
