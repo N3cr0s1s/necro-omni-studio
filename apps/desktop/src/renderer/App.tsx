@@ -27,7 +27,9 @@ import { buildTree } from '@nos/media';
 import {
   type TrackFlag,
   addTrack,
+  clipsInRegion,
   clipsOnTrack,
+  combineSelection,
   firstTrackOfKind,
   insertGenerated,
   moveClip,
@@ -516,6 +518,7 @@ export function App(): ReactNode {
     onRemoved: () => setSelected(new Set()),
     // Selected on arrival: what a user does immediately after pasting is act on the copy.
     onPasted: (clips) => setSelected(new Set(clips as readonly string[])),
+    onSelect: (clips) => setSelected(new Set(clips as readonly string[])),
   });
 
   return (
@@ -664,6 +667,11 @@ export function App(): ReactNode {
               onScrub={transport.seek}
               onSelectClip={(clip, additive) =>
                 setSelected((current) => (additive ? new Set([...current, clip]) : new Set([clip as string])))
+              }
+              // A marquee reports frames and tracks; which clips that touches is the document's
+              // question, answered in the editing layer rather than in the component.
+              onSelectRegion={(region, additive) =>
+                setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))
               }
               // Alt turns a move into a slip. The clip stays put and its content slides inside it —
               // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.

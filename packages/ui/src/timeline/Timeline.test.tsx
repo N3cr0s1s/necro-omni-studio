@@ -22,7 +22,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { Timeline } from './Timeline.js';
+import { Timeline, regionFor } from './Timeline.js';
 import { clipAccessibleLabel } from './ClipBody.js';
 import { createViewport } from './viewport.js';
 
@@ -292,6 +292,92 @@ describe('ruler', () => {
   it('renders labelled ticks', () => {
     renderTimeline();
     expect(screen.getByText('00:00')).toBeDefined();
+  });
+});
+
+describe('the marquee', () => {
+  /** The lane container: the element a background pointer-down has to land on. */
+  function laneArea(): HTMLElement {
+    const lane = document.querySelector('[data-track-id]') as HTMLElement;
+    return lane.parentElement as HTMLElement;
+  }
+
+  it('draws nothing until a drag starts', () => {
+    renderTimeline({ onSelectRegion: vi.fn() });
+    expect(document.querySelector('[data-marquee]')).toBeNull();
+  });
+
+  it('draws a rectangle while dragging the background', () => {
+    renderTimeline({ onSelectRegion: vi.fn() });
+    const area = laneArea();
+    fireEvent.pointerDown(area, { button: 0, clientX: 100, clientY: 100 });
+
+    expect(document.querySelector('[data-marquee]')).not.toBeNull();
+  });
+
+  it('does not start on a clip, which is a move gesture', () => {
+    renderTimeline({ onSelectRegion: vi.fn() });
+    const clip = document.querySelector('[data-clip-id="a"]') as HTMLElement;
+    fireEvent.pointerDown(clip, { button: 0, clientX: 100, clientY: 100 });
+
+    expect(document.querySelector('[data-marquee]')).toBeNull();
+  });
+
+  it('treats a click as a click, not as an empty selection', () => {
+    // Otherwise tapping the background to focus the timeline would clear the selection every time.
+    const onSelectRegion = vi.fn();
+    renderTimeline({ onSelectRegion });
+
+    const area = laneArea();
+    fireEvent.pointerDown(area, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(window);
+
+    expect(onSelectRegion).not.toHaveBeenCalled();
+  });
+
+  it('clears the rectangle when the drag ends', () => {
+    renderTimeline({ onSelectRegion: vi.fn() });
+    const area = laneArea();
+    fireEvent.pointerDown(area, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 60 });
+    fireEvent.pointerUp(window);
+
+    expect(document.querySelector('[data-marquee]')).toBeNull();
+  });
+});
+
+describe('what a rectangle covers', () => {
+  // The geometry, tested directly: jsdom gives every element a zero-sized box and drops the
+  // coordinates from a synthetic pointer event, so the gesture tests above can assert that a
+  // rectangle appears but not where it landed.
+  const viewport = createViewport({ framesPerPixel: 4, widthPx: 1000, frameRate: FRAME_RATES.WEB_30 });
+  const tracks = makeDocument([]).sequence.tracks;
+
+  it('converts pixels to the frames they cover', () => {
+    const region = regionFor(viewport, tracks, { left: 100, top: 0, width: 50, height: 10 });
+    expect(region.span.start).toBe(400);
+    expect(region.span.start + region.span.duration).toBe(601);
+  });
+
+  it('covers every track the rectangle crosses', () => {
+    // 84 + 60 tall: a rectangle from 0 to 100 crosses the video track and reaches into the audio.
+    const region = regionFor(viewport, tracks, { left: 0, top: 0, width: 10, height: 100 });
+    expect(region.tracks).toEqual(['v1', 'a1']);
+  });
+
+  it('covers only the track it stayed inside', () => {
+    const region = regionFor(viewport, tracks, { left: 0, top: 10, width: 10, height: 20 });
+    expect(region.tracks).toEqual(['v1']);
+  });
+
+  it('always covers at least one frame, so a thin drag still selects', () => {
+    const region = regionFor(viewport, tracks, { left: 40, top: 0, width: 0, height: 40 });
+    expect(region.span.duration).toBeGreaterThan(0);
+  });
+
+  it('never reports a frame before the start of the timeline', () => {
+    const region = regionFor(viewport, tracks, { left: -200, top: 0, width: 10, height: 40 });
+    expect(region.span.start).toBe(0);
   });
 });
 

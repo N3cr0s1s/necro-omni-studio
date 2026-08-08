@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**1843 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
+**1869 TypeScript tests + 140 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -1866,3 +1866,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   still be renamed: locking protects what is *on* a track, and the label is not on
   it — refusing would make locking a finished layer cost the ability to say what it
   holds.
+
+- 2026-08-08: Marquee selection, select-all and linked clips. Selection had been
+  one clip at a time, or several by shift-clicking each — which made every
+  multi-clip operation now in the application (copy, delete, disable) technically
+  reachable and practically not. Nobody shift-clicks eleven clips to move a scene.
+
+  The rule that matters is **intersection, not containment**. A marquee is reached
+  for precisely when there is too much on screen to click, and at that zoom the clip
+  a user wants usually runs off both edges of their rectangle; requiring it to be
+  wholly inside would make selecting a long clip impossible exactly when it matters.
+
+  The rectangle is drawn in pixels because that is what the user drags, and reported
+  as **frames and track ids** because which clips it touches is a question about the
+  document. `SelectionRegion` therefore lives in `@nos/core` rather than in the
+  editing package, so the presentational timeline can report one without depending
+  on the operations that consume it.
+
+  A drag shorter than a few pixels is a click, not a selection: reporting it would
+  clear the selection every time a user tapped the background. Adding is *union*,
+  never toggle — a second marquee over something already selected should not quietly
+  remove it.
+
+  One robustness fix came out of the tests rather than the design: the gesture began
+  with `event.button !== 0`, which rejects a synthetic pointer event that carries no
+  button at all. A missing button is not a right-click, and it is now read as
+  "primary unless stated otherwise".

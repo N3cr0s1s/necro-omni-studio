@@ -57,6 +57,19 @@ export interface TextTrack extends TrackBase {
 
 export type Track = VideoTrack | AudioTrack | TextTrack;
 
+/**
+ * A rectangle of timeline, as the document understands one.
+ *
+ * Frames and track ids rather than pixels: a marquee is drawn in pixels, but *which clips it touches*
+ * is a question about the document. Living here rather than in the editing package lets the timeline
+ * component report one without depending on the operations that consume it.
+ */
+export interface SelectionRegion {
+  readonly span: FrameSpan;
+  /** Tracks the rectangle crosses, in document order. */
+  readonly tracks: readonly TrackId[];
+}
+
 /** Clip kinds each track kind accepts. Enforced by the editing operations. */
 export const TRACK_ACCEPTS: Readonly<Record<TrackKind, readonly Clip['kind'][]>> = {
   video: ['video', 'image'],

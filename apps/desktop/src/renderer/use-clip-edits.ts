@@ -12,6 +12,7 @@ import {
   type Clipboard,
   type EditError,
   EMPTY_CLIPBOARD,
+  allClips,
   clearWorkRange,
   copyClips,
   firstFreePaste,
@@ -67,6 +68,10 @@ export interface ClipEdits {
   /** Copies the selection and pastes it immediately after itself. */
   duplicate(): void;
   readonly canPaste: boolean;
+  /** Selects everything on the timeline. */
+  selectAll(): void;
+  /** Drops the selection, which is what Escape means everywhere. */
+  clearSelection(): void;
   /** True when something is selected, so the shell can disable its buttons honestly. */
   readonly hasSelection: boolean;
 }
@@ -85,6 +90,8 @@ export interface ClipEditOptions {
   readonly onRemoved: (clips: readonly ClipId[]) => void;
   /** Selects what was just pasted, which is what a user acts on next. */
   readonly onPasted?: (clips: readonly ClipId[]) => void;
+  /** Replaces the selection outright, for select-all and for clearing it. */
+  readonly onSelect?: (clips: readonly ClipId[]) => void;
 }
 
 export function useClipEdits(options: ClipEditOptions): ClipEdits {
@@ -165,6 +172,15 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
 
         const origin = Math.min(...copied.entries.map((entry) => entry.clip.span.start));
         pasteAt(latest.current, copied, frameIndex(origin + copied.durationFrames));
+      },
+
+      selectAll() {
+        const { store, onSelect } = latest.current;
+        onSelect?.(allClips(store.getDocument()));
+      },
+
+      clearSelection() {
+        latest.current.onSelect?.([]);
       },
 
       removeRange() {
@@ -320,6 +336,9 @@ function useEditKeys(actions: EditActions): void {
           case 'd':
             current.duplicate();
             break;
+          case 'a':
+            current.selectAll();
+            break;
           default:
             return;
         }
@@ -328,6 +347,9 @@ function useEditKeys(actions: EditActions): void {
       }
 
       switch (event.key) {
+        case 'Escape':
+          current.clearSelection();
+          break;
         case 'Delete':
         case 'Backspace':
           // Shift gives the other removal without changing the mode: an editor reaches for it once,

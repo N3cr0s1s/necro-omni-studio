@@ -1,4 +1,13 @@
-import { Fragment, type CSSProperties, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   type Clip,
   type ClipId,
@@ -6,6 +15,7 @@ import {
   type FrameSpan,
   type Marker,
   type TimelineDocument,
+  type SelectionRegion,
   type Track,
   type TrackId,
   type TrackKind,
@@ -14,6 +24,7 @@ import {
   endExclusive,
   frameIndex,
   isTrackAudible,
+  spanFromBounds,
   trackClips,
 } from '@nos/core';
 import { Button, Divider, Mono, StatusDot } from '../primitives/Primitives.js';
@@ -56,6 +67,13 @@ export interface TimelineProps {
 
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
+  /**
+   * A rectangle dragged across empty timeline.
+   *
+   * Reported as a frame span and the tracks it crossed, never as pixels: which clips that touches is
+   * a question about the document, and the component has no business answering it.
+   */
+  readonly onSelectRegion?: (region: SelectionRegion, additive: boolean) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -146,6 +164,12 @@ export function Timeline(props: TimelineProps): ReactNode {
   );
 
   const anySoloed = document.sequence.tracks.some((track) => track.solo);
+  const marquee = useMarquee({
+    viewport,
+    laneAreaRef,
+    tracks: document.sequence.tracks,
+    ...(props.onSelectRegion !== undefined ? { onSelect: props.onSelectRegion } : {}),
+  });
 
   return (
     <section
@@ -193,7 +217,24 @@ export function Timeline(props: TimelineProps): ReactNode {
             {...(props.onScrub !== undefined ? { onSeek: props.onScrub } : {})}
           />
 
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }} onPointerDown={marquee.begin}>
+            {marquee.rect !== undefined && (
+              <div
+                data-marquee="true"
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: marquee.rect.left,
+                  top: marquee.rect.top,
+                  width: marquee.rect.width,
+                  height: marquee.rect.height,
+                  border: `1px solid ${token.accent}`,
+                  background: 'rgba(76, 154, 255, 0.12)',
+                  pointerEvents: 'none',
+                  zIndex: 2,
+                }}
+              />
+            )}
             {document.sequence.tracks.map((track) => (
               <Fragment key={track.id}>
                 <TrackLane
@@ -499,6 +540,133 @@ function TrackHeader({
   );
 }
 
+interface MarqueeRect {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The rubber-band selection.
+ *
+ * Starts only on the lane background: a pointer-down that lands on a clip is a move gesture, and a
+ * marquee that also began there would make every drag ambiguous. The rectangle is drawn in pixels
+ * because that is what the user is dragging, and reported in frames and tracks because that is what
+ * the document understands.
+ */
+function useMarquee(options: {
+  readonly viewport: TimelineViewport;
+  readonly laneAreaRef: React.RefObject<HTMLDivElement | null>;
+  readonly tracks: readonly Track[];
+  readonly onSelect?: (region: SelectionRegion, additive: boolean) => void;
+}): { readonly rect: MarqueeRect | undefined; begin: (event: React.PointerEvent<HTMLElement>) => void } {
+  const [rect, setRect] = useState<MarqueeRect | undefined>(undefined);
+  const origin = useRef<{ x: number; y: number; additive: boolean } | undefined>(undefined);
+
+  const latest = useRef(options);
+  latest.current = options;
+
+  const begin = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    // Only the background. A clip stops its own pointer-down from reaching here by being handled
+    // first, so this fires exactly when the user grabbed nothing.
+    if (event.target !== event.currentTarget) return;
+    // Anything but the primary button belongs to a context menu. Written as "not zero when stated"
+    // rather than "is zero", because a synthetic pointer event does not always carry one and a
+    // missing button is not a right-click.
+    if ((event.button ?? 0) !== 0) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    origin.current = {
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+      additive: event.shiftKey || event.metaKey,
+    };
+    setRect({ left: origin.current.x, top: origin.current.y, width: 0, height: 0 });
+  }, []);
+
+  useEffect(() => {
+    if (rect === undefined) return;
+
+    function onMove(event: PointerEvent): void {
+      const start = origin.current;
+      const area = latest.current.laneAreaRef.current;
+      if (start === undefined || area === null) return;
+
+      const bounds = area.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top - rulerHeightPx(area);
+      setRect({
+        left: Math.min(start.x, x),
+        top: Math.min(start.y, y),
+        width: Math.abs(x - start.x),
+        height: Math.abs(y - start.y),
+      });
+    }
+
+    function onUp(): void {
+      const start = origin.current;
+      origin.current = undefined;
+
+      setRect((current) => {
+        if (current !== undefined && start !== undefined && current.width + current.height > 3) {
+          // A rectangle smaller than a few pixels is a click, not a drag, and reporting it would
+          // clear the selection every time a user tapped the background to focus the timeline.
+          const { viewport, tracks, onSelect } = latest.current;
+          onSelect?.(regionFor(viewport, tracks, current), start.additive);
+        }
+        return undefined;
+      });
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [rect]);
+
+  return { rect, begin };
+}
+
+/** The lane area's own ruler offset, so a rectangle's top is measured from the first track. */
+function rulerHeightPx(area: HTMLElement): number {
+  const ruler = area.querySelector('[role="slider"]');
+  return ruler === null ? 0 : ruler.getBoundingClientRect().height;
+}
+
+/**
+ * Converts a pixel rectangle into the frames and tracks it covers.
+ *
+ * Exported so the geometry can be tested directly: jsdom gives every element a zero-sized box and
+ * drops the coordinates from a synthetic pointer event, so a test driving the gesture can assert
+ * that a rectangle *appears* but not where it landed. The arithmetic is the part worth pinning down.
+ */
+export function regionFor(
+  viewport: TimelineViewport,
+  tracks: readonly Track[],
+  rect: MarqueeRect,
+): SelectionRegion {
+  const from = pxToFrameFloor(viewport, rect.left);
+  const to = pxToFrameFloor(viewport, rect.left + rect.width);
+
+  const covered: TrackId[] = [];
+  let offset = 0;
+  for (const track of tracks) {
+    const top = offset;
+    offset += track.height;
+    if (top < rect.top + rect.height && offset > rect.top) covered.push(track.id);
+  }
+
+  return {
+    span: spanFromBounds(frameIndex(Math.max(0, from)), frameIndex(Math.max(1, to + 1))),
+    tracks: covered,
+  };
+}
+
 /**
  * A label that becomes a field on double-click.
  *
@@ -778,6 +946,13 @@ function TrackLane({
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
+  /**
+   * A rectangle dragged across empty timeline.
+   *
+   * Reported as a frame span and the tracks it crossed, never as pixels: which clips that touches is
+   * a question about the document, and the component has no business answering it.
+   */
+  readonly onSelectRegion?: (region: SelectionRegion, additive: boolean) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
 }): ReactNode {
