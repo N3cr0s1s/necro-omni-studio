@@ -35,6 +35,8 @@ export interface RightPanelProps {
   readonly effects: EffectRegistry;
   readonly onChangeDocument: (label: string, next: TimelineDocument) => void;
   readonly registry: GeneratorRegistry | undefined;
+  /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
+  readonly onAuthorManifest: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
   readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
   readonly libraryProblems: readonly LibraryProblem[];
@@ -161,7 +163,13 @@ function InspectorTab({
  * which is the spec's explicit rule. A tool that silently disappears turns "where is my generator" into
  * an afternoon of debugging.
  */
-function GenerateTab({ registry, libraryProblems, runtime, playhead }: RightPanelProps): ReactNode {
+function GenerateTab({
+  registry,
+  libraryProblems,
+  runtime,
+  playhead,
+  onAuthorManifest,
+}: RightPanelProps): ReactNode {
   const records = registry?.all() ?? [];
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [preset, setPreset] = useState<PresetId | undefined>(undefined);
@@ -196,6 +204,7 @@ function GenerateTab({ registry, libraryProblems, runtime, playhead }: RightPane
         {libraryProblems.map((problem) => (
           <Mono key={problem.file} tone="var(--nos-danger)">{`${problem.file}: ${problem.detail}`}</Mono>
         ))}
+        <Button onClick={onAuthorManifest}>Author a manifest</Button>
       </div>
     );
   }
@@ -225,6 +234,9 @@ function GenerateTab({ registry, libraryProblems, runtime, playhead }: RightPane
             <option value="timeline">the timeline, at the playhead</option>
           </select>
         </label>
+        <Button onClick={onAuthorManifest} title="Turn a graph in this project into a generator">
+          Author a manifest
+        </Button>
         <select
           aria-label="Generator"
           value={record?.manifest.id ?? ''}

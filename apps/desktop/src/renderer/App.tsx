@@ -28,6 +28,7 @@ import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
 import { KeyframeLanes } from './KeyframeLanes.js';
+import { ManifestAuthoring } from './ManifestAuthoring.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
@@ -299,6 +300,7 @@ export function App(): ReactNode {
 
   const exportRun = useExportRun({ document, sidecar });
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
+  const [authoring, setAuthoring] = useState(false);
 
   const openExport = useCallback(() => {
     setExportSettings({
@@ -343,6 +345,14 @@ export function App(): ReactNode {
         onSave={() => void save()}
         onExport={openExport}
       />
+
+      {authoring && (
+        <ManifestAuthoring
+          graphs={library.graphs}
+          onClose={() => setAuthoring(false)}
+          onSaved={library.reload}
+        />
+      )}
 
       {exportSettings !== undefined && (
         <ExportDialog
@@ -435,6 +445,7 @@ export function App(): ReactNode {
           canRedo={store.getSnapshot().canRedo}
           onSplit={razor}
           onNudge={nudge}
+          onAuthorManifest={() => setAuthoring(true)}
           onAcceptVariant={acceptVariant}
           onUndo={() => store.undo()}
           onRedo={() => store.redo()}
