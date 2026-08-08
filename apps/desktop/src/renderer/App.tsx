@@ -4,6 +4,7 @@ import {
   type AutosaveStatus,
   type Clip,
   type ClipId,
+  type FrameIndex,
   type FrameRate,
   type TimelineDocument,
   type TrackId,
@@ -36,6 +37,7 @@ import {
   linkClips,
   moveClip,
   nextTrackId,
+  removeMarker,
   removeTrack,
   renameTrack,
   setClipLabel,
@@ -44,6 +46,7 @@ import {
   trimClipEnd,
   trimClipStart,
   unlinkClips,
+  updateMarker,
   type TrackFlag,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
@@ -78,6 +81,7 @@ import {
   type BrowserMenuTarget,
   type MenuBinding,
   type StatusNotice,
+  type MarkerEdit,
   type TimelineMenuTarget,
   ExportDialog,
   ShortcutSheet,
@@ -550,6 +554,35 @@ export function App(): ReactNode {
         setError(undefined);
         return result.value;
       });
+    },
+    [store],
+  );
+
+  /**
+   * Naming and colouring a marker.
+   *
+   * The capability was in the document model from the start — `Marker.label` and `Marker.color`, both
+   * drawn by the ruler and both round-tripped by `project.json` — and nothing could set either. Every
+   * marker was named after its own timecode, the one fact the ruler it sits on already states.
+   */
+  const editMarker = useCallback(
+    (frame: FrameIndex, change: MarkerEdit) => {
+      store.commit('edit marker', (current) => {
+        const result = updateMarker(current, frame, change);
+        if (!result.ok) {
+          setError(describeEdit(result.error));
+          return current;
+        }
+        setError(undefined);
+        return result.value;
+      });
+    },
+    [store],
+  );
+
+  const removeMarkerAt = useCallback(
+    (frame: FrameIndex) => {
+      store.commit('remove marker', (current) => removeMarker(current, frame));
     },
     [store],
   );
@@ -1267,6 +1300,8 @@ export function App(): ReactNode {
                   onTrackSolo={(id) => toggleTrack(id, 'solo')}
                   onTrackLock={(id) => toggleTrack(id, 'locked')}
                   onTrackCollapse={(id) => toggleTrack(id, 'collapsed')}
+                  onEditMarker={editMarker}
+                  onRemoveMarker={removeMarkerAt}
                   onMarkIn={range.markIn}
                   onMarkOut={range.markOut}
                   onClearRange={range.clear}

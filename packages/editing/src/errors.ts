@@ -38,7 +38,14 @@ export type EditError =
   /** A track id already in use. Adding one anyway would replace a track and everything on it. */
   | { readonly kind: 'duplicate-track'; readonly track: TrackId }
   /** A name that is blank, which nothing could be referred to by. */
-  | { readonly kind: 'empty-name'; readonly track?: TrackId; readonly clip?: ClipId }
+  | {
+      readonly kind: 'empty-name';
+      readonly track?: TrackId;
+      readonly clip?: ClipId;
+      readonly marker?: number;
+    }
+  /** A marker asked about by a frame that carries none. */
+  | { readonly kind: 'marker-not-found'; readonly frame: number }
   /** A clip that already belongs to a linked pair. Stealing it would leave a one-sided link. */
   | { readonly kind: 'already-linked'; readonly clip: ClipId }
   /**
@@ -74,6 +81,8 @@ export function describeEditError(error: EditError): string {
       return `Track ${error.track} already exists`;
     case 'empty-name':
       return 'A name cannot be blank';
+    case 'marker-not-found':
+      return `There is no marker at frame ${error.frame}`;
     case 'no-shared-cut':
       return `${error.clips[0]} and ${error.clips[1]} do not share a cut — there is a gap between them`;
     case 'already-linked':

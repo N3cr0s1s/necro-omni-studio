@@ -102,6 +102,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Shift', 'Drag'], action: 'Roll a cut', note: 'from a shared edge' },
       { keys: ['Double-click'], action: 'Rename', note: 'a track or clip name' },
       { keys: ['Double-click'], action: 'Add a keyframe', note: 'on a parameter lane' },
+      { keys: ['Double-click'], action: 'Name or colour a marker', note: 'on a ruler flag' },
     ],
   },
 ];

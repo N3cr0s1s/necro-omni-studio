@@ -18,6 +18,7 @@ import {
 } from '@nos/core';
 import {
   addMarker,
+  updateMarker,
   clearWorkRange,
   markIn,
   markOut,
@@ -216,6 +217,78 @@ describe('markers', () => {
   it('is unchanged when removing a frame with no marker', () => {
     const document = addMarker(makeDocument(), marker(50, 'a'));
     expect(removeMarker(document, frameIndex(51))).toBe(document);
+  });
+});
+
+/**
+ * Changing a marker after it exists.
+ *
+ * Markers could carry a label and a colour from the start, the timeline drew both, the file format
+ * round-tripped both — and nothing could set either. Every marker was named after its own timecode,
+ * which is the one fact the ruler it sits on already states.
+ */
+describe('changing a marker', () => {
+  const marker = (frame: number, label: string, color?: string) => ({
+    frame: frameIndex(frame),
+    label,
+    ...(color !== undefined ? { color } : {}),
+  });
+  const withMarker = (m = marker(50, 'a')) => addMarker(makeDocument(), m);
+
+  it('renames it', () => {
+    const result = updateMarker(withMarker(), frameIndex(50), { label: 'chorus starts' });
+    expect(result.ok && result.value.sequence.markers[0]?.label).toBe('chorus starts');
+  });
+
+  it('trims the name, so a stray space cannot make two markers look alike', () => {
+    const result = updateMarker(withMarker(), frameIndex(50), { label: '  fix this shot  ' });
+    expect(result.ok && result.value.sequence.markers[0]?.label).toBe('fix this shot');
+  });
+
+  it('refuses a blank name rather than storing one', () => {
+    // A marker with no name cannot be referred to, and its tooltip would be an empty box.
+    const result = updateMarker(withMarker(), frameIndex(50), { label: '   ' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('empty-name');
+  });
+
+  it('colours it', () => {
+    const result = updateMarker(withMarker(), frameIndex(50), { color: 'var(--chart-2)' });
+    expect(result.ok && result.value.sequence.markers[0]?.color).toBe('var(--chart-2)');
+  });
+
+  it('leaves the colour alone when only the name was given', () => {
+    // Absent has to keep meaning "leave it": a rename must not clear a colour it never thought about.
+    const result = updateMarker(withMarker(marker(50, 'a', 'var(--chart-2)')), frameIndex(50), {
+      label: 'b',
+    });
+    expect(result.ok && result.value.sequence.markers[0]?.color).toBe('var(--chart-2)');
+  });
+
+  it('removes the colour field rather than storing a null', () => {
+    // `project.json` reads a `"color": null` back as a value rather than as an absence.
+    const result = updateMarker(withMarker(marker(50, 'a', 'var(--chart-2)')), frameIndex(50), {
+      color: null,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const updated = result.value.sequence.markers[0];
+      expect(updated?.color).toBeUndefined();
+      expect(updated !== undefined && 'color' in updated).toBe(false);
+    }
+  });
+
+  it('keeps them in frame order', () => {
+    let document = addMarker(makeDocument(), marker(200, 'b'));
+    document = addMarker(document, marker(50, 'a'));
+    const result = updateMarker(document, frameIndex(200), { label: 'renamed' });
+    expect(result.ok && result.value.sequence.markers.map((m) => m.frame)).toEqual([50, 200]);
+  });
+
+  it('refuses a frame that carries no marker', () => {
+    const result = updateMarker(withMarker(), frameIndex(51), { label: 'b' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('marker-not-found');
   });
 });
 

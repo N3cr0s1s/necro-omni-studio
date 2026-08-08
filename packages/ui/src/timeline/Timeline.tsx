@@ -36,6 +36,8 @@ import {
   VolumeXIcon,
 } from 'lucide-react';
 import { Button } from '@nos/ui/components/ui/button';
+import { Input } from '@nos/ui/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@nos/ui/components/ui/popover';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { cn } from '@nos/ui/lib/utils';
@@ -177,12 +179,32 @@ export interface TimelineProps {
   readonly lanes?: ReactNode;
   readonly onToggleExpandClip?: (clip: ClipId) => void;
 
+  /**
+   * Naming, colouring and removing a marker.
+   *
+   * Absent leaves a marker as a place to click and nothing more, which is what it was: the label and
+   * the colour were drawn from the first commit and could not be set.
+   */
+  readonly onEditMarker?: (frame: FrameIndex, change: MarkerEdit) => void;
+  readonly onRemoveMarker?: (frame: FrameIndex) => void;
+
   /** In/out marks. Absent handlers hide the controls rather than showing dead ones. */
   readonly onMarkIn?: () => void;
   readonly onMarkOut?: () => void;
   readonly onClearRange?: () => void;
   /** Removes the marked range from every unlocked track. Offered only while a range exists. */
   readonly onRemoveRange?: () => void;
+}
+
+/**
+ * What a marker's popover can change.
+ *
+ * `null` clears the colour rather than omitting it, because omitting has to keep meaning "leave this
+ * alone" — a rename must not clear a colour it never thought about.
+ */
+export interface MarkerEdit {
+  readonly label?: string;
+  readonly color?: string | null;
 }
 
 /** The empty area below the last track: a right-click there is about no clip and no lane. */
@@ -290,6 +312,8 @@ export function Timeline(props: TimelineProps): ReactNode {
               ticks={ticks}
               viewport={viewport}
               markers={document.sequence.markers}
+              {...(props.onEditMarker !== undefined ? { onEditMarker: props.onEditMarker } : {})}
+              {...(props.onRemoveMarker !== undefined ? { onRemoveMarker: props.onRemoveMarker } : {})}
               {...(document.sequence.workRange !== undefined
                 ? { workRange: document.sequence.workRange }
                 : {})}
@@ -1019,6 +1043,8 @@ function TimelineRuler({
   ticks,
   viewport,
   markers,
+  onEditMarker,
+  onRemoveMarker,
   workRange,
   onPointerDown,
   onSeek,
@@ -1026,6 +1052,8 @@ function TimelineRuler({
   readonly ticks: readonly RulerTick[];
   readonly viewport: TimelineViewport;
   readonly markers: readonly Marker[];
+  readonly onEditMarker?: (frame: FrameIndex, change: MarkerEdit) => void;
+  readonly onRemoveMarker?: (frame: FrameIndex) => void;
   readonly workRange?: FrameSpan;
   readonly onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSeek?: (frame: FrameIndex) => void;
@@ -1074,30 +1102,170 @@ function TimelineRuler({
           with. They seek rather than select: a marker is a place, and the only thing to do with a
           place is go to it. */}
       {markers.map((marker) => (
-        <button
+        <MarkerFlag
           key={marker.frame}
-          type="button"
-          data-marker-frame={marker.frame}
-          title={marker.label}
-          aria-label={`Marker ${marker.label} at frame ${marker.frame}`}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => onSeek?.(marker.frame)}
-          // The colour is the marker's own — a user who set one chose it deliberately, and overriding
-          // it with a theme role would throw away the only thing that tells two markers apart. Absent,
-          // it falls back to a role.
-          className={cn(
-            'absolute bottom-0 h-2.5 w-2 cursor-pointer rounded-t-sm',
-            marker.color === undefined && 'bg-chart-3',
-          )}
-          style={{
-            left: frameToPx(viewport, marker.frame) - 3,
-            ...(marker.color !== undefined ? { background: marker.color } : {}),
-          }}
+          marker={marker}
+          leftPx={frameToPx(viewport, marker.frame) - 3}
+          {...(onSeek !== undefined ? { onSeek } : {})}
+          {...(onEditMarker !== undefined ? { onEdit: onEditMarker } : {})}
+          {...(onRemoveMarker !== undefined ? { onRemove: onRemoveMarker } : {})}
         />
       ))}
     </div>
   );
 }
+
+/**
+ * A marker on the ruler, and everything that can be done to it.
+ *
+ * A click seeks, which is the thing a marker is for: it names a place, and the point of a place is to
+ * go to it. Everything else is behind a double-click, because the flag is eight pixels wide and a
+ * single click has to stay the cheap action.
+ *
+ * The popover exists because a marker could carry a label and a colour from the first commit, the
+ * ruler drew both, the file format round-tripped both — and nothing could set either. Every marker was
+ * named after its own timecode, which is the one fact the ruler it sits on already states, so the name
+ * carried nothing. A marker is for "chorus starts here"; one that cannot say so is a tick.
+ */
+function MarkerFlag({
+  marker,
+  leftPx,
+  onSeek,
+  onEdit,
+  onRemove,
+}: {
+  readonly marker: Marker;
+  readonly leftPx: number;
+  readonly onSeek?: (frame: FrameIndex) => void;
+  readonly onEdit?: (frame: FrameIndex, change: MarkerEdit) => void;
+  readonly onRemove?: (frame: FrameIndex) => void;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(marker.label);
+  const editable = onEdit !== undefined || onRemove !== undefined;
+
+  const commit = (): void => {
+    // Blank is left to the document to refuse, which is where the rule lives; the field simply stops
+    // asking. Sending it anyway would report an error for a field the user is still filling in.
+    if (draft.trim() !== '' && draft !== marker.label) onEdit?.(marker.frame, { label: draft });
+  };
+
+  const flag = (
+    <button
+      type="button"
+      data-marker-frame={marker.frame}
+      title={editable ? `${marker.label} — double-click to edit` : marker.label}
+      aria-label={`Marker ${marker.label} at frame ${marker.frame}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={() => onSeek?.(marker.frame)}
+      onDoubleClick={() => {
+        if (!editable) return;
+        setDraft(marker.label);
+        setOpen(true);
+      }}
+      // The colour is the marker's own — a user who set one chose it deliberately, and overriding it
+      // with a theme role would throw away the only thing that tells two markers apart. Absent, it
+      // falls back to a role.
+      className={cn(
+        'absolute bottom-0 h-2.5 w-2 cursor-pointer rounded-t-sm',
+        marker.color === undefined && 'bg-chart-3',
+      )}
+      style={{
+        left: leftPx,
+        ...(marker.color !== undefined ? { background: marker.color } : {}),
+      }}
+    />
+  );
+
+  if (!editable) return flag;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={flag} />
+      <PopoverContent align="start" className="w-60 p-2">
+        <div className="flex flex-col gap-2">
+          <Input
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                commit();
+                setOpen(false);
+              } else if (event.key === 'Escape') {
+                setDraft(marker.label);
+                setOpen(false);
+              } else {
+                return;
+              }
+              event.preventDefault();
+            }}
+            aria-label={`Rename ${marker.label}`}
+            className="h-7 text-xs"
+          />
+
+          <div className="flex items-center gap-1">
+            {/* The theme's own categorical roles, stored as the variable rather than the resolved
+                colour, so a marker keeps following the palette and dark mode after it is set. */}
+            {MARKER_COLORS.map((color) => (
+              <button
+                key={color ?? 'default'}
+                type="button"
+                aria-label={color === null ? 'Default colour' : `Colour ${color}`}
+                aria-pressed={(marker.color ?? null) === color}
+                onClick={() => onEdit?.(marker.frame, { color })}
+                className={cn(
+                  'size-4 rounded-full border',
+                  (marker.color ?? null) === color ? 'border-ring ring-2 ring-ring/40' : 'border-border',
+                  color === null && 'bg-chart-3',
+                )}
+                style={color === null ? undefined : { background: color }}
+              />
+            ))}
+
+            {onRemove !== undefined && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => {
+                  setOpen(false);
+                  onRemove(marker.frame);
+                }}
+                aria-label={`Remove ${marker.label}`}
+                title="Remove this marker"
+                className="ml-auto text-destructive"
+              >
+                <Trash2Icon />
+              </Button>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * What a marker may be coloured.
+ *
+ * The theme's categorical roles and nothing else, stored as `var(--chart-n)` rather than as the colour
+ * it currently resolves to. A marker set to a literal would keep that literal through a palette change
+ * and through dark mode, which is exactly what the roles exist to prevent.
+ *
+ * Worth being honest about what that buys under the preset in use: its `chart` roles are one hue at
+ * five lightnesses, so these read as a light-to-dark ramp rather than as five distinct colours. They
+ * still tell markers apart, they follow the palette, and a preset with genuinely categorical charts
+ * would make them so without a change here — which is the trade the roles were chosen for. `chart-3`
+ * is left out because it is what an uncoloured marker already draws in.
+ */
+const MARKER_COLORS: readonly (string | null)[] = [
+  null,
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+];
 
 /** Whether a track holds a clip, which decides where the opened clip's lanes are drawn. */
 function holdsClip(track: Track, clip: ClipId | undefined): boolean {

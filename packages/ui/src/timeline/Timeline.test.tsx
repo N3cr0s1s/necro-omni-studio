@@ -1114,3 +1114,105 @@ describe('collapsing a track', () => {
     expect(screen.getByRole('separator', { name: 'Resize A1' })).toBeTruthy();
   });
 });
+
+/**
+ * Naming a marker.
+ *
+ * `Marker.label` and `Marker.color` were in the document model from the first commit, the ruler drew
+ * both and `project.json` round-tripped both — and nothing could set either. Every marker was named
+ * after its own timecode, which is the one fact the ruler it sits on already states.
+ */
+describe('markers', () => {
+  const withMarkers = (): TimelineDocument => {
+    const base = makeDocument([video('a', 0, 300)]);
+    return {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        markers: [{ frame: frameIndex(120), label: 'chorus' }],
+      },
+    };
+  };
+
+  const flag = () => screen.getByRole('button', { name: /^Marker chorus/ });
+
+  it('seeks on a single click, because that is what a place is for', async () => {
+    const onScrub = vi.fn();
+    renderTimeline({ document: withMarkers(), onScrub });
+    flag().click();
+    expect(onScrub).toHaveBeenCalledWith(120);
+  });
+
+  it('stays a plain flag when nothing can edit it', async () => {
+    const user = userEvent.setup();
+    renderTimeline({ document: withMarkers() });
+    await user.dblClick(flag());
+    expect(screen.queryByRole('textbox', { name: /^Rename/ })).toBeNull();
+  });
+
+  it('opens on a double-click, since the flag is eight pixels wide', async () => {
+    // A single click has to stay the cheap action.
+    const user = userEvent.setup();
+    renderTimeline({ document: withMarkers(), onEditMarker: vi.fn() });
+    await user.dblClick(flag());
+    expect(screen.getByRole('textbox', { name: 'Rename chorus' })).toBeTruthy();
+  });
+
+  it('renames on Enter', async () => {
+    const user = userEvent.setup();
+    const onEditMarker = vi.fn();
+    renderTimeline({ document: withMarkers(), onEditMarker });
+
+    await user.dblClick(flag());
+    const field = screen.getByRole('textbox', { name: 'Rename chorus' });
+    await user.clear(field);
+    await user.type(field, 'fix this shot{Enter}');
+
+    expect(onEditMarker).toHaveBeenCalledWith(120, { label: 'fix this shot' });
+  });
+
+  it('abandons the edit on Escape', async () => {
+    const user = userEvent.setup();
+    const onEditMarker = vi.fn();
+    renderTimeline({ document: withMarkers(), onEditMarker });
+
+    await user.dblClick(flag());
+    await user.type(screen.getByRole('textbox', { name: 'Rename chorus' }), 'oops{Escape}');
+
+    expect(onEditMarker).not.toHaveBeenCalled();
+  });
+
+  it('colours it with a theme role rather than a literal', async () => {
+    // Stored as the variable, so a marker keeps following the palette and dark mode after it is set.
+    const user = userEvent.setup();
+    const onEditMarker = vi.fn();
+    renderTimeline({ document: withMarkers(), onEditMarker });
+
+    await user.dblClick(flag());
+    await user.click(screen.getByRole('button', { name: 'Colour var(--chart-2)' }));
+
+    expect(onEditMarker).toHaveBeenCalledWith(120, { color: 'var(--chart-2)' });
+  });
+
+  it('clears the colour back to the default', async () => {
+    const user = userEvent.setup();
+    const onEditMarker = vi.fn();
+    renderTimeline({ document: withMarkers(), onEditMarker });
+
+    await user.dblClick(flag());
+    await user.click(screen.getByRole('button', { name: 'Default colour' }));
+
+    expect(onEditMarker).toHaveBeenCalledWith(120, { color: null });
+  });
+
+  it('removes it', async () => {
+    const user = userEvent.setup();
+    const onRemoveMarker = vi.fn();
+    renderTimeline({ document: withMarkers(), onEditMarker: vi.fn(), onRemoveMarker });
+
+    await user.dblClick(flag());
+    await user.click(screen.getByRole('button', { name: 'Remove chorus' }));
+
+    expect(onRemoveMarker).toHaveBeenCalledWith(120);
+  });
+});

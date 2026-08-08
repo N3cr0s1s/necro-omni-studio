@@ -6,6 +6,7 @@ import {
   type TimelineDocument,
   documentEnd,
   endExclusive,
+  err,
   frameIndex,
   ok,
   spanFromBounds,
@@ -99,6 +100,49 @@ export function clearWorkRange(document: TimelineDocument): TimelineDocument {
 export function addMarker(document: TimelineDocument, marker: Marker): TimelineDocument {
   const others = document.sequence.markers.filter((existing) => existing.frame !== marker.frame);
   return withMarkers(document, sortByFrame([...others, marker]));
+}
+
+/** What may be changed about a marker after it exists. */
+export interface MarkerChange {
+  readonly label?: string;
+  /**
+   * A CSS colour, or `null` to go back to the default.
+   *
+   * `null` rather than absent, because absent has to keep meaning "leave it alone" — a caller renaming
+   * a marker must not clear the colour it was given by omitting a field it never thought about.
+   */
+  readonly color?: string | null;
+}
+
+/**
+ * Changes a marker in place.
+ *
+ * Markers arrived able to carry a **label** and a **colour**, the timeline drew both, the file format
+ * round-tripped both — and nothing could set either. Every marker was labelled with its own timecode,
+ * which is the one fact the ruler it sits on already states, so the label carried no information at
+ * all. A marker is for "chorus starts here" or "fix this shot"; a marker that cannot say so is a tick.
+ *
+ * A blank label is refused rather than stored, for the same reason a clip's is: a marker with no name
+ * cannot be referred to, and the tooltip would be an empty box.
+ */
+export function updateMarker(
+  document: TimelineDocument,
+  at: FrameIndex,
+  change: MarkerChange,
+): Result<TimelineDocument, EditError> {
+  const existing = document.sequence.markers.find((marker) => marker.frame === at);
+  if (existing === undefined) return err({ kind: 'marker-not-found', frame: at });
+
+  const label = change.label === undefined ? existing.label : change.label.trim();
+  if (label === '') return err({ kind: 'empty-name', marker: at });
+
+  // Rebuilt rather than spread, so clearing the colour actually removes the field: `project.json`
+  // reads a `"color": null` back as a value rather than as an absence.
+  const color = change.color === undefined ? existing.color : (change.color ?? undefined);
+  const updated: Marker = { frame: existing.frame, label, ...(color !== undefined ? { color } : {}) };
+
+  const others = document.sequence.markers.filter((marker) => marker.frame !== at);
+  return ok(withMarkers(document, sortByFrame([...others, updated])));
 }
 
 export function removeMarker(document: TimelineDocument, at: FrameIndex): TimelineDocument {
