@@ -1,4 +1,13 @@
-import { type KeyboardEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -138,6 +147,30 @@ export function MediaBrowser({
   // roving-focus keyboard navigation, and it is also what a virtualized list would consume if the
   // project grows past what the DOM handles comfortably.
   const [query, setQuery] = useState('');
+  const filterRef = useRef<HTMLInputElement | null>(null);
+
+  /*
+   * `Ctrl+F` puts the caret in the filter, which is where every application that has one puts it.
+   *
+   * Owned here rather than by the shell because the control is here — a shortcut routed through a
+   * prop would need the shell to hold a ref into this component to do anything with it.
+   *
+   * Deliberately not guarded against text fields: a user who is already typing in the filter and
+   * reaches for `Ctrl+F` wants the box they are in, and selecting what is there is the useful answer.
+   */
+  useEffect(() => {
+    // `globalThis.KeyboardEvent`, because React's own `KeyboardEvent` type is imported above and
+    // shadows the DOM one that `window` actually hands out.
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key.toLowerCase() !== 'f' || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+      filterRef.current?.focus();
+      filterRef.current?.select();
+      event.preventDefault();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const [kind, setKind] = useState<AssetType | undefined>(undefined);
 
   const filter: TreeFilter = { query, ...(kind !== undefined ? { assetType: kind } : {}) };
@@ -171,6 +204,7 @@ export function MediaBrowser({
       <Separator />
 
       <BrowserFilter
+        inputRef={filterRef}
         query={query}
         onQuery={setQuery}
         kind={kind}
@@ -284,6 +318,7 @@ interface Row {
  * filter and the thing filtered are recognisably about the same material.
  */
 function BrowserFilter({
+  inputRef,
   query,
   onQuery,
   kind,
@@ -291,6 +326,7 @@ function BrowserFilter({
   showing,
   total,
 }: {
+  readonly inputRef: RefObject<HTMLInputElement | null>;
   readonly query: string;
   readonly onQuery: (value: string) => void;
   readonly kind: AssetType | undefined;
@@ -304,6 +340,7 @@ function BrowserFilter({
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
+          ref={inputRef}
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           // `Escape` clears rather than blurring: the box is a filter, and leaving a stale one applied

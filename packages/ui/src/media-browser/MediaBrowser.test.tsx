@@ -392,3 +392,24 @@ describe('filtering', () => {
     expect(screen.getByRole('button', { name: 'Only video' })).toBeTruthy();
   });
 });
+
+describe('reaching the filter', () => {
+  it('takes the caret on Ctrl+F', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.keyboard('{Control>}f{/Control}');
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Filter the project folder'));
+  });
+
+  it('selects what is already there, so a second search replaces the first', async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    const box = screen.getByLabelText('Filter the project folder') as HTMLInputElement;
+    await user.type(box, 'seed4471');
+    await user.keyboard('{Control>}f{/Control}');
+
+    expect(box.selectionStart).toBe(0);
+    expect(box.selectionEnd).toBe('seed4471'.length);
+  });
+});
