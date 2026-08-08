@@ -1,0 +1,86 @@
+{
+  "id": "krea2_img2img",
+  "name": "Krea 2 Turbo — image to image",
+  "backend": "comfyui",
+  "graph": "Krea_img_to_img.json",
+
+  "produces": "image",
+  "consumes": [{ "type": "image", "role": "source", "required": true }],
+  "surfaces": ["frame_context_menu", "media_browser", "clip_context_menu"],
+
+  "duration": "declared",
+  "default_variants": 1,
+
+  "requires": [
+    "KSampler",
+    "UNETLoader",
+    "VAEEncode",
+    "LoraLoaderModelOnly",
+    "ComfySwitchNode",
+    "TextGenerate",
+    "RemoveBackground",
+    "SaveImage"
+  ],
+
+  "outputs": [
+    { "key": "image", "type": "image", "node": "29" },
+    { "key": "cutout", "type": "image", "node": "56", "optional": true }
+  ],
+
+  "params": [
+    { "key": "source_image", "label": "Source image", "type": "image", "required": true,
+      "bind": "/62/inputs/image", "transport": "upload_image" },
+
+    { "key": "prompt", "label": "Prompt", "type": "text", "multiline": true,
+      "default": "convert input image to dark theme, background is black",
+      "bind": "/30:19/inputs/value" },
+
+    { "key": "denoise", "label": "Strength", "type": "float",
+      "min": 0, "max": 1, "step": 0.05, "default": 0.6,
+      "bind": "/30:3/inputs/denoise" },
+
+    { "key": "seed", "type": "seed", "bind": "/30:3/inputs/seed" },
+
+    { "key": "steps", "type": "int", "min": 1, "max": 40, "default": 8,
+      "bind": "/30:3/inputs/steps" },
+
+    { "key": "cfg", "label": "CFG", "type": "float", "min": 1, "max": 10, "step": 0.5, "default": 1,
+      "bind": "/30:3/inputs/cfg" },
+
+    { "key": "sampler_name", "label": "Sampler", "type": "enum", "default": "euler",
+      "bind": "/30:3/inputs/sampler_name",
+      "options": { "from": "capabilities", "node_class": "KSampler", "input": "sampler_name" } },
+
+    { "key": "scheduler", "label": "Scheduler", "type": "enum", "default": "simple",
+      "bind": "/30:3/inputs/scheduler",
+      "options": { "from": "capabilities", "node_class": "KSampler", "input": "scheduler" } },
+
+    { "key": "expand_prompt", "label": "Expand the prompt with an LLM", "type": "bool",
+      "default": false, "bind": "/30:24/inputs/value" },
+
+    { "key": "use_lora", "label": "Apply the style LoRA", "type": "bool",
+      "default": false, "bind": "/30:23/inputs/value" },
+
+    { "key": "lora_name", "label": "LoRA", "type": "enum",
+      "default": "krea2_darkbrush.safetensors",
+      "bind": "/30:15/inputs/lora_name",
+      "options": { "from": "capabilities", "node_class": "LoraLoaderModelOnly", "input": "lora_name" } },
+
+    { "key": "lora_strength", "label": "LoRA strength", "type": "float",
+      "min": 0, "max": 2, "step": 0.05, "default": 0.8,
+      "bind": "/30:15/inputs/strength_model" },
+
+    { "key": "lora_trigger", "label": "LoRA trigger words", "type": "text", "default": "",
+      "bind": "/30:27/inputs/string_b" },
+
+    { "key": "remove_background", "label": "Also produce a cut-out", "type": "bool",
+      "default": false, "bind": "/57/inputs/value" }
+  ],
+
+  "presets": [
+    { "id": "dark_theme", "name": "Dark theme",
+      "pin": { "prompt": "convert input image to dark theme, background is black", "denoise": 0.6 } },
+    { "id": "cutout", "name": "Cut-out",
+      "pin": { "remove_background": true, "denoise": 0.2 } }
+  ]
+}

@@ -1,0 +1,245 @@
+{
+  "92": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "105:91",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "115": {
+    "inputs": {
+      "aspect_ratio": "16:9 (Widescreen)",
+      "megapixels": 0.4,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector"
+    }
+  },
+  "105:11": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "105:24": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "105:23": {
+    "inputs": {
+      "samples": [
+        "105:14",
+        0
+      ],
+      "vae": [
+        "105:24",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE Decode Audio"
+    }
+  },
+  "105:10": {
+    "inputs": {
+      "samples": [
+        "105:14",
+        0
+      ],
+      "vae": [
+        "105:11",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "105:17": {
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "105:9": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1,
+      "model": [
+        "105:6",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "105:14": {
+    "inputs": {
+      "noise": [
+        "105:15",
+        0
+      ],
+      "guider": [
+        "105:16",
+        0
+      ],
+      "sampler": [
+        "105:17",
+        0
+      ],
+      "sigmas": [
+        "105:9",
+        0
+      ],
+      "latent_image": [
+        "105:104",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "105:16": {
+    "inputs": {
+      "model": [
+        "105:6",
+        0
+      ],
+      "conditioning": [
+        "105:104",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Basic Guider"
+    }
+  },
+  "105:6": {
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "105:13": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "105:15": {
+    "inputs": {
+      "noise_seed": 1120497717643641
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "105:91": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "images": [
+        "105:10",
+        0
+      ],
+      "audio": [
+        "105:23",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "105:104": {
+    "inputs": {
+      "prompt": "integrated_multimodal_description: [Shot 1] Cinematic premium SaaS advertisement, inspired by neo-brutalist web design and modern enterprise software branding. A dark minimalist environment with deep black backgrounds, charcoal gray surfaces, warm off-white elements, and strong orange-red accent lighting. The scene opens with brutalist concrete architecture: massive geometric buildings, raw concrete textures, sharp edges, and architectural photography style. The camera slowly moves through the building with a clean editorial feeling. Inside the structure, abstract representations of business processes appear as elegant modular blocks, similar to a premium ERP interface: finance, inventory, projects, customers, and reporting are represented through simple geometric forms, not readable text. The visual language is minimal, structured, and precise.\n\n[Shot 2] At 00:04.000, the camera transitions into a dark modern office space built from concrete, glass, and black metal. Floating architectural panels organize themselves into a clean ERP ecosystem. White and gray information blocks align perfectly while small orange-red highlights connect different areas. The feeling is not futuristic or technological, but intelligent and efficient, showing a company becoming organized. A soft female voice with a calm, premium advertising tone (S1) says in an off-screen voiceover: <d>[Hungarian] Minden a tiéd. Minden. Egyhelyen.</d> while her lips remain completely closed.\n\n[Shot 3] At 00:08.000, the camera moves through a series of brutalist-inspired spaces representing different company departments. Minimal abstract scenes show inventory management, customer relationships, financial planning, and project tracking working together. The color palette remains consistent: black, dark gray, concrete gray, warm white, and vivid orange-red accents. The camera tracks smoothly with small amplitude at slow speed, emphasizing order, precision, and control.\n\n[Shot 4] At 00:12.000, the camera pulls back to reveal a monumental brutalist building at night. The architecture is illuminated with subtle orange-red light accents, while the interior glows softly, symbolizing a company operating as one connected system. The final composition resembles a high-end technology brand campaign: minimal, confident, elegant, and professional. No logo, no text, no futuristic holograms, no cyberpunk elements.\n\noverall_soundscape: Quiet premium office ambience with subtle room tone, distant footsteps, soft mechanical movements, and gentle architectural echoes. The sound design feels clean, modern, and controlled.\n\nnon_diegetic_music: Minimal electronic ambient music with deep soft bass, subtle synth textures, and sparse rhythmic elements. The music builds slowly with a premium corporate atmosphere and a restrained cinematic finish.",
+      "width": [
+        "115",
+        0
+      ],
+      "height": [
+        "115",
+        1
+      ],
+      "length": [
+        "105:107",
+        1
+      ],
+      "clip": [
+        "105:13",
+        0
+      ],
+      "vae": [
+        "105:11",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ImageToVideo",
+    "_meta": {
+      "title": "MiniMax H3 Image to Video"
+    }
+  },
+  "105:107": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "105:111",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "105:111": {
+    "inputs": {
+      "value": 15
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (duration)"
+    }
+  }
+}

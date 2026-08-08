@@ -1,0 +1,50 @@
+{
+  "id": "minimax_h3_t2v",
+  "name": "MiniMax H3 — text to video",
+  "backend": "comfyui",
+  "graph": "video_minimax_h3_t2v.json",
+
+  "produces": "video",
+  "consumes": [],
+  "surfaces": ["media_browser", "video_track_empty"],
+
+  "duration": "declared",
+  "duration_from": { "param": "duration_s", "unit": "seconds" },
+  "default_variants": 1,
+
+  "requires": ["MiniMaxH3ImageToVideo", "ResolutionSelector", "CreateVideo", "SaveVideo", "ComfyMathExpression"],
+
+  "outputs": [{ "key": "video", "type": "video", "node": "92" }],
+
+  "params": [
+    { "key": "prompt", "label": "Prompt", "type": "text", "multiline": true,
+      "bind": "/105:104/inputs/prompt" },
+
+    { "key": "duration_s", "label": "Length (s)", "type": "float",
+      "min": 0.5, "max": 30, "step": 0.5, "default": 15,
+      "bind": "/105:111/inputs/value" },
+
+    { "key": "aspect_ratio", "label": "Aspect ratio", "type": "enum",
+      "default": "16:9 (Widescreen)",
+      "bind": "/115/inputs/aspect_ratio",
+      "options": { "from": "capabilities", "node_class": "ResolutionSelector", "input": "aspect_ratio" } },
+
+    { "key": "megapixels", "label": "Megapixels", "type": "float",
+      "min": 0.1, "max": 2, "step": 0.1, "default": 0.4,
+      "bind": "/115/inputs/megapixels" },
+
+    { "key": "seed", "type": "seed", "bind": "/105:15/inputs/noise_seed" },
+
+    { "key": "steps", "type": "int", "min": 1, "max": 60, "default": 20,
+      "bind": "/105:9/inputs/steps" },
+
+    { "key": "fps", "label": "Frame rate", "type": "int", "min": 8, "max": 60, "default": 24,
+      "bind": "/105:91/inputs/fps",
+      "also": [
+        { "pointer": "/105:107/inputs/expression",
+          "template": "max(5, round(a * {fps})) + (5 - (max(5, round(a * {fps})) % 17)) % 17" }
+      ] }
+  ],
+
+  "presets": []
+}

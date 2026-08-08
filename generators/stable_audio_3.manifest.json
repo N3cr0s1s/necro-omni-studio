@@ -1,0 +1,59 @@
+{
+  "id": "stable_audio_3",
+  "name": "Stable Audio 3",
+  "backend": "comfyui",
+  "graph": "audio_stable_audio_3_medium_base.json",
+
+  "produces": "audio",
+  "consumes": [],
+  "surfaces": ["media_browser", "audio_track_empty"],
+
+  "duration": "declared",
+  "duration_from": { "param": "duration_s", "unit": "seconds" },
+  "default_variants": 3,
+  "batch": { "bind": "/52:11/inputs/batch_size", "max": 4 },
+
+  "requires": [
+    "CheckpointLoaderSimple",
+    "EmptyLatentAudio",
+    "CustomCombo",
+    "JsonExtractString",
+    "TextGenerate",
+    "ComfySwitchNode",
+    "SaveAudioAdvanced"
+  ],
+
+  "outputs": [{ "key": "audio", "type": "audio", "node": "57" }],
+
+  "params": [
+    { "key": "description", "label": "Description", "type": "text", "multiline": true,
+      "bind": "/52:31/inputs/value" },
+
+    { "key": "category", "label": "Category", "type": "enum",
+      "options": ["Music", "Instrument", "SFX", "One-shot"], "default": "Music",
+      "bind": "/52:43/inputs/choice" },
+
+    { "key": "duration_s", "label": "Length (s)", "type": "float",
+      "min": 1, "max": 190, "step": 1, "default": 50,
+      "bind": "/52:36/inputs/value" },
+
+    { "key": "enhance_prompt", "label": "Expand the prompt with an LLM", "type": "bool",
+      "default": false, "bind": "/52:35/inputs/value" },
+
+    { "key": "negative", "label": "Negative prompt", "type": "text", "default": "",
+      "bind": "/52:7/inputs/text" },
+
+    { "key": "seed", "type": "seed", "bind": "/52:3/inputs/seed" },
+    { "key": "steps", "type": "int", "min": 1, "max": 100, "default": 50,
+      "bind": "/52:3/inputs/steps" },
+    { "key": "cfg", "type": "float", "min": 1, "max": 15, "step": 0.5, "default": 7,
+      "bind": "/52:3/inputs/cfg" }
+  ],
+
+  "presets": [
+    { "id": "music",        "name": "Music",        "pin": { "category": "Music" } },
+    { "id": "instrumental", "name": "Instrumental", "pin": { "category": "Instrument" } },
+    { "id": "sfx",          "name": "SFX",          "pin": { "category": "SFX", "duration_s": 5 } },
+    { "id": "oneshot",      "name": "One-shot",     "pin": { "category": "One-shot", "duration_s": 2 } }
+  ]
+}

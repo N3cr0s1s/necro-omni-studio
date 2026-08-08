@@ -7,6 +7,7 @@
 export * from './contracts/index.js';
 export * from './manifest/graph-pointer.js';
 export * from './manifest/manifest-draft.js';
+export * from './manifest/manifest-file.js';
 export * from './registry/generator-registry.js';
 export * from './queue/variant-plan.js';
 export * from './queue/gpu-semaphore.js';
