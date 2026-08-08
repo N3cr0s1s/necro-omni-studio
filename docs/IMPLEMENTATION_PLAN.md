@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2106 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2139 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2259,3 +2259,35 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   The browser rows also grew — 13 px type, roomier rows — on the report that it
   was too small to read. It is the panel scanned most often and it was the
   densest thing in the window.
+
+- 2026-08-08: Image-to-video proven end to end, and timecode entry.
+
+  The one thing left unverified after #17 was whether a generator with a file
+  input had *ever* completed — the upload was broken in three places, so it
+  cannot have. Run against the live ComfyUI: the frame was grabbed into
+  `media/stills/`, uploaded, and the queued prompt's node 114 read
+  `image: withsound_000000.png` — the name the backend stored it under, not the
+  project path and not the placeholder. The job succeeded, the video was
+  downloaded into `generated/`, and a provenance record was written beside it
+  carrying the prompt, the seed and the first frame. The whole chain works.
+
+  Then the sweep for tested-but-unreachable code turned up `parseTimecode` and
+  `timecodeToFrames` with no callers: the transport's timecode was a `<span>`.
+  The position was shown and there was no way to go to one, while "go to
+  00:01:14:03" is what a note from someone else always says.
+
+  `parseSeekEntry` decides what typed text means, and the point of it is that
+  nobody types SMPTE. Partial entry fills digits from the right (`1215` is twelve
+  seconds and fifteen frames), `+30` moves thirty frames, `250f` is frames, `.`
+  and space work as separators because a keypad has no colon, and drop-frame is
+  exact — including explaining a skipped label rather than looking broken. An
+  entry past the end lands on the last frame, since typing past the end is how
+  someone asks to go *to* the end.
+
+  One correction along the way: my own test asserted frame 1798 for
+  `00:01:00;02` at 29.97. The library was right and I was wrong — drop-frame
+  skips *labels*, not frames, so that label belongs to frame 1800.
+
+  Harness note: another session's Electron was running against the same project.
+  `pkill -x electron` would have taken it down; instances are now killed by the
+  debugging port they were started with.

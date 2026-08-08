@@ -13,7 +13,7 @@ import {
   createDocumentStore,
   clipId,
   documentEnd,
-  formatFrames,
+  documentDuration,
   frameIndex,
   jobRunId,
   loadDocument,
@@ -43,7 +43,15 @@ import {
   trimClipStart,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
-import { Button, ContextMenu, ExportDialog, LevelMeter, MediaBrowser, Timeline } from '@nos/ui';
+import {
+  Button,
+  ContextMenu,
+  ExportDialog,
+  LevelMeter,
+  MediaBrowser,
+  TimecodeField,
+  Timeline,
+} from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
@@ -868,6 +876,7 @@ export function App(): ReactNode {
           <Transport
             transport={transport}
             frameRate={document.frameRate}
+            duration={documentDuration(document)}
             meters={audio.meters}
             onClearClip={audio.clearClip}
           />
@@ -1210,11 +1219,14 @@ function TitleBar({
 function Transport({
   transport,
   frameRate,
+  duration,
   meters,
   onClearClip,
 }: {
   readonly transport: Transport;
   readonly frameRate: FrameRate;
+  /** Sequence length, so an entry past the end lands on the last frame rather than being refused. */
+  readonly duration: number;
   readonly meters: MeterReading | undefined;
   readonly onClearClip: () => void;
 }): ReactNode {
@@ -1247,11 +1259,14 @@ function Transport({
         ▶
       </Button>
 
-      <span style={{ font: 'var(--nos-text-readout)', color: 'var(--nos-text-primary)' }}>
-        {/* The core formatter, not a local one: it handles drop-frame, which is exactly the rule that
-            is wrong in every hand-rolled timecode. */}
-        {formatFrames(transport.frame, frameRate)}
-      </span>
+      {/* Typed into as well as read. The position was shown and there was no way to go to one, and
+          "go to 00:01:14:03" is what a note from someone else always says. */}
+      <TimecodeField
+        frame={transport.frame}
+        frameRate={frameRate}
+        {...(duration > 0 ? { duration } : {})}
+        onSeek={transport.seek}
+      />
 
       <div style={{ flex: 1 }} />
 

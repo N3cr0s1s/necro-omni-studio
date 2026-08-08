@@ -3,3 +3,4 @@
  * document.
  */
 export * from './LevelMeter.js';
+export * from './TimecodeField.js';

@@ -10,3 +10,4 @@ export * from './frame-rate.js';
 export * from './frame-time.js';
 export * from './frame-span.js';
 export * from './timecode.js';
+export * from './timecode-entry.js';
