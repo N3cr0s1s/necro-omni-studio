@@ -18,9 +18,7 @@ interface Harness {
   readonly fetches: string[];
 }
 
-function harness(
-  options: { maxBytes?: number; fail?: 'fetch' | 'decode'; seconds?: number } = {},
-): Harness {
+function harness(options: { maxBytes?: number; fail?: 'fetch' | 'decode'; seconds?: number } = {}): Harness {
   const decodes: string[] = [];
   const fetches: string[] = [];
   let pending: string | undefined;
