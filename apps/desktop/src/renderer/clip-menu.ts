@@ -1,4 +1,4 @@
-import { type ClipId, type TimelineDocument, linkedPartner, locateClip } from '@nos/core';
+import { type ClipId, type TimelineDocument, type TrackId, linkedPartner, locateClip } from '@nos/core';
 import type { ContextMenuItem } from '@nos/ui';
 
 /**
@@ -17,6 +17,8 @@ export interface ClipMenuState {
   readonly document: TimelineDocument;
   /** The clip under the pointer, absent for a right-click on empty timeline. */
   readonly clip: ClipId | undefined;
+  /** The lane under the pointer, absent only below the last track. */
+  readonly track?: TrackId | undefined;
   readonly selectionSize: number;
   readonly canPaste: boolean;
   readonly hasAttributes: boolean;
@@ -25,6 +27,11 @@ export interface ClipMenuState {
 }
 
 export const CLIP_MENU_ACTIONS = [
+  'add-video-track',
+  'add-audio-track',
+  'add-text-track',
+  'rename-track',
+  'remove-track',
   'cut',
   'copy',
   'paste',
@@ -45,9 +52,34 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
   const linked = located === undefined ? false : linkedPartner(located.clip) !== undefined;
   const enabled = located?.clip.enabled ?? true;
   const nothing = state.selectionSize === 0 && target === undefined;
+  const track = state.track;
+  // The last of its kind cannot go: a sequence with no video track has nowhere to drop a video, and
+  // the user's next action after deleting it would be to create one.
+  const kind =
+    track === undefined ? undefined : state.document.sequence.tracks.find((t) => t.id === track)?.kind;
+  const lastOfKind =
+    kind === undefined || state.document.sequence.tracks.filter((t) => t.kind === kind).length <= 1;
 
   return [
-    { id: 'cut', label: 'Cut', shortcut: 'Ctrl+X', disabled: nothing },
+    // Track actions first, because the report that prompted them was "I cannot create a track" from
+    // someone who had right-clicked and found only clip actions. The toolbar's `+ V` buttons existed
+    // and were not where anyone looked.
+    { id: 'add-video-track', label: 'Add video track' },
+    { id: 'add-audio-track', label: 'Add audio track' },
+    { id: 'add-text-track', label: 'Add text track' },
+    {
+      id: 'rename-track',
+      label: 'Rename track',
+      disabled: track === undefined,
+    },
+    {
+      id: 'remove-track',
+      label: 'Delete track',
+      disabled: track === undefined || lastOfKind,
+      danger: true,
+    },
+
+    { id: 'cut', label: 'Cut', shortcut: 'Ctrl+X', disabled: nothing, separated: true },
     { id: 'copy', label: 'Copy', shortcut: 'Ctrl+C', disabled: nothing },
     { id: 'paste', label: 'Paste', shortcut: 'Ctrl+V', disabled: !state.canPaste },
     { id: 'duplicate', label: 'Duplicate', shortcut: 'Ctrl+D', disabled: nothing },

@@ -450,7 +450,12 @@ export function App(): ReactNode {
   const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
   /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
   const resizing = useRef(false);
-  const [menu, setMenu] = useState<{ clip: ClipId | undefined; x: number; y: number } | undefined>(undefined);
+  const [menu, setMenu] = useState<
+    { clip: ClipId | undefined; track: TrackId | undefined; x: number; y: number } | undefined
+  >(undefined);
+  // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
+  // both end in the same place.
+  const [renamingTrack, setRenamingTrack] = useState<TrackId | undefined>(undefined);
   const cache = useCacheStats({ sidecar, revision: proxies.ready });
   // Listed rather than read off the browser's tree: the tree deliberately hides cache *contents*, so
   // its `cache` node has no children to inspect. Re-listed as derivations land and after a clear.
@@ -553,6 +558,23 @@ export function App(): ReactNode {
   const runClipMenuAction = useCallback(
     (action: ClipMenuAction) => {
       switch (action) {
+        case 'add-video-track':
+          addTrackOfKind('video');
+          break;
+        case 'add-audio-track':
+          addTrackOfKind('audio');
+          break;
+        case 'add-text-track':
+          addTrackOfKind('text');
+          break;
+        case 'rename-track':
+          setRenamingTrack(menu?.track);
+          break;
+        case 'remove-track': {
+          const target = menu?.track;
+          if (target !== undefined) removeTrackById(target);
+          break;
+        }
         case 'cut':
           clipEdits.cut();
           break;
@@ -636,6 +658,7 @@ export function App(): ReactNode {
           items={clipMenuItems({
             document,
             clip: menu.clip,
+            track: menu.track,
             selectionSize: selected.size,
             canPaste: clipEdits.canPaste,
             hasAttributes: clipEdits.attributeSummary !== undefined,
@@ -749,6 +772,7 @@ export function App(): ReactNode {
               onAddTrack={addTrackOfKind}
               onTrackRemove={removeTrackById}
               onTrackRename={(id, name) => {
+                setRenamingTrack(undefined);
                 store.commit('rename track', (current) => {
                   const result = renameTrack(current, id, name);
                   if (!result.ok) {
@@ -794,16 +818,18 @@ export function App(): ReactNode {
               // question, answered in the editing layer rather than in the component.
               // Dropped material lands where it was dropped — which is the only reason to drag
               // rather than double-click, and what the browser's draggable rows had been promising.
+              {...(renamingTrack !== undefined ? { renamingTrack } : {})}
               onDropAsset={(asset, track, frame) => {
                 void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
                   if (id !== undefined) setSelected(new Set([id]));
                 });
               }}
-              onContextMenu={(clip, x, y) => {
+              onContextMenu={(target, x, y) => {
                 // Right-clicking an unselected clip selects it first: acting on something other than
                 // what was clicked is the one behaviour a context menu must never have.
+                const clip = target.clip;
                 if (clip !== undefined && !selected.has(clip)) setSelected(new Set([clip as string]));
-                setMenu({ clip, x, y });
+                setMenu({ clip, track: target.track, x, y });
               }}
               onSelectRegion={(region, additive) =>
                 setSelected((current) => combineSelection(current, clipsInRegion(document, region), additive))

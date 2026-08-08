@@ -475,6 +475,52 @@ describe('many tracks', () => {
   });
 });
 
+describe('the context menu', () => {
+  it('reports the lane a right-click on empty track area was on', async () => {
+    // Without it a menu opened over a lane could only offer clip actions — which is what the report
+    // "I cannot create a track" was actually about.
+    const onContextMenu = vi.fn();
+    renderTimeline({ onContextMenu });
+
+    const lane = document.querySelector('[data-track-id="v1"]') as HTMLElement;
+    fireEvent.contextMenu(lane, { clientX: 10, clientY: 20 });
+
+    expect(onContextMenu).toHaveBeenCalledWith({ track: 'v1' }, 10, 20);
+  });
+
+  it('reports the clip and its lane when the click was on a clip', async () => {
+    const onContextMenu = vi.fn();
+    renderTimeline({ onContextMenu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }), { clientX: 5, clientY: 6 });
+
+    expect(onContextMenu).toHaveBeenCalledWith({ clip: 'a', track: 'v1' }, 5, 6);
+  });
+
+  it('does not report the lane for a click that landed on a clip', () => {
+    // Both firing would open a menu about the lane for a click plainly on a clip.
+    const onContextMenu = vi.fn();
+    renderTimeline({ onContextMenu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^a$/ }), { clientX: 5, clientY: 6 });
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('renaming a track from elsewhere', () => {
+  it('opens the same field a double-click opens', () => {
+    // Two ways to rename that behaved differently would be worse than one.
+    renderTimeline({ onTrackRename: vi.fn(), renamingTrack: trackId('v1') });
+    expect(screen.getByLabelText('Rename V1')).toBeDefined();
+  });
+
+  it('leaves every other track alone', () => {
+    renderTimeline({ onTrackRename: vi.fn(), renamingTrack: trackId('v1') });
+    expect(screen.queryByLabelText('Rename A1')).toBeNull();
+  });
+});
+
 describe('resizing a track', () => {
   it('offers a grip only when something can handle it', () => {
     renderTimeline();

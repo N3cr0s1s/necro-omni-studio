@@ -55,6 +55,19 @@ import {
  * area with the ruler at its top and the playhead spanning all lanes.
  */
 
+/**
+ * What a right-click on the timeline was on.
+ *
+ * A value rather than two callbacks, because the answer is one of a small set and the menu's contents
+ * depend on *which*: a click on a clip offers clip actions, a click on a lane offers track actions,
+ * and a click on the empty area below the last track offers only what applies to no target at all.
+ * Both fields absent is that last case, and is meaningful rather than an omission.
+ */
+export interface TimelineMenuTarget {
+  readonly clip?: ClipId;
+  readonly track?: TrackId;
+}
+
 export interface TimelineProps {
   readonly document: TimelineDocument;
   readonly viewport: TimelineViewport;
@@ -75,7 +88,7 @@ export interface TimelineProps {
    * shell's business, because the answer depends on the selection, the clipboard and the history —
    * none of which this component knows about.
    */
-  readonly onContextMenu?: (clip: ClipId | undefined, x: number, y: number) => void;
+  readonly onContextMenu?: (target: TimelineMenuTarget, x: number, y: number) => void;
   /**
    * A rectangle dragged across empty timeline.
    *
@@ -100,6 +113,14 @@ export interface TimelineProps {
    * wherever the playhead happened to be — which is the whole reason to drag rather than double-click.
    */
   readonly onDropAsset?: (asset: string, track: TrackId, frame: FrameIndex) => void;
+  /**
+   * A track whose name field should be open.
+   *
+   * Driven from outside because the rename can be asked for from the context menu as well as by
+   * double-clicking the name, and two ways of renaming that behaved differently would be worse than
+   * one. The caller clears it when the edit finishes.
+   */
+  readonly renamingTrack?: TrackId;
   /**
    * The frame a drag is currently snapped to, and what it caught.
    *
@@ -235,6 +256,7 @@ export function Timeline(props: TimelineProps): ReactNode {
           {...(props.onTrackRemove !== undefined ? { onRemove: props.onTrackRemove } : {})}
           {...(props.onTrackRename !== undefined ? { onRename: props.onTrackRename } : {})}
           {...(props.onTrackResize !== undefined ? { onResize: props.onTrackResize } : {})}
+          {...(props.renamingTrack !== undefined ? { renaming: props.renamingTrack } : {})}
         />
 
         <div
@@ -268,11 +290,11 @@ export function Timeline(props: TimelineProps): ReactNode {
             onPointerDown={marquee.begin}
             onContextMenu={(event) => {
               if (props.onContextMenu === undefined) return;
-              // Only the background: a clip handles its own, and letting this fire too would open the
-              // menu for the lane behind whichever clip was clicked.
+              // Only the area below the last track: a lane reports itself, and a clip reports itself,
+              // so letting this fire too would open the menu for whatever sits behind the click.
               if (event.target !== event.currentTarget) return;
               event.preventDefault();
-              props.onContextMenu(undefined, event.clientX, event.clientY);
+              props.onContextMenu({}, event.clientX, event.clientY);
             }}
             onDragOver={(event) => {
               if (props.onDropAsset === undefined) return;
@@ -484,6 +506,7 @@ function TimelineToolbar({
 function TrackHeaderColumn({
   tracks,
   anySoloed,
+  renaming,
   onMute,
   onSolo,
   onLock,
@@ -493,6 +516,7 @@ function TrackHeaderColumn({
 }: {
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
+  readonly renaming?: TrackId;
   readonly onMute?: (track: TrackId) => void;
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
@@ -527,6 +551,7 @@ function TrackHeaderColumn({
           {...(onRemove !== undefined ? { onRemove } : {})}
           {...(onRename !== undefined ? { onRename } : {})}
           {...(onResize !== undefined ? { onResize } : {})}
+          renaming={renaming === track.id}
         />
       ))}
     </div>
@@ -551,9 +576,12 @@ function TrackHeader({
   onRemove,
   onRename,
   onResize,
+  renaming = false,
 }: {
   readonly track: Track;
   readonly audible: boolean;
+  /** True when a rename was asked for elsewhere, so the field opens without a double-click. */
+  readonly renaming?: boolean;
   readonly onMute?: (track: TrackId) => void;
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
@@ -584,6 +612,7 @@ function TrackHeader({
     >
       {onResize !== undefined && <ResizeHandle track={track} onResize={onResize} />}
       <EditableName
+        autoEdit={renaming}
         value={track.name}
         tone={trackLabelColor(track)}
         title={`${track.name} — double-click to rename`}
@@ -891,16 +920,27 @@ function EditableName({
   tone,
   title,
   style,
+  autoEdit = false,
   onCommit,
 }: {
   readonly value: string;
   readonly tone: string;
   readonly title: string;
   readonly style?: CSSProperties;
+  /** Opens the field without a double-click, for a rename asked for somewhere else — a menu. */
+  readonly autoEdit?: boolean;
   readonly onCommit?: (name: string) => void;
 }): ReactNode {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    // A rename chosen from the context menu has to land in the same field a double-click opens, or
+    // there would be two ways to rename a track that behaved differently.
+    if (!autoEdit) return;
+    setDraft(value);
+    setEditing(true);
+  }, [autoEdit, value]);
 
   if (!editing || onCommit === undefined) {
     return (
@@ -1158,7 +1198,7 @@ function TrackLane({
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
-  readonly onContextMenu?: (clip: ClipId | undefined, x: number, y: number) => void;
+  readonly onContextMenu?: (target: TimelineMenuTarget, x: number, y: number) => void;
   /**
    * A rectangle dragged across empty timeline.
    *
@@ -1177,6 +1217,14 @@ function TrackLane({
     <div
       data-track-id={track.id}
       data-track-kind={track.kind}
+      onContextMenu={(event) => {
+        if (onContextMenu === undefined) return;
+        // The lane's own background only. A clip sitting on it reports itself, and both firing would
+        // open a menu about the lane for a click that was plainly on a clip.
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        onContextMenu({ track: track.id }, event.clientX, event.clientY);
+      }}
       style={{
         height: track.height,
         position: 'relative',
@@ -1199,7 +1247,12 @@ function TrackLane({
             onSelectClip?.(clipId, event.shiftKey || event.metaKey);
             onClipPointerDown?.(clipId, event);
           }}
-          {...(onContextMenu !== undefined ? { onContextMenu } : {})}
+          {...(onContextMenu !== undefined
+            ? {
+                onContextMenu: (clip: ClipId, x: number, y: number) =>
+                  onContextMenu({ clip, track: track.id }, x, y),
+              }
+            : {})}
           {...(onTrimStart !== undefined ? { onTrimStart } : {})}
           {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
         />

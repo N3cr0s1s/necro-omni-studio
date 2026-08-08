@@ -189,6 +189,56 @@ describe('the look', () => {
   });
 });
 
+describe('track actions', () => {
+  // The report was "I cannot create a track": the toolbar's `+ V` buttons existed and were not where
+  // anyone looked, and a right-click offered clip actions only.
+  it('offers a track of each kind, always', () => {
+    const items = clipMenuItems(state({ clip: undefined, selectionSize: 0, track: undefined }));
+    for (const id of ['add-video-track', 'add-audio-track', 'add-text-track']) {
+      expect(item(items, id)?.disabled).toBeFalsy();
+    }
+  });
+
+  it('renames and deletes the lane that was clicked', () => {
+    const items = clipMenuItems(state({ track: trackId('v1') }));
+    expect(item(items, 'rename-track')?.disabled).toBeFalsy();
+  });
+
+  it('cannot rename or delete when the click was on no lane at all', () => {
+    // Below the last track. Offering it would act on some other track, which is the one thing a
+    // context menu must never do.
+    const items = clipMenuItems(state({ track: undefined }));
+    expect(item(items, 'rename-track')?.disabled).toBe(true);
+    expect(item(items, 'remove-track')?.disabled).toBe(true);
+  });
+
+  it('refuses to delete the last track of its kind', () => {
+    // A sequence with no video track has nowhere to drop a video, and the user's next action after
+    // deleting it would be to create one.
+    expect(item(clipMenuItems(state({ track: trackId('v1') })), 'remove-track')?.disabled).toBe(true);
+  });
+
+  it('allows deleting a track once another of its kind exists', () => {
+    const twoVideo = documentWith([video('a')]);
+    const extended: TimelineDocument = {
+      ...twoVideo,
+      sequence: {
+        ...twoVideo.sequence,
+        tracks: [
+          ...twoVideo.sequence.tracks,
+          { ...(twoVideo.sequence.tracks[0] as Track), id: trackId('v2'), name: 'V2' },
+        ],
+      },
+    };
+    const items = clipMenuItems(state({ document: extended, track: trackId('v2') }));
+    expect(item(items, 'remove-track')?.disabled).toBe(false);
+  });
+
+  it('marks deleting a track as destructive', () => {
+    expect(item(clipMenuItems(state({ track: trackId('v1') })), 'remove-track')?.danger).toBe(true);
+  });
+});
+
 describe('shape', () => {
   it('keeps the same rows whatever the state, so the menu does not move under the pointer', () => {
     const full = clipMenuItems(state({ canPaste: true, hasAttributes: true })).map((entry) => entry.id);
