@@ -841,6 +841,12 @@ so it can gate a release:
   a double-click, because the flag is eight pixels wide and the cheap action has to
   stay cheap.
 
+- Track order **is** layer order: the compositor walks video tracks in reverse so a later
+  one draws on top. Anything that reorders them is changing what the picture shows, not
+  the layout.
+- A track moves only **within its own kind**. The timeline reads video, then audio, then
+  text, and a move across that boundary breaks the reading for the life of the project —
+  so it is refused, and the control is disabled rather than silently doing nothing.
 - A track's drawn height comes from `laneHeight`, never from `track.height` directly.
   Five things need the answer — header, lane, clips, and the two running offsets for
   the playhead and the drop indicator — and one of them disagreeing puts every row
