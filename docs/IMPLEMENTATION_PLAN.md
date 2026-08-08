@@ -94,8 +94,11 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       (landed with the compositor in Phase 3)
 - [x] Keyframe evaluation (linear/ease-in/out/in-out/hold) — landed in `@nos/core`
       Phase 1, consumed by the plan builder
-- [ ] Effect stack UI with drag & drop reorder
-- [ ] Keyframe lane UI with per-marker easing badges
+- [x] Effect stack UI with pointer **and keyboard** reorder, health dots, shader
+      error surfacing, pass-budget warning. 28 tests.
+- [x] Keyframe lane UI: diamond markers, per-marker easing badges, drag/nudge,
+      easing cycling, value readout under the playhead. 26 tests.
+      Screenshot-verified against mockup 1b.
 
 ### Phase 5 — M7: Text layer
 - [ ] Text clip model + rasterization cache
@@ -135,9 +138,8 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–3 complete (M1–M4). Phase 4 in progress — the effect registry is done;
-the effect stack and keyframe lane UI remain.**
-**657 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–4 complete (M1–M6).**
+**712 TypeScript tests + 65 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions (including every shipped built-in effect).**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -146,8 +148,8 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the effect stack UI with drag & drop reorder, and the keyframe lane UI with
-per-marker easing badges (mockup 1b). The Electron shell
+Next: Phase 5 (M7) — the text layer: rasterization cache, animation presets as
+keyframe generators, and the typewriter advance-list mechanism. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -230,6 +232,27 @@ the media browser plus a full timeline from mockup 1a.
 - `preambleLines` must be counted from the **joined** source, not `lines.length`:
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
+
+### Effect and keyframe UI rules (keep these)
+
+- Reordering the effect stack changes render output, so it is **not pointer-only**.
+  Alt+Arrow moves a row; plain arrows stay free for moving between rows.
+- Pointer reordering uses pointer events, not HTML5 drag-and-drop: native DnD cannot
+  be keyboard-driven, gives no control over the drag image, and fights React's event
+  model.
+- The dragged row **dims in place** rather than following the pointer. A floating
+  copy over a 340 px panel covers the very targets the user is aiming at.
+- A shader error is surfaced on the row with its compiler message. It is the only
+  feedback a shader author gets, and the spec requires it to be visible.
+- A keyframe's easing badge sits **to the right of its marker**, because easing
+  governs the segment *leaving* it — and the **last marker gets no badge**, since its
+  easing governs nothing.
+- Drag handlers attach to the **window as well as the element**, and treat
+  `setPointerCapture` as an enhancement inside a `try`. Capture is absent in some
+  environments, and a marker that cannot be dragged at all is far worse than one that
+  loses events when the pointer leaves.
+- Always handle `pointercancel`, not just `pointerup`: an interrupted drag otherwise
+  leaves the caller's undo gesture open, silently merging every later edit into it.
 
 ### Effect registry rules (keep these)
 
@@ -595,6 +618,15 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   a "missing shader" test silently supplied one; and appending `results.builtins`
   overwrote an existing key of that name, turning a passing pixel assertion into a
   failing one.
+
+- 2026-08-08: **Phase 4 closed (M5, M6).** Effect stack and keyframe lane UI, 54
+  tests, screenshot-verified against mockup 1b.
+
+  A failing test exposed a genuine robustness gap rather than a test artifact: the
+  keyframe drag handler called `setPointerCapture` unguarded, so in any environment
+  lacking it the handler threw and the marker became undraggable. Rewritten to attach
+  listeners to the window as well as the element, with capture as a guarded
+  enhancement — and a test now asserts a drag starts where capture is unavailable.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than

@@ -4,3 +4,4 @@
 export * from './viewport.js';
 export * from './ClipBody.js';
 export * from './Timeline.js';
+export * from './KeyframeLane.js';

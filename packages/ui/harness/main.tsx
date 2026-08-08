@@ -23,6 +23,7 @@ import {
   effectId,
   effectInstanceId,
   frameIndex,
+  keyframeId,
   generatorId,
   jobRunId,
   maskId,
@@ -33,11 +34,16 @@ import {
   trackId,
 } from '@nos/core';
 import { type FileEntry, buildTree } from '@nos/media';
+import type { Easing, Keyframe } from '@nos/core';
 import {
   AssetDetail,
+  EffectStack,
+  KeyframeLane,
   MediaBrowser,
+  SectionCaption,
   Timeline,
   createViewport,
+  nextEasing,
   token,
   zoomAt,
 } from '../src/index.js';
@@ -300,7 +306,9 @@ function App() {
           }
         />
         <div style={{ flex: 1, background: token.bgCanvas }} />
+        <InspectorPanel />
       </div>
+      <KeyframeLanes viewport={viewport} playhead={playhead} />
       <Timeline
         document={document}
         viewport={viewport}
@@ -313,6 +321,134 @@ function App() {
         onToggleSnap={() => setSnap((value) => !value)}
         onToggleRipple={() => setRipple((value) => !value)}
         onZoom={(next, anchorPx) => setViewport((vp) => zoomAt(vp, anchorPx, next))}
+      />
+    </div>
+  );
+}
+
+/** Keyframe lanes as mockup 1b shows them: one lane per animated parameter, under the clip. */
+function KeyframeLanes({ viewport, playhead }: { viewport: ReturnType<typeof createViewport>; playhead: ReturnType<typeof frameIndex> }) {
+  const [lanes, setLanes] = useState<{ label: string; keyframes: Keyframe[] }[]>([
+    {
+      label: 'film_grain · amount',
+      keyframes: [
+        { id: keyframeId('a1'), frame: frameIndex(60), value: 0.18, ease: 'ease-out' as Easing },
+        { id: keyframeId('a2'), frame: frameIndex(700), value: 0.42, ease: 'hold' as Easing },
+        { id: keyframeId('a3'), frame: frameIndex(1200), value: 0.1, ease: 'linear' as Easing },
+      ],
+    },
+    {
+      label: 'rgb_split · amount',
+      keyframes: [
+        { id: keyframeId('b1'), frame: frameIndex(200), value: 0, ease: 'linear' as Easing },
+        { id: keyframeId('b2'), frame: frameIndex(560), value: 8, ease: 'ease-in-out' as Easing },
+        { id: keyframeId('b3'), frame: frameIndex(1000), value: 2, ease: 'linear' as Easing },
+      ],
+    },
+  ]);
+  const [selectedKeyframe, setSelectedKeyframe] = useState(keyframeId('b2'));
+
+  return (
+    <div style={{ flex: 'none', display: 'flex', flexDirection: 'column', background: token.bgTimeline }}>
+      {lanes.map((lane, laneIndex) => (
+        <div key={lane.label} style={{ display: 'flex' }}>
+          <div
+            style={{
+              width: token.trackHeaderWidth,
+              flex: 'none',
+              background: token.bgPanel,
+              borderRight: `1px solid ${token.border}`,
+              borderBottom: `1px solid ${token.surface1}`,
+              display: 'flex',
+              alignItems: 'center',
+              padding: `0 ${token.space4}`,
+              font: `400 10px ${token.fontMono}`,
+              color: token.textDim,
+              boxSizing: 'border-box',
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {lane.label}
+          </div>
+          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+            <KeyframeLane
+              label={lane.label}
+              keyframes={lane.keyframes}
+              clipStart={frameIndex(0)}
+              viewport={viewport}
+              playhead={playhead}
+              selected={selectedKeyframe}
+              onSelectKeyframe={setSelectedKeyframe}
+              onCycleEasing={(id) =>
+                setLanes((current) =>
+                  current.map((entry, index) =>
+                    index !== laneIndex
+                      ? entry
+                      : {
+                          ...entry,
+                          keyframes: entry.keyframes.map((k) =>
+                            k.id === id ? { ...k, ease: nextEasing(k.ease) } : k,
+                          ),
+                        },
+                  ),
+                )
+              }
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The inspector column from mockup 1b: effect stack with reorderable rows. */
+function InspectorPanel() {
+  const [entries, setEntries] = useState([
+    { instance: { id: effectInstanceId('fx1'), effect: effectId('film_grain'), enabled: true, params: {} }, label: 'Film Grain', keyframeCount: 2 },
+    { instance: { id: effectInstanceId('fx2'), effect: effectId('rgb_split'), enabled: true, params: {} }, label: 'RGB Split', keyframeCount: 4 },
+    { instance: { id: effectInstanceId('fx3'), effect: effectId('levels'), enabled: true, params: {} }, label: 'Levels', keyframeCount: 0 },
+    { instance: { id: effectInstanceId('fx4'), effect: effectId('broken'), enabled: true, params: {} }, label: 'Vignette', keyframeCount: 0, error: "line 12: 'u_falloff' : undeclared identifier" },
+  ]);
+  const [selected, setSelected] = useState(effectInstanceId('fx2'));
+
+  return (
+    <div
+      style={{
+        width: token.inspectorWidth,
+        flex: 'none',
+        background: token.bgPanel,
+        borderLeft: `1px solid ${token.border}`,
+        padding: token.space6,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: token.space6,
+        overflow: 'hidden',
+      }}
+    >
+      <SectionCaption>Clip</SectionCaption>
+      <EffectStack
+        entries={entries}
+        selected={selected}
+        onSelect={setSelected}
+        onReorder={(from, to) =>
+          setEntries((current) => {
+            const next = [...current];
+            const [moved] = next.splice(from, 1);
+            if (moved !== undefined) next.splice(to, 0, moved);
+            return next;
+          })
+        }
+        onToggleEnabled={(id, enabled) =>
+          setEntries((current) =>
+            current.map((entry) =>
+              entry.instance.id === id
+                ? { ...entry, instance: { ...entry.instance, enabled } }
+                : entry,
+            ),
+          )
+        }
       />
     </div>
   );
