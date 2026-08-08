@@ -1,4 +1,5 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useId, useMemo, useState } from 'react';
+import { FileJsonIcon, PlusIcon, SaveIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import {
   type DraftIssue,
   type DraftParam,
@@ -11,8 +12,17 @@ import {
   draftManifestJson,
   validateDraft,
 } from '@nos/generators';
-import { Badge, Button, Mono, PanelHeader, SectionCaption } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { Checkbox } from '@nos/ui/components/ui/checkbox';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@nos/ui/components/ui/input-group';
+import { Item, ItemContent, ItemGroup, ItemMedia } from '@nos/ui/components/ui/item';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
+import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * The manifest inspector (spec §5.9).
@@ -64,36 +74,30 @@ export function ManifestInspector({
   const groups = useMemo(() => groupByNode(literals, filter), [literals, filter]);
 
   return (
-    <section
-      aria-label="Manifest inspector"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: token.bgPanel,
-        color: token.textPrimary,
-      }}
-    >
-      <PanelHeader
-        caption="Manifest inspector"
-        trailing={
-          <div style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-            <Badge tone={blocked ? 'danger' : draft.graph === null ? 'warn' : 'ok'}>
-              {blocked ? 'incomplete' : draft.graph === null ? 'unbound' : 'ready'}
-            </Badge>
-            <Button
-              tone="primary"
-              disabled={blocked}
-              onClick={onSave}
-              title={blocked ? 'Fix the errors below first' : 'Write the manifest'}
-            >
-              Save manifest
-            </Button>
-          </div>
-        }
-      />
+    <section aria-label="Manifest inspector" className="flex h-full flex-col">
+      <div className="flex h-9 flex-none items-center gap-3 px-4">
+        <FileJsonIcon className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Manifest inspector
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <Badge variant={blocked ? 'destructive' : draft.graph === null ? 'outline' : 'secondary'}>
+            {blocked ? 'incomplete' : draft.graph === null ? 'unbound' : 'ready'}
+          </Badge>
+          <Button
+            size="sm"
+            disabled={blocked}
+            onClick={onSave}
+            title={blocked ? 'Fix the errors below first' : 'Write the manifest'}
+          >
+            <SaveIcon />
+            Save manifest
+          </Button>
+        </div>
+      </div>
+      <Separator />
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="flex min-h-0 flex-1">
         <GraphColumn
           groups={groups}
           promoted={promoted}
@@ -170,95 +174,95 @@ function GraphColumn({
   readonly onDemote?: (id: string) => void;
 }): ReactNode {
   return (
-    <div
-      style={{
-        width: 380,
-        flex: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: `1px solid ${token.border}`,
-        minHeight: 0,
-      }}
-    >
-      <div style={{ padding: token.space4, borderBottom: `1px solid ${token.borderSubtle}` }}>
-        <input
-          type="search"
-          aria-label="Filter graph inputs"
-          placeholder="Filter by node, input or value"
-          value={filter}
-          onChange={(event) => onFilter(event.target.value)}
-          style={{
-            width: '100%',
-            height: token.controlHeight,
-            background: token.surface1,
-            border: `1px solid ${token.borderControl}`,
-            borderRadius: token.radiusControl,
-            color: token.textBright,
-            font: `400 11.5px ${token.fontUi}`,
-            padding: `0 ${token.space3}`,
+    <div className="flex w-95 min-h-0 flex-none flex-col border-r">
+      <div className="p-3">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Filter graph inputs"
+            placeholder="Filter by node, input or value"
+            value={filter}
+            onChange={(event) => onFilter(event.target.value)}
+          />
+        </InputGroup>
+      </div>
+      <Separator />
+
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-3">
+          {groups.length === 0 && (
+            <p className="font-mono text-xs text-muted-foreground">
+              no graph inputs — load a graph, or clear the filter
+            </p>
+          )}
+          {groups.map((group) => (
+            <div key={group.nodeId} className="mb-4">
+              <div className="flex items-center gap-2 p-2">
+                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {group.nodeClass}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{group.nodeId}</span>
+              </div>
+
+              <ItemGroup className="gap-0.5">
+                {group.literals.map((literal) => (
+                  <LiteralRow
+                    key={literal.pointer}
+                    literal={literal}
+                    param={promoted.get(literal.pointer)}
+                    {...(onPromote !== undefined ? { onPromote } : {})}
+                    {...(onDemote !== undefined ? { onDemote } : {})}
+                  />
+                ))}
+              </ItemGroup>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/** One graph literal, with the tick that promotes it to a parameter. */
+function LiteralRow({
+  literal,
+  param,
+  onPromote,
+  onDemote,
+}: {
+  readonly literal: GraphLiteral;
+  readonly param: DraftParam | undefined;
+  readonly onPromote?: (literal: GraphLiteral) => void;
+  readonly onDemote?: (id: string) => void;
+}): ReactNode {
+  const ticked = param !== undefined;
+  const id = useId();
+
+  return (
+    <Item size="xs" className={cn('py-1', ticked && 'bg-chart-4/10')}>
+      <ItemMedia>
+        <Checkbox
+          id={id}
+          checked={ticked}
+          aria-label={`${literal.input} on ${literal.nodeClass} ${literal.nodeId}`}
+          onCheckedChange={() => {
+            if (param !== undefined) onDemote?.(param.id);
+            else onPromote?.(literal);
           }}
         />
-      </div>
-
-      <div style={{ flex: 1, overflow: 'auto', padding: token.space3 }}>
-        {groups.length === 0 && (
-          <Mono tone={token.textFaint}>no graph inputs — load a graph, or clear the filter</Mono>
-        )}
-        {groups.map((group) => (
-          <div key={group.nodeId} style={{ marginBottom: token.space4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: token.space2, padding: token.space2 }}>
-              <SectionCaption>{group.nodeClass}</SectionCaption>
-              <Mono tone={token.textGhost}>{group.nodeId}</Mono>
-            </div>
-
-            {group.literals.map((literal) => {
-              const param = promoted.get(literal.pointer);
-              const ticked = param !== undefined;
-              return (
-                <label
-                  key={literal.pointer}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: token.space3,
-                    height: token.controlHeight,
-                    padding: `0 ${token.space2}`,
-                    borderRadius: token.radiusInset,
-                    background: ticked ? 'rgba(155, 140, 255, 0.10)' : 'transparent',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={ticked}
-                    aria-label={`${literal.input} on ${literal.nodeClass} ${literal.nodeId}`}
-                    onChange={() => {
-                      if (ticked) onDemote?.(param.id);
-                      else onPromote?.(literal);
-                    }}
-                  />
-                  <span style={{ font: `400 11.5px ${token.fontUi}`, color: token.textSecondary }}>
-                    {literal.input}
-                  </span>
-                  <div style={{ flex: 1 }} />
-                  <Mono
-                    tone={token.textFaint}
-                    style={{
-                      maxWidth: 140,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {String(literal.value)}
-                  </Mono>
-                </label>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <label htmlFor={id} className="cursor-pointer text-sm">
+          {literal.input}
+        </label>
+      </ItemContent>
+      <span className="max-w-35 truncate font-mono text-xs text-muted-foreground">
+        {String(literal.value)}
+      </span>
+    </Item>
   );
 }
 
@@ -276,23 +280,16 @@ function DraftColumn({
   readonly onEditParam?: (id: string, changes: DraftParamChanges) => void;
 }): ReactNode {
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: token.space5,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: token.space5,
-        }}
-      >
+    <ScrollArea className="min-w-0 flex-1">
+      <div className="flex flex-col gap-5 p-4">
         <Identity draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
-          <SectionCaption>Parameters</SectionCaption>
+        <div className="flex flex-col gap-3">
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Parameters</span>
           {draft.params.length === 0 && (
-            <Mono tone={token.textFaint}>tick a graph input on the left to make it a parameter</Mono>
+            <p className="font-mono text-xs text-muted-foreground">
+              tick a graph input on the left to make it a parameter
+            </p>
           )}
           {draft.params.map((param) => (
             <ParamRow
@@ -307,29 +304,35 @@ function DraftColumn({
         <Issues issues={issues} />
         <Preview draft={draft} />
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
-function Field({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
+/**
+ * A labelled control.
+ *
+ * Plumbing, not a component: it pairs the registry's `Field` and `FieldLabel` with a generated id so the
+ * label is *associated* with its control rather than merely sitting above it. Without the association a
+ * click on the label does nothing and a screen reader reads the control unnamed — and there are eighteen
+ * of them on this screen.
+ */
+function Labelled({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: (id: string) => ReactNode;
+}): ReactNode {
+  const id = useId();
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: token.space2, minWidth: 0 }}>
-      <span style={{ font: token.textLabel, color: token.textSoft }}>{label}</span>
-      {children}
-    </label>
+    <Field className="min-w-0 gap-1.5">
+      <FieldLabel htmlFor={id} className="text-xs">
+        {label}
+      </FieldLabel>
+      {children(id)}
+    </Field>
   );
 }
-
-const inputStyle = {
-  height: token.controlHeight,
-  background: token.surface1,
-  border: `1px solid ${token.borderControl}`,
-  borderRadius: token.radiusControl,
-  color: token.textBright,
-  font: `400 11.5px ${token.fontUi}`,
-  padding: `0 ${token.space3}`,
-  minWidth: 0,
-} as const;
 
 function Identity({
   draft,
@@ -341,80 +344,88 @@ function Identity({
   const set = (changes: Partial<ManifestDraft>): void => onChange?.({ ...draft, ...changes });
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: token.space3 }}>
-      <Field label="Id">
-        <input style={inputStyle} value={draft.id} onChange={(event) => set({ id: event.target.value })} />
-      </Field>
-      <Field label="Name">
-        <input
-          style={inputStyle}
-          value={draft.name}
-          onChange={(event) => set({ name: event.target.value })}
-        />
-      </Field>
-      <Field label="Backend">
-        <input
-          style={inputStyle}
-          value={draft.backend}
-          onChange={(event) => set({ backend: event.target.value })}
-        />
-      </Field>
-      <Field label="Produces">
-        <select
-          style={inputStyle}
-          value={draft.produces}
-          onChange={(event) => set({ produces: event.target.value as ManifestDraft['produces'] })}
-        >
-          {['video', 'audio', 'image', 'text'].map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Length">
-        <select
-          style={inputStyle}
-          value={draft.duration}
-          onChange={(event) => set({ duration: event.target.value as ManifestDraft['duration'] })}
-        >
-          <option value="declared">declared — a parameter sets it</option>
-          <option value="discovered">discovered — only the output says</option>
-        </select>
-      </Field>
-      <Field label="Default variants">
-        <input
-          type="number"
-          min={1}
-          max={16}
-          style={inputStyle}
-          value={draft.defaultVariants}
-          onChange={(event) => set({ defaultVariants: Number(event.target.value) })}
-        />
-      </Field>
-      <Field label="Surfaces">
-        <input
-          style={inputStyle}
-          value={draft.surfaces.join(', ')}
-          placeholder="media_browser, clip_context_menu"
-          onChange={(event) => set({ surfaces: splitList(event.target.value) })}
-        />
-      </Field>
-      <Field label="Requires node classes">
-        <input
-          style={inputStyle}
-          value={draft.requires.join(', ')}
-          onChange={(event) => set({ requires: splitList(event.target.value) })}
-        />
-      </Field>
-      <Field label="Graph file">
-        <input
-          style={inputStyle}
-          value={draft.graph ?? ''}
-          placeholder="not connected yet"
-          onChange={(event) => set({ graph: event.target.value === '' ? null : event.target.value })}
-        />
-      </Field>
+    <div className="grid grid-cols-3 gap-3">
+      <Labelled label="Id">
+        {(id) => <Input id={id} value={draft.id} onChange={(event) => set({ id: event.target.value })} />}
+      </Labelled>
+      <Labelled label="Name">
+        {(id) => <Input id={id} value={draft.name} onChange={(event) => set({ name: event.target.value })} />}
+      </Labelled>
+      <Labelled label="Backend">
+        {(id) => (
+          <Input id={id} value={draft.backend} onChange={(event) => set({ backend: event.target.value })} />
+        )}
+      </Labelled>
+      <Labelled label="Produces">
+        {(id) => (
+          <NativeSelect
+            id={id}
+            className="w-full"
+            value={draft.produces}
+            onChange={(event) => set({ produces: event.target.value as ManifestDraft['produces'] })}
+          >
+            {['video', 'audio', 'image', 'text'].map((type) => (
+              <NativeSelectOption key={type} value={type}>
+                {type}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        )}
+      </Labelled>
+      <Labelled label="Length">
+        {(id) => (
+          <NativeSelect
+            id={id}
+            className="w-full"
+            value={draft.duration}
+            onChange={(event) => set({ duration: event.target.value as ManifestDraft['duration'] })}
+          >
+            <NativeSelectOption value="declared">declared — a parameter sets it</NativeSelectOption>
+            <NativeSelectOption value="discovered">discovered — only the output says</NativeSelectOption>
+          </NativeSelect>
+        )}
+      </Labelled>
+      <Labelled label="Default variants">
+        {(id) => (
+          <Input
+            id={id}
+            type="number"
+            min={1}
+            max={16}
+            value={draft.defaultVariants}
+            onChange={(event) => set({ defaultVariants: Number(event.target.value) })}
+          />
+        )}
+      </Labelled>
+      <Labelled label="Surfaces">
+        {(id) => (
+          <Input
+            id={id}
+            value={draft.surfaces.join(', ')}
+            placeholder="media_browser, clip_context_menu"
+            onChange={(event) => set({ surfaces: splitList(event.target.value) })}
+          />
+        )}
+      </Labelled>
+      <Labelled label="Requires node classes">
+        {(id) => (
+          <Input
+            id={id}
+            value={draft.requires.join(', ')}
+            onChange={(event) => set({ requires: splitList(event.target.value) })}
+          />
+        )}
+      </Labelled>
+      <Labelled label="Graph file">
+        {(id) => (
+          <Input
+            id={id}
+            value={draft.graph ?? ''}
+            placeholder="not connected yet"
+            onChange={(event) => set({ graph: event.target.value === '' ? null : event.target.value })}
+          />
+        )}
+      </Labelled>
     </div>
   );
 }
@@ -443,63 +454,66 @@ function ParamRow({
 
   return (
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: numeric ? '1.2fr 1fr 0.7fr 0.7fr' : '1.2fr 1fr',
-        gap: token.space3,
-        alignItems: 'end',
-        padding: token.space3,
-        background: token.surface1,
-        borderRadius: token.radiusInset,
-        border: `1px solid ${token.borderSubtle}`,
-      }}
+      className={cn(
+        'grid items-end gap-3 rounded-md border bg-muted/50 p-3',
+        numeric ? 'grid-cols-[1.2fr_1fr_0.7fr_0.7fr]' : 'grid-cols-[1.2fr_1fr]',
+      )}
     >
-      <Field label={`Key · ${param.pointer === '' ? 'not bound' : param.pointer}`}>
-        <input
-          style={inputStyle}
-          value={param.key}
-          onChange={(event) => onEdit?.(param.id, { key: event.target.value })}
-        />
-      </Field>
-      <Field label="Type">
-        <select
-          style={inputStyle}
-          value={param.type}
-          onChange={(event) => onEdit?.(param.id, { type: event.target.value as GeneratorParamType })}
-        >
-          {PARAM_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <Labelled label={`Key · ${param.pointer === '' ? 'not bound' : param.pointer}`}>
+        {(id) => (
+          <Input
+            id={id}
+            value={param.key}
+            onChange={(event) => onEdit?.(param.id, { key: event.target.value })}
+          />
+        )}
+      </Labelled>
+      <Labelled label="Type">
+        {(id) => (
+          <NativeSelect
+            id={id}
+            className="w-full"
+            value={param.type}
+            onChange={(event) => onEdit?.(param.id, { type: event.target.value as GeneratorParamType })}
+          >
+            {PARAM_TYPES.map((type) => (
+              <NativeSelectOption key={type} value={type}>
+                {type}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        )}
+      </Labelled>
       {numeric && (
         <>
-          <Field label="Min">
-            <input
-              type="number"
-              style={inputStyle}
-              value={param.min ?? ''}
-              onChange={(event) =>
-                onEdit?.(param.id, {
-                  min: event.target.value === '' ? undefined : Number(event.target.value),
-                })
-              }
-            />
-          </Field>
-          <Field label="Max">
-            <input
-              type="number"
-              style={inputStyle}
-              value={param.max ?? ''}
-              onChange={(event) =>
-                onEdit?.(param.id, {
-                  max: event.target.value === '' ? undefined : Number(event.target.value),
-                })
-              }
-            />
-          </Field>
+          <Labelled label="Min">
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                value={param.min ?? ''}
+                onChange={(event) =>
+                  onEdit?.(param.id, {
+                    min: event.target.value === '' ? undefined : Number(event.target.value),
+                  })
+                }
+              />
+            )}
+          </Labelled>
+          <Labelled label="Max">
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                value={param.max ?? ''}
+                onChange={(event) =>
+                  onEdit?.(param.id, {
+                    max: event.target.value === '' ? undefined : Number(event.target.value),
+                  })
+                }
+              />
+            )}
+          </Labelled>
         </>
       )}
     </div>
@@ -516,11 +530,13 @@ function Outputs({
   readonly onChange?: (draft: ManifestDraft) => void;
 }): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Outputs</SectionCaption>
-        <div style={{ flex: 1 }} />
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Outputs</span>
         <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
           onClick={() =>
             onChange?.({
               ...draft,
@@ -531,52 +547,55 @@ function Outputs({
             })
           }
         >
+          <PlusIcon />
           Add output
         </Button>
       </div>
 
       {draft.outputs.map((output, index) => (
-        <div
-          key={output.key}
-          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: token.space3, alignItems: 'end' }}
-        >
-          <Field label="Key">
-            <input
-              style={inputStyle}
-              value={output.key}
-              onChange={(event) =>
-                onChange?.({
-                  ...draft,
-                  outputs: draft.outputs.map((entry, position) =>
-                    position === index ? { ...entry, key: event.target.value } : entry,
-                  ),
-                })
-              }
-            />
-          </Field>
-          <Field label="Node">
-            <select
-              style={inputStyle}
-              value={output.node ?? ''}
-              onChange={(event) =>
-                onChange?.({
-                  ...draft,
-                  outputs: draft.outputs.map((entry, position) =>
-                    position === index
-                      ? { ...entry, node: event.target.value === '' ? null : event.target.value }
-                      : entry,
-                  ),
-                })
-              }
-            >
-              <option value="">not bound yet</option>
-              {nodeIds.map((nodeId) => (
-                <option key={nodeId} value={nodeId}>
-                  {nodeId}
-                </option>
-              ))}
-            </select>
-          </Field>
+        <div key={output.key} className="grid grid-cols-2 items-end gap-3">
+          <Labelled label="Key">
+            {(id) => (
+              <Input
+                id={id}
+                value={output.key}
+                onChange={(event) =>
+                  onChange?.({
+                    ...draft,
+                    outputs: draft.outputs.map((entry, position) =>
+                      position === index ? { ...entry, key: event.target.value } : entry,
+                    ),
+                  })
+                }
+              />
+            )}
+          </Labelled>
+          <Labelled label="Node">
+            {(id) => (
+              <NativeSelect
+                id={id}
+                className="w-full"
+                value={output.node ?? ''}
+                onChange={(event) =>
+                  onChange?.({
+                    ...draft,
+                    outputs: draft.outputs.map((entry, position) =>
+                      position === index
+                        ? { ...entry, node: event.target.value === '' ? null : event.target.value }
+                        : entry,
+                    ),
+                  })
+                }
+              >
+                <NativeSelectOption value="">not bound yet</NativeSelectOption>
+                {nodeIds.map((nodeId) => (
+                  <NativeSelectOption key={nodeId} value={nodeId}>
+                    {nodeId}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            )}
+          </Labelled>
         </div>
       ))}
     </div>
@@ -594,22 +613,25 @@ function Issues({ issues }: { readonly issues: readonly DraftIssue[] }): ReactNo
   if (issues.length === 0) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <SectionCaption>Problems</SectionCaption>
-      <ul aria-label="Draft problems" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Problems</span>
+      <ItemGroup aria-label="Draft problems" role="list" className="gap-0.5">
         {issues.map((issue) => (
-          <li
+          <Item
             key={`${issue.severity}-${issue.path}-${issue.message}`}
-            style={{ display: 'flex', gap: token.space2, alignItems: 'baseline', padding: '2px 0' }}
+            role="listitem"
+            size="xs"
+            className="py-0.5"
           >
-            <Badge tone={issue.severity === 'error' ? 'danger' : 'warn'}>{issue.severity}</Badge>
-            <Mono tone={token.textGhost}>{issue.path}</Mono>
-            <span style={{ font: `400 11.5px ${token.fontUi}`, color: token.textSecondary }}>
-              {issue.message}
-            </span>
-          </li>
+            <Badge variant={issue.severity === 'error' ? 'destructive' : 'outline'}>
+              <TriangleAlertIcon />
+              {issue.severity}
+            </Badge>
+            <span className="font-mono text-xs text-muted-foreground">{issue.path}</span>
+            <span className="text-sm">{issue.message}</span>
+          </Item>
         ))}
-      </ul>
+      </ItemGroup>
     </div>
   );
 }
@@ -625,21 +647,11 @@ function Preview({ draft }: { readonly draft: ManifestDraft }): ReactNode {
   const json = useMemo(() => JSON.stringify(draftManifestJson(draft), null, 2), [draft]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space2 }}>
-      <SectionCaption>Manifest</SectionCaption>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Manifest</span>
       <pre
         aria-label="Manifest preview"
-        style={{
-          margin: 0,
-          padding: token.space4,
-          background: token.bgCanvas,
-          border: `1px solid ${token.borderSubtle}`,
-          borderRadius: token.radiusInset,
-          color: token.textFaint,
-          font: token.textMeta,
-          maxHeight: 260,
-          overflow: 'auto',
-        }}
+        className="max-h-65 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs text-muted-foreground"
       >
         {json}
       </pre>

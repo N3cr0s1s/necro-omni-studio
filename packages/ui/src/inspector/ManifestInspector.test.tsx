@@ -63,7 +63,9 @@ describe('promoting inputs', () => {
 
   it('shows a promoted input as ticked', () => {
     renderInspector({ draft: promote(usable(), literals[1]!) });
-    expect((screen.getByLabelText('steps on KSampler 3') as HTMLInputElement).checked).toBe(true);
+    // Base UI's checkbox is a button carrying `aria-checked`, not an `<input>` — so the tick is read
+    // off the accessibility tree, which is also where a user of one would find it.
+    expect(screen.getByLabelText('steps on KSampler 3').getAttribute('aria-checked')).toBe('true');
   });
 
   it('reports an untick as a demotion, by the parameter´s id', async () => {

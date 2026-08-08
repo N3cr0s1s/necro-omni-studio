@@ -18,6 +18,9 @@ export default defineConfig({
       'apps/desktop/src/**/*.test.tsx',
     ],
     environment: 'node',
+    // A DOM gap rather than a preference: Base UI constructs a `PointerEvent`, which jsdom does not
+    // implement. The file is a no-op outside a DOM environment.
+    setupFiles: ['./test/jsdom-pointer-events.ts'],
     clearMocks: true,
     restoreMocks: true,
     coverage: {
