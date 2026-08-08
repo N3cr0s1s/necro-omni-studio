@@ -132,10 +132,14 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
       graphs in `docs/comfy/`.** 25 tests.
 - [x] Variant planning: seed constraints, sequential default, batch splitting.
       19 tests.
-- [ ] Job queue: groups + runs, progress, cancellation
+- [x] Job queue: groups + runs, progress, cancellation, partial results, GPU
+      serialization. 31 tests.
+- [x] Mock backend — a shipped artifact, not a fixture: makes the framework
+      demonstrable and testable with no GPU and no ComfyUI, which is why the spec
+      separates M9 from M10.
 - [x] GPU semaphore: serialized, idempotent release, cancellable waits, status
       reporting. 16 tests.
-- [ ] Mock backend for framework tests
+
 - [ ] Registry-driven parameter panel UI
 - [ ] In-place variant picking on the timeline
 - [ ] Manifest inspector
@@ -158,10 +162,10 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–6 complete (M1–M8). Phase 7 in progress — manifest contracts, validator,
-registry, variant planning and the GPU semaphore are done; the job queue and the
-generator panel UI remain.**
-**920 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–6 complete (M1–M8). Phase 7 nearly complete — the whole generator
+framework works end to end against the mock backend; only the panel UI, in-place
+variant picking and the manifest inspector remain.**
+**951 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -170,8 +174,8 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the job queue (groups + runs, progress, cancellation), then the
-registry-driven parameter panel. The Electron shell
+Next: the registry-driven parameter panel and in-place variant picking (mockups
+1c and 1d), then M10 — the ComfyUI backend implementing `GeneratorBackend`. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.
@@ -301,6 +305,22 @@ the media browser plus a full timeline from mockup 1a.
   backend fails loudly, rather than emptied into a subtly wrong expression.
 - Manifests are untrusted JSON, so the registry tolerates missing arrays: one
   malformed file must not break the menu for every other generator.
+- **One queue for every generator type.** The machinery is identical — only the
+  importer that lands the output differs — and the GPU semaphore has to serialize
+  across all of them anyway. A per-type queue would be a second place for the same
+  bug.
+- `partial` is a **first-class group status**, not an error. Two of three variants
+  succeeding still gives the user something to choose from; reporting it as failed
+  would hide two usable results.
+- A cancelled run is **not** a failed run. Failed runs are worth surfacing;
+  cancelled ones are noise the user caused deliberately.
+- A dying progress stream does **not** fail the run — the output may exist, so
+  collection is still attempted.
+- Group progress counts failed and cancelled runs as **settled**, or the bar sticks
+  below 100% after everything finished and reads as a hang.
+- The `GraphPatcher` is injected, so the queue is testable with a mock backend and
+  no graph at all — which is exactly how the spec wants M9 verified before M10
+  exists.
 
 ### Export rules (keep these)
 
@@ -818,6 +838,17 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   manifests arrive as untrusted JSON, so the registry now tolerates missing arrays.
   One malformed file must not break the menu for every other generator — the same
   rule the effect registry already follows.
+
+- 2026-08-08: Job queue and mock backend. 31 queue tests, all green first run, and
+  the generator framework now works end to end **without ComfyUI or a GPU** — which
+  is the separation the spec asks for between M9 and M10.
+
+  The mock backend is deliberately capable of misbehaving: configurable submit and
+  collect failures, delays and cancellation. A mock that only ever succeeds would
+  leave the interesting half of the queue untested, and the queue's error paths are
+  most of its value. `failSubmitOn` takes specific run indices rather than a
+  fail-everything switch, because the case worth testing is one variant of three
+  failing — which is what exercises the `partial` status.
 
   Also resolved the recurring `exactOptionalPropertyTypes` friction properly:
   component callback props are now declared `(() => void) | undefined` rather than
