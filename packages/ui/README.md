@@ -68,13 +68,12 @@ any palette in a way a hand-picked amber would not.
 
 ## Deviations from the registry as shipped
 
-Kept to a minimum, and listed here because they are invisible otherwise. If a `shadcn add` overwrites
-one, `npm run typecheck` fails and it needs re-applying:
+None. Every file in `src/components/ui/` is byte-for-byte what `shadcn add` wrote, which is what makes
+`shadcn diff` meaningful and an upgrade a real diff rather than a merge.
 
-- `ui/sonner.tsx` — `theme={theme as NonNullable<ToasterProps['theme']>}`. The repository compiles
-  with `exactOptionalPropertyTypes`, under which passing an explicit `undefined` to an optional prop
-  is an error; the value is already defaulted to `"system"` one line above, so the assertion only
-  tells the compiler what the code already guarantees.
+`sonner` is deliberately **not** installed: it was the one component that needed a patch to compile
+under `exactOptionalPropertyTypes`, and nothing in this application raises a toast. `shadcn add sonner`
+brings it back in one command on the day something does.
 
 ## Adding a component
 
