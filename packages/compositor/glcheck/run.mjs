@@ -43,6 +43,14 @@ const checks = {
   'no GL errors':                            Object.values(r ?? {}).every((v) => v.glError === undefined || v.glError === 0),
   // Every shipped built-in must compile: a fresh install shows these in its menu.
   'every built-in effect compiles':          Array.isArray(r?.builtinLibrary) && r.builtinLibrary.length > 0 && r.builtinLibrary.every((b) => b.compiled),
+  // The mask path end to end: run-length counts -> RGBA -> texture -> sampler.
+  'a decoded mask uploads':                  r?.decodedMask?.uploaded === true,
+  'the decoded mask covers half the frame':  r?.decodedMask?.area === 64 * 32,
+  'masked-in pixels keep the source':        near(r?.decodedMask?.inside?.[0] ?? -1, 255),
+  'masked-out pixels are cut away':          near(r?.decodedMask?.outside?.[0] ?? -1, 0),
+  // A column-major/row-major swap would split the frame top/bottom instead of left/right, which every
+  // square fixture hides.
+  'the mask is not transposed':              near(r?.decodedMask?.top?.[0] ?? -1, 0) && near(r?.decodedMask?.bottom?.[0] ?? -1, 0),
 };
 const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
 console.log(JSON.stringify({ errors, passed: Object.keys(checks).length - failed.length, total: Object.keys(checks).length, failed, pixels: Object.fromEntries(Object.entries(r ?? {}).filter(([k]) => k !== 'builtinLibrary').map(([k, v]) => [k, v.pixel ?? v])), builtinLibrary: r?.builtinLibrary }, null, 2));

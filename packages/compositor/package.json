@@ -17,6 +17,7 @@
     "glcheck:serve": "vite --port 5200"
   },
   "devDependencies": {
-    "@nos/effects": "*"
+    "@nos/effects": "*",
+    "@nos/masks": "*"
   }
 }

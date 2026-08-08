@@ -7,3 +7,4 @@
 export * from './render-target.js';
 export * from './program-cache.js';
 export * from './gl-compositor.js';
+export * from './mask-texture.js';

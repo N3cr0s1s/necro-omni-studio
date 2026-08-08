@@ -16,12 +16,14 @@ import {
   type TextureProvider,
   createBuiltinPrograms,
   createGlCompositor,
+  createMaskTextureStore,
   createProgramCache,
   createRenderTargetPool,
   describeShaderError,
 } from '../src/index.js';
-import { clipId, effectId, effectInstanceId, frameIndex } from '@nos/core';
+import { clipId, effectId, effectInstanceId, frameIndex, maskId } from '@nos/core';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+import { encodeRle, toRgba } from '@nos/masks';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, alpha: true });
@@ -176,6 +178,13 @@ function renderAndRead(plan: RenderPlan): { pixel: number[]; stats: unknown; glE
   return { pixel: [...pixels], stats, glError: gl!.getError() };
 }
 
+/** Reads one pixel of whatever was last rendered. */
+function readAt(x: number, y: number): number[] {
+  const pixels = new Uint8Array(4);
+  gl!.readPixels(x, y, 1, 1, gl!.RGBA, gl!.UNSIGNED_BYTE, pixels);
+  return [...pixels];
+}
+
 const results: Record<string, unknown> = {};
 
 // 1. A bare layer must reproduce its source exactly.
@@ -264,5 +273,55 @@ results.programFailures = programs.failures().map((error) => ({
 }));
 
 results.builtinLibrary = builtinResults;
+
+/**
+ * The whole mask path, end to end: run-length counts → RGBA → texture → sampler.
+ *
+ * Every step here has been a real bug in some codebase: a column-major/row-major swap that transposes
+ * the mask, a decode emitting 1 instead of 255 so the mask is invisible, a texture bound to the wrong
+ * unit. A left-half mask over a red source makes all three fail loudly — the left pixel must be red and
+ * the right must be black, and a transposed mask splits top/bottom instead.
+ */
+{
+  const size = 64;
+  const bitmap = new Uint8Array(size * size);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) bitmap[y * size + x] = x < size / 2 ? 1 : 0;
+  }
+  const counts = encodeRle(bitmap, size, size);
+
+  const store = createMaskTextureStore(gl);
+  const uploaded = store.set(maskId('m_left'), {
+    width: size,
+    height: size,
+    rgba: toRgba(counts, size, size),
+  });
+
+  // Swap in a provider that serves the decoded mask rather than the flat grey stand-in.
+  const decoded: TextureProvider = {
+    textureFor: textures.textureFor.bind(textures),
+    maskTexture: () => store.get(maskId('m_left')),
+  };
+  const maskCompositor = createGlCompositor({ gl, programs, builtins, pool, textures: decoded });
+  maskCompositor.render(
+    makePlan([{ kind: 'layer', layer: layer('media/red.mp4', [pass('mask_mul', {}, 'm_left')]) }]),
+    null,
+  );
+
+  results.decodedMask = {
+    uploaded: uploaded !== undefined,
+    // Read well inside each half so linear filtering at the boundary cannot blur the assertion.
+    inside: readAt(16, 32),
+    outside: readAt(48, 32),
+    // Both read inside the masked-out half, away from the boundary so linear filtering cannot blur
+    // the answer. A transposed mask splits the frame horizontally, which makes these two differ.
+    top: readAt(48, 56),
+    bottom: readAt(48, 8),
+    area: counts.filter((_run, index) => index % 2 === 1).reduce((sum, run) => sum + run, 0),
+    glError: gl.getError(),
+  };
+  maskCompositor.dispose();
+  store.dispose();
+}
 
 (window as unknown as { __glcheck: unknown }).__glcheck = results;
