@@ -238,9 +238,20 @@ paints, `window.require` is undefined, the bridge exposes exactly its eight
 methods, and no page errors are raised. The `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) remains for component work.
 
-Next: wiring the remaining panels into the shell — the generator panel, the
-variant picker and the segmentation panel are all built and tested, and the shell
-currently mounts the media browser, the timeline and a minimal inspector.
+The shell mounts the media browser, the timeline, and a tabbed right column with
+the clip inspector, the generator panel, the variant picker and segmentation. It
+loads the project's `generators/` folder into a real registry and talks to the
+live ComfyUI instance through the main process.
+
+**Verified against the running application and the real ComfyUI**: the sidecar
+spawns and answers, the last project reopens on launch, the library loads, the
+backend reports **1102 installed node classes**, and all five manifests validate
+as `ready` with their parameters, presets and capability badges rendered entirely
+from JSON. No page errors.
+
+Next: the preview surface (the compositor is built and GL-verified but not yet
+mounted in the shell), drag-to-move on the timeline, and landing a chosen variant
+onto the timeline as a clip.
 
 ### Editing rules (keep these)
 
@@ -1056,3 +1067,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 - 2026-08-08: `npm run verify` — format, lint, typecheck and the full suite — is
   green: **1339 TypeScript tests, 136 Python tests, 22/22 compositor GL assertions
   and 19/19 rasterizer assertions.** Every phase of the plan is checked.
+
+- 2026-08-08: The shell wired up, and two bugs only a running application could
+  show.
+
+  The first was reported by the app itself: "ComfyUI is unreachable at
+  http://127.0.0.1:8188" while `curl` got a 200 from that exact URL. ComfyUI sends
+  no CORS headers, so a renderer loaded from `file://` cannot reach it at all —
+  and the failure is indistinguishable from the server being down. Backend HTTP
+  now goes through the main process, which has no CORS to satisfy and keeps
+  basic-auth credentials out of the page. The WebSocket stays in the renderer
+  because WebSockets are not subject to CORS. The ComfyUI backend needed no change
+  at all: it takes an injected transport, which is precisely what that design was
+  for.
+
+  The second was visual. Every panel sized itself to the mockups' 340 px inspector
+  width, and under the default `content-box` that width excludes padding — so each
+  overflowed its column by exactly its padding and clipped the status badge, the
+  seed lock and the Generate button off the right edge. Every unit test passed
+  throughout, because none of them lays a panel out inside a sized column. This is
+  the third time in this project that a screenshot has caught what the suite
+  structurally could not.
+
+  With both fixed, the running application validates all five shipped manifests
+  against the live ComfyUI (1102 node classes) and renders each generator's
+  parameters, presets and capability badges from its JSON alone — which is the
+  framework's central claim, demonstrated rather than asserted.
