@@ -27,6 +27,7 @@ import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
+import { KeyframeLanes } from './KeyframeLanes.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
@@ -408,6 +409,15 @@ export function App(): ReactNode {
                 setFramesPerPixel(next);
                 setScrollFrame(frameIndex(Math.max(0, scrollFrame + anchorPx * (framesPerPixel - next))));
               }}
+            />
+
+            <KeyframeLanes
+              document={drag.document}
+              {...([...selected][0] !== undefined ? { clip: [...selected][0] } : {})}
+              effects={effectRegistry}
+              viewport={viewport}
+              playhead={playhead}
+              onChange={commitDocument}
             />
           </div>
         </main>

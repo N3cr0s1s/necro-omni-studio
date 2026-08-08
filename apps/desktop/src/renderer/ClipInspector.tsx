@@ -4,8 +4,11 @@ import {
   type EffectInstance,
   type EffectInstanceId,
   type TimelineDocument,
+  animatedNumber,
   effectInstanceId,
+  frameIndex,
   isAnimated,
+  keyframeId,
   keyframeCount,
   locateClip,
 } from '@nos/core';
@@ -201,6 +204,35 @@ function EffectParams({
               {param.key}
               {animated ? ' · animated' : ''}
             </span>
+
+            {param.keyframable === true && (
+              // Animating is an explicit act. A parameter silently becoming keyframed on first edit
+              // would surprise anyone who only meant to change its value once.
+              <Button
+                onClick={() =>
+                  onChange({
+                    ...instance,
+                    params: {
+                      ...instance.params,
+                      [param.key]: animated
+                        ? constant(readNumber(value, param.default))
+                        : animatedNumber([
+                            {
+                              id: keyframeId(`${instance.id}_${param.key}_0`),
+                              frame: frameIndex(0),
+                              value: readNumber(value, param.default),
+                              ease: 'linear',
+                            },
+                          ]),
+                    },
+                  })
+                }
+                title={animated ? 'Return this to a constant value' : 'Animate this with keyframes'}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                {animated ? 'un-animate' : 'animate'}
+              </Button>
+            )}
 
             {param.type === 'bool' ? (
               <Button
