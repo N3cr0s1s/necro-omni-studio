@@ -24,6 +24,7 @@ import { insertGenerated, moveClip, splitClip, trimClipEnd, trimClipStart } from
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
 import { Button, ExportDialog, MediaBrowser, Timeline, createViewport } from '@nos/ui';
 import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
+import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { Transport } from './use-transport.js';
 import { Preview } from './Preview.js';
@@ -119,6 +120,10 @@ export function App(): ReactNode {
   // The queue patches from whatever the library last loaded, without being rebuilt — which would
   // otherwise drop every job in flight each time a manifest is edited.
   graphsRef.current = library.graphs;
+
+  // One registry for the window: the preview, the export and the inspector must agree about which
+  // effects exist and which of them compile.
+  const effectRegistry = useMemo(() => createEffectRegistry(BUILTIN_EFFECTS), []);
 
   const commitDocument = useCallback(
     (label: string, next: TimelineDocument) => {
@@ -395,6 +400,9 @@ export function App(): ReactNode {
         </main>
 
         <RightPanel
+          document={document}
+          effects={effectRegistry}
+          onChangeDocument={commitDocument}
           registry={library.registry}
           libraryProblems={library.problems}
           runtime={runtime}

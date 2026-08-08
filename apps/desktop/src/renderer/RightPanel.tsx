@@ -1,5 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { type FrameIndex, type PresetId, clipId, frameIndex, spanFromBounds, trackId } from '@nos/core';
+import type { TimelineDocument } from '@nos/core';
+import type { EffectRegistry } from '@nos/effects';
 import type {
   GeneratorManifest,
   GeneratorRegistry,
@@ -10,6 +12,7 @@ import type {
 import { acceptSelection, buildSelection } from '@nos/generators';
 import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/masks';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
+import { ClipInspector } from './ClipInspector.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
 
@@ -28,6 +31,9 @@ import type { LibraryProblem } from './use-generator-library.js';
 export type PanelTab = 'inspector' | 'generate' | 'variants' | 'segment';
 
 export interface RightPanelProps {
+  readonly document: TimelineDocument;
+  readonly effects: EffectRegistry;
+  readonly onChangeDocument: (label: string, next: TimelineDocument) => void;
   readonly registry: GeneratorRegistry | undefined;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
   readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
@@ -87,7 +93,7 @@ export function RightPanel(props: RightPanelProps): ReactNode {
       </PanelHeader>
 
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {tab === 'inspector' && <ClipInspector {...props} />}
+        {tab === 'inspector' && <InspectorTab {...props} />}
         {tab === 'generate' && <GenerateTab {...props} />}
         {tab === 'variants' && <VariantsTab {...props} />}
         {tab === 'segment' && <SegmentTab {...props} />}
@@ -96,7 +102,10 @@ export function RightPanel(props: RightPanelProps): ReactNode {
   );
 }
 
-function ClipInspector({
+function InspectorTab({
+  document,
+  effects,
+  onChangeDocument,
   selectedClip,
   canUndo,
   canRedo,
@@ -106,33 +115,41 @@ function ClipInspector({
   onRedo,
 }: RightPanelProps): ReactNode {
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Mono tone="var(--nos-text-faint)">{selectedClip ?? 'no clip selected'}</Mono>
-      <Button onClick={onSplit} disabled={selectedClip === undefined}>
-        Split at playhead
-      </Button>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Button
-          onClick={() => onNudge(-1)}
-          disabled={selectedClip === undefined}
-          title="Nudge one frame left"
-        >
-          ◀ 1f
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <ClipInspector
+        document={document}
+        {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
+        effects={effects}
+        onChange={onChangeDocument}
+      />
+
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Button onClick={onSplit} disabled={selectedClip === undefined}>
+          Split at playhead
         </Button>
-        <Button
-          onClick={() => onNudge(1)}
-          disabled={selectedClip === undefined}
-          title="Nudge one frame right"
-        >
-          1f ▶
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            onClick={() => onNudge(-1)}
+            disabled={selectedClip === undefined}
+            title="Nudge one frame left"
+          >
+            ◀ 1f
+          </Button>
+          <Button
+            onClick={() => onNudge(1)}
+            disabled={selectedClip === undefined}
+            title="Nudge one frame right"
+          >
+            1f ▶
+          </Button>
+        </div>
+        <Button onClick={onUndo} disabled={!canUndo}>
+          Undo
+        </Button>
+        <Button onClick={onRedo} disabled={!canRedo}>
+          Redo
         </Button>
       </div>
-      <Button onClick={onUndo} disabled={!canUndo}>
-        Undo
-      </Button>
-      <Button onClick={onRedo} disabled={!canRedo}>
-        Redo
-      </Button>
     </div>
   );
 }
