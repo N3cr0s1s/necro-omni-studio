@@ -46,6 +46,46 @@ const mask = (frame: number): MaskFrame => ({
 
 const session = () => beginSession(track(), frameIndex(120));
 
+describe('the frame a session is on', () => {
+  // A prompt carries the session's frame. The clip starts at 1032 and the playhead sits at 0 while a
+  // user selects it from the browser, so unclamped every point would be stamped with a frame the clip
+  // never shows — and the engine asked to seed from a picture that is not the one clicked on.
+  const ranged = () =>
+    emptyTrack(maskTrackId('m1'), clipId('c1'), spanFromBounds(frameIndex(1032), frameIndex(1122)));
+
+  it('starts inside the clip even when the playhead is before it', () => {
+    expect(beginSession(ranged(), frameIndex(0)).frame).toBe(1032);
+  });
+
+  it('starts inside the clip even when the playhead is past it', () => {
+    expect(beginSession(ranged(), frameIndex(9999)).frame).toBe(1121);
+  });
+
+  it('stays inside the clip as the playhead moves outside it', () => {
+    const session = beginSession(ranged(), frameIndex(1050));
+    expect(moveTo(session, frameIndex(0)).frame).toBe(1032);
+    expect(moveTo(session, frameIndex(5000)).frame).toBe(1121);
+  });
+
+  it('follows the playhead while it is inside', () => {
+    const session = beginSession(ranged(), frameIndex(1050));
+    expect(moveTo(session, frameIndex(1100)).frame).toBe(1100);
+  });
+
+  it('treats the range as half-open, like every other span', () => {
+    // 1122 is the first frame *after* the clip, so the last frame a point can sit on is 1121.
+    expect(moveTo(beginSession(ranged(), frameIndex(1050)), frameIndex(1122)).frame).toBe(1121);
+  });
+
+  it('returns the same session when nothing would change', () => {
+    const session = beginSession(ranged(), frameIndex(1050));
+    expect(moveTo(session, frameIndex(1050))).toBe(session);
+    // And when the clamp lands where it already is, so a playhead parked outside does not re-render.
+    const atStart = moveTo(session, frameIndex(0));
+    expect(moveTo(atStart, frameIndex(-5) as never)).toBe(atStart);
+  });
+});
+
 describe('prompts', () => {
   it('records a click', () => {
     const after = addPrompt(session(), point(120));

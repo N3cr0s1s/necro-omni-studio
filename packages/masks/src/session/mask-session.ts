@@ -32,7 +32,7 @@ export interface MaskSession {
 export function beginSession(track: MaskTrack, frame: FrameIndex): MaskSession {
   return {
     track,
-    frame,
+    frame: clampToRange(track, frame),
     propagation: track.range,
     frames: new Map(),
     running: false,
@@ -51,7 +51,23 @@ export function removePrompt(session: MaskSession, index: number): MaskSession {
 }
 
 export function moveTo(session: MaskSession, frame: FrameIndex): MaskSession {
-  return frame === session.frame ? session : { ...session, frame };
+  const clamped = clampToRange(session.track, frame);
+  return clamped === session.frame ? session : { ...session, frame: clamped };
+}
+
+/**
+ * Keeps the session's frame inside the clip it belongs to.
+ *
+ * A prompt carries the frame the session is on, and the playhead is very often somewhere else — the
+ * clip starts at 1032 and the playhead sits at 0 while a user selects it from the browser. Unclamped,
+ * every point would be stamped with a frame the clip never shows, and the engine would be asked to
+ * seed from a picture that is not the one the user clicked on. The same reason `setPropagation`
+ * clamps: a mask outside the clip is pure cost and an invisible result.
+ */
+function clampToRange(track: MaskTrack, frame: FrameIndex): FrameIndex {
+  const last = frameIndex(Math.max(track.range.start, endExclusive(track.range) - 1));
+  if (frame < track.range.start) return track.range.start;
+  return frame > last ? last : frame;
 }
 
 /**

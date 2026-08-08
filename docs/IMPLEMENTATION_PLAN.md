@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2139 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2150 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2291,3 +2291,37 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Harness note: another session's Electron was running against the same project.
   `pkill -x electron` would have taken it down; instances are now killed by the
   debugging port they were started with.
+
+- 2026-08-08: Segmentation, connected.
+
+  The sidecar has implemented SAM 2 propagation since M6 — capabilities, start, a
+  status poll, a cursored frame feed — and the panel asked it nothing. It
+  reported `available: false` with the words "connect a project to check whether
+  SAM 2 is installed", a placeholder that had outlived its placeholder-ness: a
+  project *was* connected and it still said that. It now asks, and says what the
+  engine actually answers, which on this machine is that `sam2` is not installed
+  and how to fix it.
+
+  Two things were wrong beyond the missing request. The session was built from a
+  fixed three-hundred-frame span rather than the clip's own, so a propagation
+  would have covered frames the clip never shows. And it was rebuilt inside a
+  `useMemo` keyed on the playhead, so every placed point was discarded the moment
+  the playhead moved — a second point could never be added.
+
+  Placing points needed the session above both panels: the clicks land on the
+  preview and the run starts in the inspector, and those are siblings. The
+  overlay is sized to the *picture* rather than the canvas box, which is not the
+  same rectangle — measured live at 919 px against a 1256 px box, so an
+  aspect-blind overlay would have placed every point up to 27% out. That failure
+  does not look broken; it looks like an inaccurate engine.
+
+  One genuine bug fell out of watching it: the session's frame was not clamped to
+  the clip. Selecting a clip that starts at frame 1032 while the playhead sits at
+  0 stamped every prompt with frame 0 — a frame the clip does not contain — so
+  the engine would have been asked to seed from a picture the user never clicked
+  on. Clamped now in `beginSession` and `moveTo`, for the same reason
+  `setPropagation` already clamped.
+
+  Not verifiable end to end here: `sam2` and `torch` are absent from the sidecar
+  environment, so the propagation itself has never run. Everything up to the
+  request is exercised; the run is not.

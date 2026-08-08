@@ -40,10 +40,23 @@ export interface PreviewProps {
    * without anything on screen changing.
    */
   readonly resolveAsset?: (asset: AssetPath) => AssetPath;
+  /**
+   * Drawn over the picture, given the picture's own size.
+   *
+   * How mask points are placed: they are normalized against the *frame*, so they can only be put
+   * where the frame is — and the frame is letterboxed inside the canvas, which is a rectangle
+   * nothing outside this component can compute. Handing it out is the whole point of the callback;
+   * an overlay sized to the canvas box would place every point wrong on any clip whose aspect does
+   * not match the project's.
+   *
+   * A callback rather than a node so the preview still knows nothing about masks.
+   */
+  readonly overlay?: (picture: { readonly width: number; readonly height: number }) => ReactNode;
 }
 
-export function Preview({ document: doc, frame, sidecar, resolveAsset }: PreviewProps): ReactNode {
+export function Preview({ document: doc, frame, sidecar, resolveAsset, overlay }: PreviewProps): ReactNode {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [picture, setPicture] = useState<{ width: number; height: number } | undefined>(undefined);
   const compositorRef = useRef<GlCompositor | undefined>(undefined);
   const [stats, setStats] = useState<RenderStats | undefined>(undefined);
   /** Items the plan carried, so "nothing is visible" can be told apart from "nothing was planned". */
@@ -122,6 +135,29 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset }: Preview
       });
   }, [doc, frame, effects, media]);
 
+  // The picture's own rectangle, which `object-fit: contain` decides and nothing can read back off
+  // the element. Measured rather than derived from a stored layout, because the panel is resizable
+  // and a stale rectangle would put every mask point a few pixels out with no sign that it had.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === undefined || canvas === null) return;
+    if (globalThis.ResizeObserver === undefined) return;
+
+    const measure = (): void => {
+      const box = canvas.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) {
+        setPicture(undefined);
+        return;
+      }
+      setPicture(containedSize(box.width, box.height, doc.resolution.width, doc.resolution.height));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [doc.resolution.height, doc.resolution.width]);
+
   return (
     <div
       style={{
@@ -159,6 +195,15 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset }: Preview
             background: '#000',
           }}
         />
+
+        {overlay !== undefined && picture !== undefined && (
+          // Centred over the canvas at the picture's own size, which is what `object-fit: contain`
+          // produces. Sharing the canvas's inset rather than guessing at where it sits is what keeps
+          // a placed point on the pixel it was placed on.
+          <div style={{ position: 'absolute', inset: 12, display: 'grid', placeItems: 'center' }}>
+            {overlay(picture)}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 12, padding: '4px 12px', alignItems: 'center' }}>
@@ -184,4 +229,23 @@ export function Preview({ document: doc, frame, sidecar, resolveAsset }: Preview
       </div>
     </div>
   );
+}
+
+/**
+ * The rectangle a picture of a given aspect fills inside a box, letterboxed.
+ *
+ * The same arithmetic `object-fit: contain` does, exported so it can be checked against the cases
+ * that matter: a wide frame in a tall box, a tall frame in a wide box, and an exact match. Getting
+ * it wrong does not look broken — it places mask points a few percent off, which reads as the
+ * segmentation engine being inaccurate.
+ */
+export function containedSize(
+  boxWidth: number,
+  boxHeight: number,
+  contentWidth: number,
+  contentHeight: number,
+): { readonly width: number; readonly height: number } {
+  if (contentWidth <= 0 || contentHeight <= 0) return { width: boxWidth, height: boxHeight };
+  const scale = Math.min(boxWidth / contentWidth, boxHeight / contentHeight);
+  return { width: contentWidth * scale, height: contentHeight * scale };
 }

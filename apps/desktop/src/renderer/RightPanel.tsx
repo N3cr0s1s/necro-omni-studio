@@ -1,5 +1,5 @@
-import { type ReactNode, useMemo, useState } from 'react';
-import { type FrameIndex, type PresetId, clipId, frameIndex, spanFromBounds, trackId } from '@nos/core';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type FrameIndex, type PresetId, clipId, locateClip, trackId } from '@nos/core';
 import type { TimelineDocument } from '@nos/core';
 import type { EffectRegistry } from '@nos/effects';
 import type {
@@ -10,7 +10,7 @@ import type {
   SelectionOutcome,
 } from '@nos/generators';
 import { acceptSelection, buildSelection } from '@nos/generators';
-import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/masks';
+import type { MaskWorkspace } from './use-mask-workspace.js';
 import type { DirectoryNode } from '@nos/media';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
 import { assetChoicesFrom } from './generator-assets.js';
@@ -44,6 +44,16 @@ export interface RightPanelProps {
   readonly registry: GeneratorRegistry | undefined;
   /** The project folder, so a generator's asset inputs can be chosen from the files that exist. */
   readonly projectTree: DirectoryNode | undefined;
+  /**
+   * The mask session for the selected clip, and everything that acts on it.
+   *
+   * Held above this panel because the *points* are placed on the preview, which is its sibling — a
+   * session owned here could not be drawn there, and two sessions would disagree the moment either
+   * was edited.
+   */
+  readonly masks: MaskWorkspace;
+  /** Which panel is open, so the preview knows whether it is placing mask points. */
+  readonly onTabChange?: (tab: string) => void;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
   readonly onAuthorManifest: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
@@ -78,6 +88,12 @@ export interface RightPanelProps {
 
 export function RightPanel(props: RightPanelProps): ReactNode {
   const [tab, setTab] = useState<PanelTab>('inspector');
+
+  // Reported upward because the preview changes behaviour with it: mask points are placed on the
+  // picture, and only while the panel that uses them is open.
+  useEffect(() => {
+    props.onTabChange?.(tab);
+  }, [props, tab]);
 
   return (
     <aside
@@ -494,23 +510,14 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
  * Bound to the selected clip, because a mask belongs to one clip's range. With nothing selected there is
  * no range to propagate over, and the panel says so rather than offering a control that cannot work.
  */
-function SegmentTab({ selectedClip, playhead }: RightPanelProps): ReactNode {
-  const [session, setSession] = useState<MaskSession | undefined>(undefined);
+function SegmentTab({ document, selectedClip, masks }: RightPanelProps): ReactNode {
+  const located = useMemo(
+    () => (selectedClip === undefined ? undefined : locateClip(document, clipId(selectedClip))),
+    [document, selectedClip],
+  );
 
-  const active = useMemo(() => {
-    if (selectedClip === undefined) return undefined;
-    if (session?.track.clip === selectedClip) return session;
-    return beginSession(
-      emptyTrack(
-        maskTrackId(`${selectedClip}-mask`),
-        clipId(selectedClip),
-        spanFromBounds(frameIndex(0), frameIndex(300)),
-      ),
-      playhead,
-    );
-  }, [selectedClip, session, playhead]);
-
-  if (active === undefined) {
+  const session = masks.session;
+  if (session === undefined) {
     return (
       <div style={{ padding: 16 }}>
         <Mono tone="var(--nos-text-faint)">select a clip to segment</Mono>
@@ -518,19 +525,24 @@ function SegmentTab({ selectedClip, playhead }: RightPanelProps): ReactNode {
     );
   }
 
+  const source = located?.clip.kind === 'video' ? located.clip.source.asset : undefined;
+
   return (
-    <SegmentationPanel
-      session={active}
-      capabilities={{
-        available: false,
-        propagates: false,
-        // Reported rather than hidden. The sidecar answers `/segment/capabilities` with the real reason
-        // once a project is open; this is the pre-connection state.
-        detail: 'connect a project to check whether SAM 2 is installed',
-      }}
-      onChangePropagation={(span) =>
-        setSession((current) => (current ? { ...current, propagation: span } : current))
-      }
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <SegmentationPanel
+        session={session}
+        {...(masks.capabilities !== undefined ? { capabilities: masks.capabilities } : {})}
+        {...(source !== undefined ? { onRun: () => masks.run(source) } : {})}
+        onCancel={masks.cancel}
+        onRemovePrompt={masks.removePrompt}
+        onChangePropagation={masks.setPropagation}
+      />
+
+      {masks.error !== undefined && (
+        <Mono tone="var(--nos-danger)" style={{ padding: '0 16px' }}>
+          {masks.error}
+        </Mono>
+      )}
+    </div>
   );
 }

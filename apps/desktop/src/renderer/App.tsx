@@ -48,6 +48,7 @@ import {
   ContextMenu,
   ExportDialog,
   LevelMeter,
+  MaskPointOverlay,
   MediaBrowser,
   TimecodeField,
   Timeline,
@@ -73,6 +74,7 @@ import { useTimelineView } from './use-timeline-view.js';
 import { useAssetDetail, useCacheListing } from './use-asset-detail.js';
 import { useProvenanceWriter } from './use-provenance-writer.js';
 import { useProjectFiles } from './use-project-files.js';
+import { useMaskWorkspace } from './use-mask-workspace.js';
 import { type BrowserMenuAction, browserMenuItems } from './browser-menu.js';
 import { useCacheStats } from './use-cache-stats.js';
 import { BrowserDetail } from './BrowserDetail.js';
@@ -497,6 +499,16 @@ export function App(): ReactNode {
   useProvenanceWriter(runtime.snapshot, library.registry, bridge);
 
   const files = useProjectFiles(bridge);
+
+  // Held here because the points are placed on the preview and the run is started in the inspector,
+  // and those are siblings — a session owned by either could not be drawn by the other.
+  const [rightTab, setRightTab] = useState<string>('inspector');
+  const selectedClip = [...selected][0];
+  const masks = useMaskWorkspace(document, selectedClip, playhead, sidecar);
+  // The overlay only while the segmentation panel is open. A preview that was click-to-place at all
+  // times would swallow every click meant for the picture, and the crosshair would be a promise
+  // about a mode the user is not in.
+  const segmenting = rightTab === 'segment';
   const [browserMenu, setBrowserMenu] = useState<
     { path: string; isDirectory: boolean; x: number; y: number } | undefined
   >(undefined);
@@ -868,6 +880,19 @@ export function App(): ReactNode {
             frame={playhead}
             sidecar={sidecar}
             resolveAsset={proxies.resolve}
+            {...(segmenting && masks.session !== undefined
+              ? {
+                  overlay: (picture: { readonly width: number; readonly height: number }) => (
+                    <MaskPointOverlay
+                      session={masks.session!}
+                      width={picture.width}
+                      height={picture.height}
+                      onAddPrompt={masks.addPrompt}
+                      onRemovePrompt={masks.removePrompt}
+                    />
+                  ),
+                }
+              : {})}
           />
 
           {/* Under the picture it controls. In the title bar it sat among file and project actions,
@@ -985,6 +1010,8 @@ export function App(): ReactNode {
 
         <RightPanel
           projectTree={tree.tree}
+          masks={masks}
+          onTabChange={setRightTab}
           document={document}
           effects={effectRegistry}
           onChangeDocument={commitDocument}
