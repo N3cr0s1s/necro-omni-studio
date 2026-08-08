@@ -729,6 +729,13 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Export rules (keep these)
 
+- Preview and export share **one effect registry**, not one compositor and two registries. The export
+  built its own from the builtins, so a project-local effect rendered in the preview and vanished from
+  the delivered file. Anything the preview merges in, the export must be handed.
+- Adding a source of content to the preview means adding it to the export in the same change.
+  Project-local effects were built for one and not the other, and the gap survived several rounds
+  because every individual piece worked.
+
 - The delivered file carries the **sound**. The encoder was sent an audio codec and a bitrate and never
   an audio stream, so every export was silent — an interface (`OfflineMixRenderer`) declared for the
   job and never implemented. A codec setting is not an audio path.
