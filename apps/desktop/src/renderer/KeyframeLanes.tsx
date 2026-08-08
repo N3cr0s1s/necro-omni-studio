@@ -1,7 +1,8 @@
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import {
   type AnimatableNumber,
-  type EffectInstance,
+  type Clip,
+  type ClipTransform,
   type FrameIndex,
   type Keyframe,
   type KeyframeId,
@@ -45,11 +46,21 @@ export interface KeyframeLanesProps {
 /** The animated variant specifically: a lane only exists for a parameter that has keyframes. */
 type AnimatedParam = Extract<AnimatableNumber, { kind: 'animated' }>;
 
+/**
+ * One lane.
+ *
+ * `write` is a closure rather than a discriminant because a lane's parameter lives in one of three
+ * places — an effect's params, the clip's transform, or a text clip's `reveal` channel — and every other
+ * part of this component treats them identically. Encoding the difference once, where it is created,
+ * keeps the drag, the easing cycle and the removal from each needing their own three-way branch.
+ */
 interface LaneTarget {
-  readonly instance: EffectInstance;
-  readonly paramKey: string;
+  readonly id: string;
   readonly label: string;
   readonly param: AnimatedParam;
+  write(document: TimelineDocument, next: AnimatableNumber): TimelineDocument;
+  /** Reads this lane's parameter from a document, for a drag that re-applies to the gesture's base. */
+  read(document: TimelineDocument): AnimatedParam | undefined;
 }
 
 export function KeyframeLanes({
@@ -74,27 +85,67 @@ export function KeyframeLanes({
 
   const shown = drag?.preview ?? document;
   const located = clip === undefined ? undefined : locateClip(shown, clip as never);
-  const lanes: readonly LaneTarget[] =
-    located === undefined
-      ? []
-      : located.clip.effects.flatMap((instance) =>
-          Object.entries(instance.params)
-            .filter(([, value]) => isAnimated(value as AnimatableNumber))
-            .map(([paramKey, value]) => ({
-              instance,
-              paramKey,
-              label: `${effects.manifestFor(instance.effect)?.name ?? instance.effect} · ${paramKey}`,
-              param: value as AnimatedParam,
-            })),
-        );
+  const clipKey = located?.clip.id;
+
+  const lanes: readonly LaneTarget[] = useMemo(() => {
+    if (located === undefined || clipKey === undefined) return [];
+    const found: LaneTarget[] = [];
+
+    // The clip's own transform first: a text preset animates position and opacity, and those are the
+    // markers a user reaches for after applying one.
+    const transform = clipTransformOf(located.clip);
+    if (transform !== undefined) {
+      for (const channel of TRANSFORM_CHANNELS) {
+        const value = transform[channel];
+        if (!isAnimated(value)) continue;
+        found.push({
+          id: `transform-${channel}`,
+          label: `transform · ${channel}`,
+          param: value,
+          write: (target, next) => writeTransform(target, clipKey, channel, next),
+          read: (target) => readTransform(target, clipKey, channel),
+        });
+      }
+    }
+
+    // `reveal` is its own channel, not a transform: typewriter changes the number of visible glyphs,
+    // which no transform can express.
+    if (
+      located.clip.kind === 'text' &&
+      located.clip.reveal !== undefined &&
+      isAnimated(located.clip.reveal)
+    ) {
+      found.push({
+        id: 'reveal',
+        label: 'text · reveal',
+        param: located.clip.reveal,
+        write: (target, next) => writeReveal(target, clipKey, next),
+        read: (target) => readReveal(target, clipKey),
+      });
+    }
+
+    for (const instance of located.clip.effects) {
+      for (const [paramKey, value] of Object.entries(instance.params)) {
+        if (!isAnimated(value as AnimatableNumber)) continue;
+        found.push({
+          id: `${instance.id}-${paramKey}`,
+          label: `${effects.manifestFor(instance.effect)?.name ?? instance.effect} · ${paramKey}`,
+          param: value as AnimatedParam,
+          write: (target, next) => replaceParam(target, clipKey, instance.id, paramKey, next),
+          read: (target) => readParam(target, clipKey, instance.id, paramKey),
+        });
+      }
+    }
+
+    return found;
+  }, [located, clipKey, effects]);
 
   /** A discrete edit: one action, one history entry. */
   const commit = useCallback(
     (target: LaneTarget, next: AnimatableNumber, label: string): void => {
-      if (located === undefined) return;
-      onChange(label, replaceParam(document, located.clip.id, target.instance.id, target.paramKey, next));
+      onChange(label, target.write(document, next));
     },
-    [document, located, onChange],
+    [document, onChange],
   );
 
   if (located === undefined || lanes.length === 0) return null;
@@ -103,7 +154,7 @@ export function KeyframeLanes({
     <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${token.borderSubtle}` }}>
       {lanes.map((target) => (
         <KeyframeLane
-          key={`${target.instance.id}-${target.paramKey}`}
+          key={target.id}
           label={target.label}
           keyframes={target.param.keyframes}
           clipStart={located.clip.span.start}
@@ -116,18 +167,11 @@ export function KeyframeLanes({
             setDrag((current) => {
               const base = current?.base ?? document;
               const from = locateClip(base, located.clip.id);
-              if (from === undefined) return current;
-
-              const original = from.clip.effects.find((instance) => instance.id === target.instance.id)
-                ?.params[target.paramKey];
-              if (original === undefined || !isAnimated(original as AnimatableNumber)) return current;
+              const original = target.read(base);
+              if (from === undefined || original === undefined) return current;
 
               const relative = frameIndex(Math.max(0, toFrame - from.clip.span.start));
-              const moved = moveKeyframe(original as AnimatedParam, id, relative);
-              return {
-                base,
-                preview: replaceParam(base, from.clip.id, target.instance.id, target.paramKey, moved),
-              };
+              return { base, preview: target.write(base, moveKeyframe(original, id, relative)) };
             });
           }}
           onDragEnd={() => {
@@ -205,6 +249,76 @@ function cycleEasing(param: AnimatedParam, id: KeyframeId): AnimatableNumber {
       return { ...keyframe, ease: EASINGS[(index + 1) % EASINGS.length] ?? 'linear' };
     }),
   );
+}
+
+/** Transform channels a keyframe lane can show. `rotation` included: a title can spin. */
+const TRANSFORM_CHANNELS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;
+
+type TransformChannel = (typeof TRANSFORM_CHANNELS)[number];
+
+function clipTransformOf(clip: Clip): ClipTransform | undefined {
+  return clip.kind === 'audio' ? undefined : clip.transform;
+}
+
+function mapClip(
+  document: TimelineDocument,
+  clipKey: string,
+  change: (clip: Clip) => Clip,
+): TimelineDocument {
+  return {
+    ...document,
+    sequence: {
+      ...document.sequence,
+      tracks: document.sequence.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((entry) => (entry.id === clipKey ? change(entry as Clip) : entry)),
+      })) as TimelineDocument['sequence']['tracks'],
+    },
+  };
+}
+
+function writeTransform(
+  document: TimelineDocument,
+  clipKey: string,
+  channel: TransformChannel,
+  value: AnimatableNumber,
+): TimelineDocument {
+  return mapClip(document, clipKey, (clip) =>
+    clip.kind === 'audio' ? clip : { ...clip, transform: { ...clip.transform, [channel]: value } },
+  );
+}
+
+function readTransform(
+  document: TimelineDocument,
+  clipKey: string,
+  channel: TransformChannel,
+): AnimatedParam | undefined {
+  const located = locateClip(document, clipKey as never);
+  const transform = located === undefined ? undefined : clipTransformOf(located.clip);
+  const value = transform?.[channel];
+  return value !== undefined && isAnimated(value) ? value : undefined;
+}
+
+function writeReveal(document: TimelineDocument, clipKey: string, value: AnimatableNumber): TimelineDocument {
+  return mapClip(document, clipKey, (clip) => (clip.kind === 'text' ? { ...clip, reveal: value } : clip));
+}
+
+function readReveal(document: TimelineDocument, clipKey: string): AnimatedParam | undefined {
+  const located = locateClip(document, clipKey as never);
+  const clip = located?.clip;
+  if (clip === undefined || clip.kind !== 'text' || clip.reveal === undefined) return undefined;
+  return isAnimated(clip.reveal) ? clip.reveal : undefined;
+}
+
+function readParam(
+  document: TimelineDocument,
+  clipKey: string,
+  instanceId: string,
+  paramKey: string,
+): AnimatedParam | undefined {
+  const located = locateClip(document, clipKey as never);
+  const value = located?.clip.effects.find((entry) => entry.id === instanceId)?.params[paramKey];
+  return value !== undefined && isAnimated(value as AnimatableNumber) ? (value as AnimatedParam) : undefined;
 }
 
 function replaceParam(

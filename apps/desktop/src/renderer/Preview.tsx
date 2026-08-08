@@ -12,6 +12,7 @@ import {
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { Mono } from '@nos/ui';
 import { createMediaTextures } from './media-textures.js';
+import { textCacheKeyFor, textClipsOf } from './text-plan.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 
 /**
@@ -37,6 +38,9 @@ export function Preview({ document: doc, frame, sidecar }: PreviewProps): ReactN
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const compositorRef = useRef<GlCompositor | undefined>(undefined);
   const [stats, setStats] = useState<RenderStats | undefined>(undefined);
+  /** Items the plan carried, so "nothing is visible" can be told apart from "nothing was planned". */
+  const [planned, setPlanned] = useState(0);
+  const [textProblems, setTextProblems] = useState<readonly { clip: string; detail: string }[]>([]);
   const [glError, setGlError] = useState<string | undefined>(undefined);
 
   const effects = useMemo(() => createEffectRegistry(BUILTIN_EFFECTS), []);
@@ -85,12 +89,26 @@ export function Preview({ document: doc, frame, sidecar }: PreviewProps): ReactN
     canvas.width = doc.resolution.width;
     canvas.height = doc.resolution.height;
 
-    const plan = buildRenderPlan({ document: doc, frame, effects });
-    void media.prepare(plan.items).then(() => {
-      const current = compositorRef.current;
-      if (current === undefined) return;
-      setStats(current.render(plan, null));
+    // Text is registered from the document, because the plan deliberately carries only a cache key —
+    // the compositor knows nothing about fonts and must not have to.
+    const plan = buildRenderPlan({
+      document: doc,
+      frame,
+      effects,
+      textCacheKey: textCacheKeyFor(doc.resolution),
     });
+    void media
+      .registerText(textClipsOf(doc), doc.resolution)
+      .then((problems) => {
+        setTextProblems(problems);
+        return media.prepare(plan.items);
+      })
+      .then(() => {
+        const current = compositorRef.current;
+        if (current === undefined) return;
+        setPlanned(plan.items.length);
+        setStats(current.render(plan, null));
+      });
   }, [doc, frame, effects, media]);
 
   return (
@@ -126,11 +144,15 @@ export function Preview({ document: doc, frame, sidecar }: PreviewProps): ReactN
         {glError === undefined && (
           <>
             <Mono tone="var(--nos-text-faint)">{`frame ${frame}`}</Mono>
+            <Mono tone="var(--nos-text-faint)">{`${planned} layers`}</Mono>
             <Mono tone="var(--nos-text-faint)">{`${stats?.passesExecuted ?? 0} passes`}</Mono>
             {/* Skipped layers are reported rather than hidden: a black preview with no explanation is
                 indistinguishable from a broken one. */}
             {(stats?.layersSkipped ?? 0) > 0 && (
               <Mono tone="var(--nos-warn)">{`${stats?.layersSkipped} layers still decoding`}</Mono>
+            )}
+            {textProblems.length > 0 && (
+              <Mono tone="var(--nos-danger)">{`title: ${textProblems[0]?.detail ?? ''}`}</Mono>
             )}
             {(stats?.passthroughs.length ?? 0) > 0 && (
               <Mono tone="var(--nos-danger)">{`${stats?.passthroughs.length} effects failed to compile`}</Mono>

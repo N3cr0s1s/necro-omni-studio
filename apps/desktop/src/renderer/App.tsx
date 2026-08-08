@@ -29,6 +29,7 @@ import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contra
 import type { Transport } from './use-transport.js';
 import { KeyframeLanes } from './KeyframeLanes.js';
 import { ManifestAuthoring } from './ManifestAuthoring.js';
+import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
@@ -314,6 +315,45 @@ export function App(): ReactNode {
     });
   }, [document, project?.name]);
 
+  /**
+   * Adds a title at the playhead.
+   *
+   * On the text track, because that is where a title belongs and asking the user which track to put it
+   * on is a question with one sensible answer.
+   */
+  const addText = useCallback(() => {
+    store.commit('add title', (current) => {
+      const track = current.sequence.tracks.find((entry) => entry.kind === 'text');
+      if (track === undefined) return current;
+
+      const id = `text_${playhead}_${track.clips.length + 1}`;
+      const clip = createTextClip(id, playhead);
+      const collides = track.clips.some(
+        (entry) =>
+          entry.span.start < clip.span.start + clip.span.duration &&
+          clip.span.start < entry.span.start + entry.span.duration,
+      );
+      if (collides) {
+        // Rejected rather than nudged: a title landing somewhere the user did not point at is worse
+        // than one that does not appear, because the second is obvious and the first is not.
+        setError('there is already a title at the playhead');
+        return current;
+      }
+
+      setError(undefined);
+      setSelected(new Set([id]));
+      return {
+        ...current,
+        sequence: {
+          ...current.sequence,
+          tracks: current.sequence.tracks.map((entry) =>
+            entry.id === track.id ? ({ ...entry, clips: [...entry.clips, clip] } as typeof entry) : entry,
+          ),
+        },
+      };
+    });
+  }, [playhead, store]);
+
   const razor = useCallback(() => {
     const target = [...selected][0];
     if (target === undefined) return;
@@ -449,6 +489,7 @@ export function App(): ReactNode {
           onAcceptVariant={acceptVariant}
           onUndo={() => store.undo()}
           onRedo={() => store.redo()}
+          onAddText={addText}
         />
       </div>
     </div>

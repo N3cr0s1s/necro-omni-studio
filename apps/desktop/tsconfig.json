@@ -45,6 +45,9 @@
     },
     {
       "path": "../../packages/backend-comfyui"
+    },
+    {
+      "path": "../../packages/text"
     }
   ]
 }

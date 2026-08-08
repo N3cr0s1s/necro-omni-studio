@@ -13,6 +13,7 @@ import { acceptSelection, buildSelection } from '@nos/generators';
 import { type MaskSession, beginSession, emptyTrack, maskTrackId } from '@nos/masks';
 import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
 import { ClipInspector } from './ClipInspector.js';
+import { TextInspector } from './TextInspector.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
 
@@ -49,6 +50,7 @@ export interface RightPanelProps {
   readonly onNudge: (delta: number) => void;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
+  readonly onAddText: () => void;
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
@@ -115,9 +117,18 @@ function InspectorTab({
   onNudge,
   onUndo,
   onRedo,
+  onAddText,
 }: RightPanelProps): ReactNode {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Text properties come first for a text clip: the effect stack applies to it too, but the words
+          are what the user opened the inspector to change. */}
+      <TextInspector
+        document={document}
+        {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
+        onChange={onChangeDocument}
+      />
+
       <ClipInspector
         document={document}
         {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
@@ -145,6 +156,9 @@ function InspectorTab({
             1f ▶
           </Button>
         </div>
+        <Button onClick={onAddText} title="Add a title at the playhead, on the text track">
+          Add title
+        </Button>
         <Button onClick={onUndo} disabled={!canUndo}>
           Undo
         </Button>
