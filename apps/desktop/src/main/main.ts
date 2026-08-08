@@ -276,6 +276,10 @@ function registerHandlers(): void {
   });
 
   ipcMain.handle(IPC.readTextFile, async (_event, path: unknown): Promise<string | undefined> => {
+    // Nothing to read before a project is open, which is an answer rather than a fault: the renderer
+    // mounts its panels first and several of them ask immediately. Throwing turned an ordinary race
+    // into an uncaught rejection in the main process.
+    if (session.root === '') return undefined;
     const absolute = resolveInProject(requireProject(), requireString(path));
     try {
       const { readFile } = await import('node:fs/promises');
@@ -293,10 +297,19 @@ function registerHandlers(): void {
   });
 
   ipcMain.handle(IPC.listFolder, async (_event, path: unknown): Promise<readonly FolderEntry[]> => {
+    // Empty, not an error, for the same reason `readTextFile` returns nothing: a folder in a project
+    // that is not open has no entries, and the mask cache and the browser both ask on mount.
+    if (session.root === '') return [];
     const root = requireProject();
     const target = path === '' || path === undefined ? root : resolveInProject(root, requireString(path));
 
-    const entries = await readdir(target, { withFileTypes: true });
+    // A folder that has never existed has no entries. `readdir` raises `ENOENT`, which crossed the IPC
+    // boundary as a rejection and — with a closed stdout — took the main process down with it. The
+    // mask cache asks for a key's folder before anything has been written to it, which is every first
+    // segmentation of every clip, so this is the common path rather than an edge.
+    const entries = await readdir(target, { withFileTypes: true }).catch(() => undefined);
+    if (entries === undefined) return [];
+
     const results: FolderEntry[] = [];
     for (const entry of entries) {
       const absolute = join(target, entry.name);
@@ -605,6 +618,23 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(here, '..', 'renderer', 'index.html'));
   }
+}
+
+/**
+ * A closed stdout is not a reason to stop editing.
+ *
+ * When the shell is launched from a terminal that goes away — a script that exits, a pipe that is not
+ * read — the next write to `stdout` or `stderr` raises `EPIPE`. Node reports that as an *uncaught
+ * exception*, and Electron's default handler for one is a modal "A JavaScript error occurred in the
+ * main process" over the editor. So a diagnostic nobody was reading took the application down.
+ *
+ * Narrow on purpose: only `EPIPE`, only on the two streams. Everything else still crashes loudly,
+ * because a main-process fault that is genuinely a fault must not be swallowed.
+ */
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EPIPE') throw error;
+  });
 }
 
 app.whenReady().then(() => {

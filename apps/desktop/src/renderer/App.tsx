@@ -49,15 +49,12 @@ import {
   FilmIcon,
   FolderOpenIcon,
   FolderPlusIcon,
-  HistoryIcon,
-  InfoIcon,
   PauseIcon,
   PlayIcon,
   SaveIcon,
   ServerIcon,
   SkipBackIcon,
   SkipForwardIcon,
-  TriangleAlertIcon,
   UploadIcon,
 } from 'lucide-react';
 import { Badge } from '@nos/ui/components/ui/badge';
@@ -77,8 +74,10 @@ import { cn } from '@nos/ui/lib/utils';
 import {
   type BrowserMenuTarget,
   type MenuBinding,
+  type StatusNotice,
   type TimelineMenuTarget,
   ExportDialog,
+  StatusBar,
   LevelMeter,
   MaskPointOverlay,
   MediaBrowser,
@@ -99,6 +98,13 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { ModeToggle } from './ModeToggle.js';
+import {
+  derivationActivity,
+  exportActivity,
+  generatorActivities,
+  orderActivities,
+  segmentationActivity,
+} from './activities.js';
 import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
@@ -821,6 +827,54 @@ export function App(): ReactNode {
     [clipEdits, document, ripple, runClipMenuAction, selected],
   );
 
+  /**
+   * Everything running, from every source that has any.
+   *
+   * Assembled here because this is the only place that can see all of them; each is adapted in
+   * `activities.ts`, so adding a sixth source changes this list and nothing else.
+   */
+  const activities = useMemo(
+    () =>
+      orderActivities([
+        ...generatorActivities(runtime.snapshot),
+        ...exportActivity(exportRun.progress),
+        ...derivationActivity(proxies.pending.length, proxies.ready),
+        ...segmentationActivity(masks.session?.running === true, masks.session?.progress, masks.error),
+      ]),
+    [exportRun.progress, masks.error, masks.session, proxies.pending.length, proxies.ready, runtime.snapshot],
+  );
+
+  /**
+   * What the application needs to say, and the decisions some of it carries.
+   *
+   * Errors first: a failure is the thing a user must not miss, and the recovery offer below it is a
+   * question they can take their time over.
+   */
+  const notices = useMemo((): readonly StatusNotice[] => {
+    const failure = error ?? drag.rejection ?? exportRun.error ?? mediaImport.error;
+    return [
+      ...(failure !== undefined ? [{ id: 'error', tone: 'error' as const, message: failure }] : []),
+      ...(notice !== undefined ? [{ id: 'notice', tone: 'warning' as const, message: notice }] : []),
+      ...(autosave.offer !== undefined
+        ? [
+            {
+              id: 'recovery',
+              tone: 'info' as const,
+              message: `unsaved work from ${
+                autosave.offeredAt === undefined
+                  ? 'a previous session'
+                  : new Date(autosave.offeredAt).toLocaleString()
+              } was recovered`,
+              actions: [
+                { label: 'Restore it', onClick: autosave.accept, primary: true },
+                { label: 'Discard', onClick: autosave.discard },
+              ],
+            },
+          ]
+        : []),
+    ];
+  }, [autosave, drag.rejection, error, exportRun.error, mediaImport.error, notice]);
+
   const browserMenu: MenuBinding<BrowserMenuTarget> = useMemo(
     () => ({
       items: (target) =>
@@ -845,10 +899,6 @@ export function App(): ReactNode {
         onExport={openExport}
         autosaveStatus={autosave.status}
       />
-
-      {autosave.offer !== undefined && (
-        <RecoveryOffer savedAt={autosave.offeredAt} onAccept={autosave.accept} onDiscard={autosave.discard} />
-      )}
 
       {newFolderIn !== undefined && (
         <NewFolderPrompt
@@ -881,32 +931,6 @@ export function App(): ReactNode {
           onClose={() => setExportSettings(undefined)}
           onReveal={() => void bridge()?.revealInFolder(exportSettings.outputPath)}
         />
-      )}
-
-      {exportRun.timing !== undefined && (
-        <div role="status" className="px-4 py-1 font-mono text-xs text-muted-foreground">
-          {describeTiming(exportRun.timing)}
-        </div>
-      )}
-
-      {(error ?? drag.rejection ?? exportRun.error ?? mediaImport.error) !== undefined && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 bg-destructive/10 px-4 py-1.5 font-mono text-xs text-destructive"
-        >
-          <TriangleAlertIcon className="size-3.5 shrink-0" />
-          {error ?? drag.rejection ?? exportRun.error ?? mediaImport.error}
-        </div>
-      )}
-
-      {notice !== undefined && (
-        <div
-          role="status"
-          className="flex items-center gap-2 bg-muted px-4 py-1.5 font-mono text-xs text-muted-foreground"
-        >
-          <InfoIcon className="size-3.5 shrink-0" />
-          {notice}
-        </div>
       )}
 
       <div className="flex min-h-0 flex-1">
@@ -1113,6 +1137,12 @@ export function App(): ReactNode {
           onReject={setError}
         />
       </div>
+
+      <StatusBar activities={activities} notices={notices}>
+        {exportRun.timing !== undefined && (
+          <span className="font-mono text-muted-foreground">{describeTiming(exportRun.timing)}</span>
+        )}
+      </StatusBar>
     </div>
   );
 }
@@ -1339,43 +1369,6 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
     >
       {describeAutosave(status, now)}
     </span>
-  );
-}
-
-/**
- * The offer to restore work from a session that did not exit cleanly.
- *
- * A banner rather than a modal, and neither choice is preselected. The user has to be able to look at
- * the timeline behind it to decide — "is this newer than what I have?" is not answerable from a
- * dialog that covers the answer. Nothing is deleted until they say so.
- */
-function RecoveryOffer({
-  savedAt,
-  onAccept,
-  onDiscard,
-}: {
-  readonly savedAt: number | undefined;
-  readonly onAccept: () => void;
-  readonly onDiscard: () => void;
-}): ReactNode {
-  return (
-    <div
-      role="alertdialog"
-      aria-label="Unsaved work was recovered"
-      className="flex items-center gap-3 bg-muted px-4 py-2 font-mono text-xs"
-    >
-      <HistoryIcon className="size-3.5 shrink-0" />
-      <span>
-        unsaved work from {savedAt === undefined ? 'a previous session' : new Date(savedAt).toLocaleString()}{' '}
-        was recovered
-      </span>
-      <Button size="sm" className="ml-auto" onClick={onAccept}>
-        Restore it
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onDiscard}>
-        Discard
-      </Button>
-    </div>
   );
 }
 
