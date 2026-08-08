@@ -1,9 +1,12 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import {
+  type AnimatableNumber,
   type Clip,
   type ClipId,
+  type EffectId,
   type EffectInstance,
   type EffectInstanceId,
+  type StaticValue,
   type TimelineDocument,
   animatedNumber,
   effectInstanceId,
@@ -14,14 +17,21 @@ import {
   locateClip,
 } from '@nos/core';
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
-import { addTransition, describeTransitionError, removeTransition, transitionsOf } from '@nos/editing';
+import {
+  addTransition,
+  describeTransitionError,
+  removeTransition,
+  setTransitionParams,
+  transitionsOf,
+} from '@nos/editing';
 import type { MaskId } from '@nos/core';
 import { DiamondIcon, PlusIcon, WandSparklesIcon, XIcon } from 'lucide-react';
 import { type EffectStackEntry, EditableName, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
-import { Field, FieldLabel, FieldTitle } from '@nos/ui/components/ui/field';
+import { Field, FieldTitle } from '@nos/ui/components/ui/field';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Input } from '@nos/ui/components/ui/input';
+import { Label } from '@nos/ui/components/ui/label';
 import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
@@ -201,10 +211,22 @@ export function ClipInspector({
           instance={stack.find((entry) => entry.id === selected)}
           effects={effects}
           masks={masks ?? []}
-          onChange={(next) =>
+          onParams={(params) =>
             apply(
               'set effect parameter',
-              stack.map((entry) => (entry.id === next.id ? next : entry)),
+              stack.map((entry) => (entry.id === selected ? { ...entry, params } : entry)),
+            )
+          }
+          onMask={(mask) =>
+            apply(
+              'bind mask',
+              stack.map((entry) => {
+                if (entry.id !== selected) return entry;
+                // Rebuilt rather than spread: `mask: undefined` would put a key holding undefined in
+                // the document, and `project.json` reads that back as a value rather than an absence.
+                const { mask: _previous, ...rest } = entry;
+                return mask === undefined ? rest : { ...rest, mask };
+              }),
             )
           }
         />
@@ -279,22 +301,38 @@ function Transitions({
       </div>
 
       {existing.map((transition) => (
-        <div key={transition.id} className="flex items-center gap-1.5">
-          <span className="font-mono text-xs text-primary">{`${transition.effect} · ${transition.span.duration}f`}</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="ml-auto"
-            aria-label={`Remove the ${transition.effect} transition`}
-            onClick={() => {
-              const result = removeTransition(document, transition.id);
-              if (result.ok) onChange('remove transition', result.value);
+        <div key={transition.id} className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-xs text-primary">{`${transition.effect} · ${transition.span.duration}f`}</span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="ml-auto"
+              aria-label={`Remove the ${transition.effect} transition`}
+              onClick={() => {
+                const result = removeTransition(document, transition.id);
+                if (result.ok) onChange('remove transition', result.value);
+                else onReject?.(describeTransitionError(result.error));
+              }}
+              title="Remove this transition and return both clips to the cut"
+            >
+              <XIcon />
+            </Button>
+          </div>
+
+          {/* The same panel the effect stack uses, from the same manifest. A transition's parameters
+            were the last thing in the document that nothing could write: the built-in wipe declares a
+            `softness`, the compositor read it, and every wipe in every project sat at the default. */}
+          <EffectParams
+            instance={transition}
+            effects={effects}
+            masks={[]}
+            onParams={(params) => {
+              const result = setTransitionParams(document, transition.id, params);
+              if (result.ok) onChange('set transition parameter', result.value);
               else onReject?.(describeTransitionError(result.error));
             }}
-            title="Remove this transition and return both clips to the cut"
-          >
-            <XIcon />
-          </Button>
+          />
         </div>
       ))}
 
@@ -401,16 +439,37 @@ function EffectPicker({
  * that is currently animated is shown as such and left read-only here — its values belong to the
  * keyframe lane, and editing one in two places would need a rule about which wins.
  */
+/**
+ * The part of an effect or a transition that a parameter panel needs.
+ *
+ * Written as its own interface so both can use one panel. They are different things in the document —
+ * one sits in a clip's stack, the other spans a cut and carries the two clips it joins — but a
+ * parameter is a parameter, and the controls for one are generated from the manifest either way.
+ *
+ * The alternative was a second copy of the sliders for transitions, which is how the two would come to
+ * disagree about what animating a value means.
+ */
+interface ParameterizedEffect {
+  readonly id: EffectInstanceId;
+  readonly effect: EffectId;
+  readonly params: Readonly<Record<string, AnimatableNumber | StaticValue>>;
+  readonly mask?: MaskId;
+}
+
 function EffectParams({
   instance,
   effects,
   masks,
-  onChange,
+  onParams,
+  onMask,
 }: {
-  readonly instance: EffectInstance | undefined;
+  readonly instance: ParameterizedEffect | undefined;
   readonly effects: EffectRegistry;
   readonly masks: readonly MaskChoice[];
-  readonly onChange: (next: EffectInstance) => void;
+  /** The parameters after an edit. Only the parameters — the caller owns everything else. */
+  readonly onParams: (params: ParameterizedEffect['params']) => void;
+  /** Absent hides the mask control, which is right for a transition: its samplers are `from` and `to`. */
+  readonly onMask?: ((mask: MaskId | undefined) => void) | undefined;
 }): ReactNode {
   if (instance === undefined) return null;
 
@@ -418,7 +477,7 @@ function EffectParams({
   const declared = manifest?.params ?? [];
   // Declaring the `mask` slot is the *entire* coupling between SAM 2 and the effect system, so it is
   // also the only thing that decides whether this control exists.
-  const takesMask = manifest?.samplers.includes('mask') === true;
+  const takesMask = manifest?.samplers.includes('mask') === true && onMask !== undefined;
 
   if (declared.length === 0 && !takesMask) {
     return <p className="font-mono text-xs text-muted-foreground">this effect declares no parameters</p>;
@@ -443,11 +502,7 @@ function EffectParams({
               value={instance.mask ?? ''}
               onChange={(event) => {
                 const chosen = event.target.value;
-                // Rebuilt rather than spread: `mask: undefined` would put a key holding undefined in
-                // the document, and `project.json` would read it back as a value rather than an
-                // absence — the same trap the text inspector's optional fields have.
-                const { mask: _mask, ...rest } = instance;
-                onChange(chosen === '' ? rest : { ...rest, mask: chosen as MaskId });
+                onMask?.(chosen === '' ? undefined : (chosen as MaskId));
               }}
             >
               <NativeSelectOption value="">not bound</NativeSelectOption>
@@ -467,10 +522,13 @@ function EffectParams({
 
         return (
           <Field key={param.key} className="gap-1">
-            <FieldLabel htmlFor={`param-${instance.id}-${param.key}`} className="text-xs">
+            {/* Not a `<label>`: the control it would name is wrapped in its own below, and a second
+                label pointing at a slider root that cannot be labelled named nothing while making the
+                parameter look like it had two. */}
+            <span className="text-xs font-medium">
               {param.key}
               {animated ? ' · animated' : ''}
-            </FieldLabel>
+            </span>
 
             {param.keyframable === true && (
               // Animating is an explicit act. A parameter silently becoming keyframed on first edit
@@ -480,21 +538,18 @@ function EffectParams({
                 pressed={animated}
                 aria-label={animated ? `Stop animating ${param.key}` : `Animate ${param.key}`}
                 onPressedChange={() =>
-                  onChange({
-                    ...instance,
-                    params: {
-                      ...instance.params,
-                      [param.key]: animated
-                        ? constant(readNumber(value, param.default))
-                        : animatedNumber([
-                            {
-                              id: keyframeId(`${instance.id}_${param.key}_0`),
-                              frame: frameIndex(0),
-                              value: readNumber(value, param.default),
-                              ease: 'linear',
-                            },
-                          ]),
-                    },
+                  onParams({
+                    ...instance.params,
+                    [param.key]: animated
+                      ? constant(readNumber(value, param.default))
+                      : animatedNumber([
+                          {
+                            id: keyframeId(`${instance.id}_${param.key}_0`),
+                            frame: frameIndex(0),
+                            value: readNumber(value, param.default),
+                            ease: 'linear',
+                          },
+                        ]),
                   })
                 }
                 title={animated ? 'Return this to a constant value' : 'Animate this with keyframes'}
@@ -510,34 +565,34 @@ function EffectParams({
                 disabled={animated}
                 checked={readNumber(value, param.default) >= 0.5}
                 onCheckedChange={(next) =>
-                  onChange({
-                    ...instance,
-                    params: { ...instance.params, [param.key]: constant(next ? 1 : 0) },
-                  })
+                  onParams({ ...instance.params, [param.key]: constant(next ? 1 : 0) })
                 }
                 className="self-start"
               />
             ) : (
-              <Slider
-                id={`param-${instance.id}-${param.key}`}
-                aria-label={param.key}
-                disabled={animated}
-                min={param.min ?? 0}
-                max={param.max ?? 1}
-                step={(param.max ?? 1) - (param.min ?? 0) > 4 ? 1 : 0.01}
-                // The array form even for one value: given a scalar the registry falls back to
-                // `[min, max]` and renders a second thumb.
-                value={[readNumber(value, param.default)]}
-                onValueChange={(next) =>
-                  onChange({
-                    ...instance,
-                    params: {
+              /* Wrapped in a label rather than given an `aria-label`. The slider spreads its props
+                 onto its root, and the control that needs a name is the range input inside its thumb —
+                 so every parameter slider in this panel had no accessible name at all, and neither the
+                 `id` and the `aria-label` that used to be here reached nothing. Implicit association
+                 is what reaches the input, so the name lives in the label. */
+              <Label className="w-full">
+                <span className="sr-only">{param.key}</span>
+                <Slider
+                  disabled={animated}
+                  min={param.min ?? 0}
+                  max={param.max ?? 1}
+                  step={(param.max ?? 1) - (param.min ?? 0) > 4 ? 1 : 0.01}
+                  // The array form even for one value: given a scalar the registry falls back to
+                  // `[min, max]` and renders a second thumb.
+                  value={[readNumber(value, param.default)]}
+                  onValueChange={(next) =>
+                    onParams({
                       ...instance.params,
                       [param.key]: constant(Array.isArray(next) ? (next[0] ?? 0) : next),
-                    },
-                  })
-                }
-              />
+                    })
+                  }
+                />
+              </Label>
             )}
           </Field>
         );

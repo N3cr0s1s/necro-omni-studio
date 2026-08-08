@@ -268,3 +268,22 @@ describe('resetting', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('reset framing');
   });
 });
+
+/**
+ * Naming the controls.
+ *
+ * Every one of these sliders carried an `aria-label` that named nothing. The shadcn slider spreads its
+ * props onto its **root**, and the control a screen reader reaches is the range input inside the thumb
+ * — so the attribute landed on a div and five controls went unnamed, in the panel that positions every
+ * clip in the sequence. The same mistake was in the effect parameters and in the transport.
+ */
+describe('the controls have names', () => {
+  it('names every slider after the channel it moves', () => {
+    mount();
+    for (const label of ['x', 'y', 'scale', 'rotation', 'opacity']) {
+      const control = screen.getByLabelText(label);
+      expect(control.tagName, label).toBe('INPUT');
+      expect((control as HTMLInputElement).type, label).toBe('range');
+    }
+  });
+});

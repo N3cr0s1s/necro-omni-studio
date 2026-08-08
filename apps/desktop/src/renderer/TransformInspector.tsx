@@ -22,6 +22,7 @@ import {
 } from '@nos/editing';
 import { NumberField } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
+import { Label } from '@nos/ui/components/ui/label';
 import { Slider } from '@nos/ui/components/ui/slider';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { cn } from '@nos/ui/lib/utils';
@@ -149,18 +150,24 @@ function Channel({
       </div>
 
       <div className="flex items-center gap-2">
-        <Slider
-          aria-label={spec.label}
-          disabled={animated}
-          min={spec.min}
-          max={spec.max}
-          step={spec.step}
-          // The array form even for one value: given a scalar the registry falls back to `[min, max]`
-          // and renders a second thumb.
-          value={[clampToSlider(now, spec)]}
-          onValueChange={(next) => onWrite(`set ${spec.label}`, spec.channel, staticNumber(scalar(next)))}
-          className="flex-1"
-        />
+        {/* The name lives in a wrapping label, not in an `aria-label`. The slider spreads its props
+            onto its root, and the control that needs naming is the range input inside its thumb — so
+            an attribute here reached nothing and all five of these were nameless. The visible row
+            label says the same word, which is why this copy is `sr-only`. */}
+        <Label className="flex-1">
+          <span className="sr-only">{spec.label}</span>
+          <Slider
+            disabled={animated}
+            min={spec.min}
+            max={spec.max}
+            step={spec.step}
+            // The array form even for one value: given a scalar the registry falls back to `[min, max]`
+            // and renders a second thumb.
+            value={[clampToSlider(now, spec)]}
+            onValueChange={(next) => onWrite(`set ${spec.label}`, spec.channel, staticNumber(scalar(next)))}
+            className="w-full"
+          />
+        </Label>
         {/* The number takes values the slider does not span — scaling to 8× is legitimate, and the
             slider stopping at 4 is a convenience rather than a rule. */}
         <NumberField

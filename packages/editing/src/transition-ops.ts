@@ -130,6 +130,39 @@ export function addTransition(
   );
 }
 
+/**
+ * Changes a transition's parameters.
+ *
+ * The gap this closes: a transition could be added and removed and nothing else. `Transition.params`
+ * was in the document, the compositor read it, and the built-in wipe declares a `softness` — so every
+ * wipe in every project was stuck at the manifest's default with no way to ask for a different one.
+ *
+ * Separate from `addTransition`, which rebuilds the overlap and moves both clips' edges. Changing a
+ * number a shader reads must not touch the cut, and routing it through the same call would make an
+ * undo of "softness" restore two clip spans as well.
+ */
+export function setTransitionParams(
+  document: TimelineDocument,
+  id: EffectInstanceId,
+  params: Transition['params'],
+): Result<TimelineDocument, TransitionError> {
+  for (const track of document.sequence.tracks) {
+    if (track.kind !== 'video') continue;
+    const existing = track.transitions.find((entry) => entry.id === id);
+    if (existing === undefined) continue;
+    if (track.locked) return err({ kind: 'track-locked', track: track.id });
+
+    return ok(
+      replaceTrack(document, {
+        ...track,
+        transitions: track.transitions.map((entry) => (entry.id === id ? { ...entry, params } : entry)),
+      }),
+    );
+  }
+
+  return err({ kind: 'clip-not-found', clip: id as unknown as ClipId });
+}
+
 /** Removes a transition, returning both clips to their original edges. */
 export function removeTransition(
   document: TimelineDocument,

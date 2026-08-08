@@ -17,7 +17,13 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { addTransition, describeTransitionError, removeTransition, transitionsOf } from './transition-ops.js';
+import {
+  addTransition,
+  describeTransitionError,
+  removeTransition,
+  setTransitionParams,
+  transitionsOf,
+} from './transition-ops.js';
 
 const TRACKS = { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') };
 
@@ -254,6 +260,73 @@ describe('replacing an existing transition', () => {
     if (track.kind !== 'video') return;
     expect(track.transitions).toHaveLength(1);
     expect(track.transitions[0]?.effect).toBe('wipe');
+  });
+});
+
+/**
+ * Changing a transition's parameters.
+ *
+ * A transition could be added and removed and nothing else. `Transition.params` was in the document
+ * and the compositor read it, and the built-in wipe declares a `softness` — so every wipe in every
+ * project sat at the manifest default with no way to ask for another.
+ */
+describe('changing a transition´s parameters', () => {
+  const added = () => {
+    const result = addTransition(adjacent(), { ...request, effect: effectId('wipe') });
+    if (!result.ok) throw new Error('the fixture failed to add a transition');
+    return result.value;
+  };
+
+  const transitionsIn = (document: TimelineDocument) => {
+    const track = videoTrack(document);
+    return track.kind === 'video' ? track.transitions : [];
+  };
+
+  it('writes the value the shader reads', () => {
+    const result = setTransitionParams(added(), request.id, { softness: staticNumber(0.4) });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(transitionsIn(result.value)[0]?.params).toEqual({ softness: staticNumber(0.4) });
+  });
+
+  it('leaves the cut exactly where it was', () => {
+    // The reason this is not routed through `addTransition`, which rebuilds the overlap: changing a
+    // number a shader reads must not move two clips, and an undo of "softness" must not restore them.
+    const before = added();
+    const result = setTransitionParams(before, request.id, { softness: staticNumber(0.4) });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(transitionsIn(result.value)[0]?.span).toEqual(transitionsIn(before)[0]?.span);
+      expect(result.value.sequence.tracks).toHaveLength(before.sequence.tracks.length);
+      const track = videoTrack(result.value);
+      const original = videoTrack(before);
+      if (track.kind === 'video' && original.kind === 'video') {
+        expect(track.clips.map((clip) => clip.span)).toEqual(original.clips.map((clip) => clip.span));
+      }
+    }
+  });
+
+  it('refuses a transition that is not there', () => {
+    const result = setTransitionParams(added(), effectInstanceId('nope'), {});
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses to touch a locked track', () => {
+    // Locking protects what is on a track, and a transition is on it.
+    const document = added();
+    const locked: TimelineDocument = {
+      ...document,
+      sequence: {
+        ...document.sequence,
+        tracks: document.sequence.tracks.map((track) =>
+          track.kind === 'video' ? { ...track, locked: true } : track,
+        ),
+      },
+    };
+
+    const result = setTransitionParams(locked, request.id, { softness: staticNumber(0.4) });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('track-locked');
   });
 });
 

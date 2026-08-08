@@ -22,6 +22,7 @@ import {
   trackId,
 } from '@nos/core';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
+import { addTransition, setTransitionParams } from '@nos/editing';
 import { type MaskChoice, ClipInspector } from './ClipInspector.js';
 
 /** The built-in that declares the `mask` sampler — the spec's own example of one. */
@@ -480,5 +481,74 @@ describe('renaming a clip', () => {
     render(<ClipInspector document={single()} clip="c1" effects={effects} playhead={0} onChange={vi.fn()} />);
     expect(screen.getByText('c1')).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: 'Rename c1' })).toBeNull();
+  });
+});
+
+/**
+ * A transition's parameters.
+ *
+ * The last thing in the document nothing could write. A transition could be added and removed and
+ * nothing else — while the built-in wipe declares a `softness` that the compositor reads, so every
+ * wipe in every project sat at the manifest's default with no way to ask for another.
+ */
+describe('transition parameters', () => {
+  function withWipe(): TimelineDocument {
+    // Two clips meeting at a cut, each with source either side of it — a transition needs handles to
+    // overlap into, and `sourceIn` of 100 is what gives them.
+    const base = documentWith([videoClip('c1', 0, 120), videoClip('c2', 120, 240)]);
+    const result = addTransition(base, {
+      from: clipId('c1'),
+      to: clipId('c2'),
+      effect: 'wipe' as never,
+      durationFrames: 12,
+      id: effectInstanceId('t1'),
+    });
+    if (!result.ok) throw new Error('the fixture failed to add a transition');
+    return result.value;
+  }
+
+  it('offers the parameters the manifest declares', () => {
+    const onChange = vi.fn();
+    render(
+      <ClipInspector document={withWipe()} clip="c1" effects={effects} playhead={0} onChange={onChange} />,
+    );
+    // `hidden: true` because Base UI leaves a slider thumb `visibility: hidden` until it has measured
+    // the track, and jsdom never lays anything out.
+    expect(screen.getByLabelText('softness')).toBeTruthy();
+  });
+
+  it('writes the value the shader reads', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ClipInspector document={withWipe()} clip="c1" effects={effects} playhead={0} onChange={onChange} />,
+    );
+
+    const slider = screen.getByLabelText('softness');
+    slider.focus();
+    await user.keyboard('{ArrowRight}');
+
+    expect(onChange).toHaveBeenCalled();
+    const [label, next] = onChange.mock.calls.at(-1) as [string, TimelineDocument];
+    expect(label).toBe('set transition parameter');
+
+    const track = next.sequence.tracks.find((entry) => entry.kind === 'video');
+    const transition = track?.kind === 'video' ? track.transitions[0] : undefined;
+    expect(transition?.params['softness']).toBeDefined();
+  });
+
+  it('leaves the cut where it is', () => {
+    // Changing a number a shader reads must not move two clips: an undo of "softness" that also
+    // restored two spans would be an edit the user never asked for.
+    const before = withWipe();
+    const track = before.sequence.tracks.find((entry) => entry.kind === 'video');
+    const span = track?.kind === 'video' ? track.transitions[0]?.span : undefined;
+
+    const result = setTransitionParams(before, effectInstanceId('t1'), {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const after = result.value.sequence.tracks.find((entry) => entry.kind === 'video');
+      expect(after?.kind === 'video' ? after.transitions[0]?.span : undefined).toEqual(span);
+    }
   });
 });
