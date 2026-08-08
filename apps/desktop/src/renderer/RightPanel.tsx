@@ -12,7 +12,29 @@ import type {
 import { acceptSelection, buildSelection } from '@nos/generators';
 import type { MaskWorkspace } from './use-mask-workspace.js';
 import type { DirectoryNode } from '@nos/media';
-import { Button, GeneratorPanel, Mono, PanelHeader, SegmentationPanel, VariantPicker } from '@nos/ui';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardPasteIcon,
+  CpuIcon,
+  EyeIcon,
+  FileJsonIcon,
+  PaletteIcon,
+  RedoIcon,
+  ScissorsIcon,
+  SplitIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  TypeIcon,
+  UndoIcon,
+} from 'lucide-react';
+import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
+import { Button } from '@nos/ui/components/ui/button';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@nos/ui/components/ui/tabs';
+import { cn } from '@nos/ui/lib/utils';
 import { assetChoicesFrom } from './generator-assets.js';
 import { useFrameGrab } from './use-frame-grab.js';
 import { ClipInspector } from './ClipInspector.js';
@@ -98,49 +120,37 @@ export function RightPanel(props: RightPanelProps): ReactNode {
   return (
     <aside
       aria-label="Inspector"
-      style={{
-        width: 340,
-        flex: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        borderLeft: '1px solid var(--nos-border)',
-        background: 'var(--nos-bg-panel)',
-        minHeight: 0,
-      }}
+      className="flex w-85 min-h-0 flex-none flex-col border-l"
     >
-      <PanelHeader>
-        <div role="tablist" aria-label="Panel" style={{ display: 'flex', gap: 4 }}>
-          {(['inspector', 'generate', 'variants', 'segment'] as const).map((entry) => (
-            <button
-              key={entry}
-              type="button"
-              role="tab"
-              aria-selected={tab === entry}
-              onClick={() => setTab(entry)}
-              style={{
-                height: 24,
-                padding: '0 8px',
-                borderRadius: 4,
-                background: tab === entry ? '#1c2333' : 'transparent',
-                border: `1px solid ${tab === entry ? '#2f4a72' : 'transparent'}`,
-                color: tab === entry ? '#9dc2ff' : 'var(--nos-text-muted)',
-                font: '500 11px system-ui, sans-serif',
-                cursor: 'pointer',
-                textTransform: 'capitalize',
-              }}
-            >
-              {entry}
-            </button>
-          ))}
+      <Tabs
+        value={tab}
+        onValueChange={(next) => setTab(next as typeof tab)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="flex h-8.5 flex-none items-center px-2">
+          <TabsList aria-label="Panel">
+            {(['inspector', 'generate', 'variants', 'segment'] as const).map((entry) => (
+              <TabsTrigger key={entry} value={entry} className="capitalize">
+                {entry}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
-      </PanelHeader>
+        <Separator />
 
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {tab === 'inspector' && <InspectorTab {...props} />}
-        {tab === 'generate' && <GenerateTab {...props} />}
-        {tab === 'variants' && <VariantsTab {...props} />}
-        {tab === 'segment' && <SegmentTab {...props} />}
-      </div>
+        <TabsContent value="inspector" className="min-h-0 flex-1 overflow-auto">
+          <InspectorTab {...props} />
+        </TabsContent>
+        <TabsContent value="generate" className="min-h-0 flex-1 overflow-auto">
+          <GenerateTab {...props} />
+        </TabsContent>
+        <TabsContent value="variants" className="min-h-0 flex-1 overflow-auto">
+          <VariantsTab {...props} />
+        </TabsContent>
+        <TabsContent value="segment" className="min-h-0 flex-1 overflow-auto">
+          <SegmentTab {...props} />
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }
@@ -169,7 +179,7 @@ function InspectorTab({
   onReject,
 }: RightPanelProps): ReactNode {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="flex flex-col">
       {/* Text properties come first for a text clip: the effect stack applies to it too, but the words
           are what the user opened the inspector to change. */}
       <TextInspector
@@ -189,62 +199,94 @@ function InspectorTab({
 
       <ProjectSettings document={document} onChange={onChangeDocument} onReject={onReject} />
 
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button onClick={onSplit} disabled={selectedClip === undefined} title="Split at the playhead (S)">
+      <div className="flex flex-col gap-2 p-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onSplit}
+          disabled={selectedClip === undefined}
+          title="Split at the playhead (S)"
+        >
+          <SplitIcon />
           Split at playhead
         </Button>
-        <Button onClick={onSplitAllTracks} title="Cut every unlocked track at the playhead (Shift+S)">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onSplitAllTracks}
+          title="Cut every unlocked track at the playhead (Shift+S)"
+        >
+          <ScissorsIcon />
           Split all tracks
         </Button>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           {/* Named for what it will do, not for the key that does it. Which of the two removals is
               about to happen is the Ripple toggle's state, and a button that said only "Delete"
               would leave the user to remember it. */}
           <Button
+            variant="destructive"
+            size="sm"
             onClick={onRemoveClip}
             disabled={selectedClip === undefined}
             title={removeHint}
-            style={{ flex: 1 }}
+            className="flex-1"
           >
+            <Trash2Icon />
             {removeLabel}
           </Button>
           <Button
+            variant="outline"
+            size="sm"
             onClick={onToggleClipEnabled}
             disabled={selectedClip === undefined}
             title="Take the clip out of the composite without removing it (E)"
-            style={{ flex: 1 }}
+            className="flex-1"
           >
+            <EyeIcon />
             Enable / disable
           </Button>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <Button
+            variant="outline"
+            size="sm"
             onClick={() => onNudge(-1)}
             disabled={selectedClip === undefined}
             title="Nudge one frame left"
+            className="flex-1"
           >
-            ◀ 1f
+            <ChevronLeftIcon />
+            1f
           </Button>
           <Button
+            variant="outline"
+            size="sm"
             onClick={() => onNudge(1)}
             disabled={selectedClip === undefined}
             title="Nudge one frame right"
+            className="flex-1"
           >
-            1f ▶
+            1f
+            <ChevronRightIcon />
           </Button>
         </div>
         {/* Grading a scene clip by clip is how a grade drifts: the same eleven-step ritual, subtly
             different each time. */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <Button
+            variant="outline"
+            size="sm"
             onClick={onCopyAttributes}
             disabled={selectedClip === undefined}
             title="Copy this clip's effects, framing, speed and level (Ctrl+Shift+C)"
-            style={{ flex: 1 }}
+            className="flex-1"
           >
+            <PaletteIcon />
             Copy look
           </Button>
           <Button
+            variant="outline"
+            size="sm"
             onClick={onPasteAttributes}
             disabled={selectedClip === undefined || attributeSummary === undefined}
             title={
@@ -252,24 +294,35 @@ function InspectorTab({
                 ? 'Copy a look first'
                 : `Apply ${attributeSummary} to every selected clip (Ctrl+Shift+V)`
             }
-            style={{ flex: 1 }}
+            className="flex-1"
           >
+            <ClipboardPasteIcon />
             Paste look
           </Button>
         </div>
         {attributeSummary !== undefined && (
-          <Mono tone="var(--nos-text-faint)">{`clipboard: ${attributeSummary}`}</Mono>
+          <p className="font-mono text-xs text-muted-foreground">{`clipboard: ${attributeSummary}`}</p>
         )}
 
-        <Button onClick={onAddText} title="Add a title at the playhead, on the text track">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onAddText}
+          title="Add a title at the playhead, on the text track"
+        >
+          <TypeIcon />
           Add title
         </Button>
-        <Button onClick={onUndo} disabled={!canUndo}>
-          Undo
-        </Button>
-        <Button onClick={onRedo} disabled={!canRedo}>
-          Redo
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo} className="flex-1">
+            <UndoIcon />
+            Undo
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onRedo} disabled={!canRedo} className="flex-1">
+            <RedoIcon />
+            Redo
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -323,68 +376,84 @@ function GenerateTab({
 
   if (records.length === 0) {
     return (
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Mono tone="var(--nos-text-faint)">no manifests in the project&apos;s generators/ folder</Mono>
+      <div className="flex flex-col gap-2 p-4">
+        <p className="font-mono text-xs text-muted-foreground">
+          no manifests in the project&apos;s generators/ folder
+        </p>
         {libraryProblems.map((problem) => (
-          <Mono key={problem.file} tone="var(--nos-danger)">{`${problem.file}: ${problem.detail}`}</Mono>
+          <p key={problem.file} className="flex items-start gap-1.5 font-mono text-xs text-destructive">
+            <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            {`${problem.file}: ${problem.detail}`}
+          </p>
         ))}
-        <Button onClick={onAuthorManifest}>Author a manifest</Button>
+        <Button variant="outline" size="sm" onClick={onAuthorManifest}>
+          <FileJsonIcon />
+          Author a manifest
+        </Button>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Mono tone={runtime.mode === 'comfyui' ? 'var(--nos-ok)' : 'var(--nos-warn)'}>{runtime.detail}</Mono>
-        {runtime.error !== undefined && <Mono tone="var(--nos-danger)">{runtime.error}</Mono>}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ font: '400 11px system-ui', color: 'var(--nos-text-soft)' }}>Send to</span>
-          <select
+    <div className="flex flex-col">
+      <div className="flex flex-col gap-1 px-3 py-2">
+        <p
+          className={cn(
+            'flex items-center gap-1.5 font-mono text-xs',
+            runtime.mode === 'comfyui' ? 'text-chart-2' : 'text-muted-foreground',
+          )}
+        >
+          <CpuIcon className="size-3.5" />
+          {runtime.detail}
+        </p>
+        {runtime.error !== undefined && (
+          <p className="flex items-start gap-1.5 font-mono text-xs text-destructive">
+            <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            {runtime.error}
+          </p>
+        )}
+        <Field orientation="horizontal" className="gap-2">
+          <FieldLabel htmlFor="generate-destination" className="shrink-0 text-xs">
+            Send to
+          </FieldLabel>
+          <NativeSelect
+            id="generate-destination"
+            size="sm"
             aria-label="Destination"
+            className="flex-1"
             value={destination}
             onChange={(event) => setDestination(event.target.value as 'media-browser' | 'timeline')}
-            style={{
-              flex: 1,
-              height: 24,
-              background: 'var(--nos-surface-1)',
-              border: '1px solid var(--nos-border-control)',
-              borderRadius: 4,
-              color: 'var(--nos-text-bright)',
-              font: '400 11px system-ui, sans-serif',
-            }}
           >
-            <option value="media-browser">the media browser</option>
-            <option value="timeline">the timeline, at the playhead</option>
-          </select>
-        </label>
-        <Button onClick={onAuthorManifest} title="Turn a graph in this project into a generator">
+            <NativeSelectOption value="media-browser">the media browser</NativeSelectOption>
+            <NativeSelectOption value="timeline">the timeline, at the playhead</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onAuthorManifest}
+          title="Turn a graph in this project into a generator"
+        >
+          <FileJsonIcon />
           Author a manifest
         </Button>
-        <select
+        <NativeSelect
           aria-label="Generator"
+          className="w-full"
           value={record?.manifest.id ?? ''}
           onChange={(event) => {
             setSelectedId(event.target.value);
             setPreset(undefined);
             setParams({});
           }}
-          style={{
-            height: 26,
-            background: 'var(--nos-surface-1)',
-            border: '1px solid var(--nos-border-control)',
-            borderRadius: 4,
-            color: 'var(--nos-text-bright)',
-            font: '400 11.5px system-ui, sans-serif',
-          }}
         >
           {records.map((entry) => (
-            <option key={entry.manifest.id} value={entry.manifest.id}>
+            <NativeSelectOption key={entry.manifest.id} value={entry.manifest.id}>
               {entry.manifest.name}
               {entry.status === 'available' ? '' : ` — ${entry.status}`}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       {record !== undefined && (
@@ -461,14 +530,14 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
 
   if (selection === undefined) {
     return (
-      <div style={{ padding: 16 }}>
-        <Mono tone="var(--nos-text-faint)">nothing has been generated yet</Mono>
+      <div className="p-4">
+        <p className="font-mono text-xs text-muted-foreground">nothing has been generated yet</p>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 12 }}>
+    <div className="p-3">
       <VariantPicker
         selection={selection}
         auditioning={audition.playing}
@@ -500,7 +569,12 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
           setCurrent(undefined);
         }}
       />
-      {audition.error !== undefined && <Mono tone="var(--nos-danger)">{audition.error}</Mono>}
+      {audition.error !== undefined && (
+        <p className="mt-2 flex items-start gap-1.5 font-mono text-xs text-destructive">
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+          {audition.error}
+        </p>
+      )}
     </div>
   );
 }
@@ -520,8 +594,8 @@ function SegmentTab({ document, selectedClip, masks }: RightPanelProps): ReactNo
   const session = masks.session;
   if (session === undefined) {
     return (
-      <div style={{ padding: 16 }}>
-        <Mono tone="var(--nos-text-faint)">select a clip to segment</Mono>
+      <div className="p-4">
+        <p className="font-mono text-xs text-muted-foreground">select a clip to segment</p>
       </div>
     );
   }
@@ -529,7 +603,7 @@ function SegmentTab({ document, selectedClip, masks }: RightPanelProps): ReactNo
   const source = located?.clip.kind === 'video' ? located.clip.source.asset : undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="flex flex-col gap-2">
       <SegmentationPanel
         session={session}
         {...(masks.capabilities !== undefined ? { capabilities: masks.capabilities } : {})}
@@ -540,9 +614,10 @@ function SegmentTab({ document, selectedClip, masks }: RightPanelProps): ReactNo
       />
 
       {masks.error !== undefined && (
-        <Mono tone="var(--nos-danger)" style={{ padding: '0 16px' }}>
+        <p className="flex items-start gap-1.5 px-4 font-mono text-xs text-destructive">
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
           {masks.error}
-        </Mono>
+        </p>
       )}
     </div>
   );
