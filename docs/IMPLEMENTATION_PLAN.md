@@ -220,7 +220,7 @@ manifests in `generators/` cover every supplied graph, the registry validates
 them against the real files, and the panel, variant picker and manifest inspector
 are all driven by the manifest alone. The mask pipeline reaches the compositor's
 `mask` sampler with the whole path verified on a real driver.**
-**2212 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
+**2244 TypeScript tests + 147 Python tests passing; `tsc --build` clean, `ruff` clean,
 22/22 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -2382,3 +2382,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   Verified live: the length shows under every preset, pre-filled at 2 for
   One-shot and 50 for Music, and an edit to 12 under SFX holds.
+
+- 2026-08-08: The roll edit, and re-linking.
+
+  **Roll** was the last core edit missing. Trimming either side of a cut leaves a
+  gap or an overlap; rolling moves the boundary, so one clip gains exactly what
+  the other gives up and nothing downstream moves. Built on the two trims rather
+  than beside them — they already know about handles, locks, keyframes and
+  collisions — with this adding only what neither can know: that they are one
+  gesture, ordered shorten-then-lengthen so the intermediate state is legal, and
+  whole or nothing because a partial roll opens the gap it exists to prevent.
+
+  The gesture is Shift on a trim handle. The cut is exactly where the two trim
+  handles already are, so a roll strip wide enough to grab would cover one of them
+  — losing head-trim on every flush clip is a worse trade than a held key. Only
+  edges that really are cuts advertise it, from the same predicate the edit uses,
+  so the tooltip cannot promise a gesture that refuses. Verified live: the cut
+  moved 913 → 964 px, both edges flush, the sequence's extent unchanged.
+
+  **Re-linking** closed an asymmetry: `linkClips` existed, tested, with no caller,
+  so unlinking a pair was a one-way door whose only recovery was undo. The
+  selection rule lives in `linkablePair` so the menu row and the action read the
+  same thing, and it is resolved again at the moment of acting — the selection can
+  change between opening a menu and choosing from it, and linking the wrong pair is
+  worse than a row that turns out to do nothing.
+
+  Probe hygiene: the scratchpad demo project now holds the user's own edit, so
+  probes run against a fixture under the job directory instead. Earlier runs this
+  session imported clips into that project and dismissed its recovery snapshot.

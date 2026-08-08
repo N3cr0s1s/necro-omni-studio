@@ -25,22 +25,24 @@ import {
 } from '@nos/core';
 import { buildTree } from '@nos/media';
 import {
-  type TrackFlag,
   addTrack,
   clipsInRegion,
   clipsOnTrack,
   combineSelection,
   firstTrackOfKind,
   insertGenerated,
+  linkablePair,
+  linkClips,
   moveClip,
   nextTrackId,
   removeTrack,
   renameTrack,
   setTrackHeight,
-  unlinkClips,
   toggleTrackFlag,
   trimClipEnd,
   trimClipStart,
+  unlinkClips,
+  type TrackFlag,
 } from '@nos/editing';
 import { type GeneratorManifest, type SelectionOutcome, placeholderLength } from '@nos/generators';
 import {
@@ -681,6 +683,21 @@ export function App(): ReactNode {
         case 'toggle-enabled':
           clipEdits.toggleEnabled();
           break;
+        case 'link':
+          store.commit('link clips', (current) => {
+            // Resolved again at the moment of acting rather than trusting what the menu decided when
+            // it opened: the selection can change between the two, and linking the wrong pair is far
+            // worse than a row that turns out to do nothing.
+            const pair = linkablePair(current, [...selected] as ClipId[]);
+            if (pair === undefined) return current;
+            const result = linkClips(current, pair.video, pair.audio);
+            if (!result.ok) {
+              setError(describeEdit(result.error));
+              return current;
+            }
+            return result.value;
+          });
+          break;
         case 'unlink':
           store.commit('unlink clips', (current) => {
             const target = menu?.clip;
@@ -750,6 +767,7 @@ export function App(): ReactNode {
             selectionSize: selected.size,
             canPaste: clipEdits.canPaste,
             hasAttributes: clipEdits.attributeSummary !== undefined,
+            canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
             ripple,
           })}
           onChoose={(action) => runClipMenuAction(action as ClipMenuAction)}

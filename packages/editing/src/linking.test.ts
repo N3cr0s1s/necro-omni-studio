@@ -17,7 +17,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { linkClips, unlinkClips } from './linking.js';
+import { linkClips, linkablePair, unlinkClips } from './linking.js';
 
 /**
  * Linking a picture to its sound.
@@ -99,6 +99,47 @@ const partnerOf = (document: TimelineDocument, id: string) => {
   const located = locateClip(document, clipId(id));
   return located === undefined ? undefined : linkedPartner(located.clip);
 };
+
+describe('whether a selection can be linked', () => {
+  // The other half of unlinking, which had no way back at all: `linkClips` existed and was tested and
+  // had no caller, so splitting a pair was a one-way door and the only recovery was undo.
+  it('is a video and an audio clip, in either selection order', () => {
+    const document = documentWith([video('v')], [audio('a')]);
+    expect(linkablePair(document, [clipId('v'), clipId('a')])).toEqual({ video: 'v', audio: 'a' });
+    expect(linkablePair(document, [clipId('a'), clipId('v')])).toEqual({ video: 'v', audio: 'a' });
+  });
+
+  it('is nothing for one clip, or three', () => {
+    const document = documentWith(
+      [video('v'), video('v2', { span: spanFromBounds(frameIndex(100), frameIndex(200)) })],
+      [audio('a')],
+    );
+    expect(linkablePair(document, [clipId('v')])).toBeUndefined();
+    expect(linkablePair(document, [clipId('v'), clipId('v2'), clipId('a')])).toBeUndefined();
+  });
+
+  it('is nothing for two clips of the same kind', () => {
+    const document = documentWith(
+      [video('v'), video('v2', { span: spanFromBounds(frameIndex(100), frameIndex(200)) })],
+      [],
+    );
+    expect(linkablePair(document, [clipId('v'), clipId('v2')])).toBeUndefined();
+  });
+
+  it('is nothing when either side already belongs to a pair', () => {
+    // Stealing one would leave the other half pointing at nothing.
+    const document = documentWith([video('v')], [audio('a')]);
+    const linked = linkClips(document, clipId('v'), clipId('a'));
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linkablePair(linked.value, [clipId('v'), clipId('a')])).toBeUndefined();
+  });
+
+  it('is nothing when a clip in the selection no longer exists', () => {
+    const document = documentWith([video('v')], [audio('a')]);
+    expect(linkablePair(document, [clipId('v'), clipId('gone')])).toBeUndefined();
+  });
+});
 
 describe('unlinking', () => {
   it('breaks both sides', () => {

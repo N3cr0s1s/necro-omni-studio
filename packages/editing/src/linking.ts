@@ -116,3 +116,35 @@ function withoutLink(clip: Clip): Clip {
   }
   return clip;
 }
+
+/**
+ * The video and audio clip a selection could be linked into, if any.
+ *
+ * The rule the menu row and the action both read, so a row that is offered cannot then refuse: the
+ * selection has to be exactly one video and one audio clip, and neither may already belong to a pair
+ * — stealing one would leave the other half pointing at nothing.
+ *
+ * Deliberately silent about *why* it is `undefined`. A menu row that explained "select one video and
+ * one audio clip" in its label would be a paragraph in a list of verbs; the shape of the selection is
+ * visible on the timeline, which is where the user is already looking.
+ */
+export function linkablePair(
+  document: TimelineDocument,
+  selection: readonly ClipId[],
+): { readonly video: ClipId; readonly audio: ClipId } | undefined {
+  if (selection.length !== 2) return undefined;
+
+  const located = selection.map((id) => locateClip(document, id));
+  if (located.some((entry) => entry === undefined)) return undefined;
+
+  const video = located.find((entry) => entry?.clip.kind === 'video');
+  const audio = located.find((entry) => entry?.clip.kind === 'audio');
+  if (video === undefined || audio === undefined) return undefined;
+
+  // Already half of a pair: linking would orphan whatever the other side points at.
+  if (linkedPartner(video.clip) !== undefined || linkedPartner(audio.clip) !== undefined) {
+    return undefined;
+  }
+
+  return { video: video.clip.id, audio: audio.clip.id };
+}

@@ -24,6 +24,13 @@ export interface ClipMenuState {
   readonly hasAttributes: boolean;
   /** True when removing closes the gap, so the label can say which removal this is. */
   readonly ripple: boolean;
+  /**
+   * True when the selection is exactly one unlinked video and one unlinked audio clip.
+   *
+   * Decided by the caller because it is a question about the selection and the document, and computed
+   * once so the menu row and the action cannot disagree about whether it is possible.
+   */
+  readonly canLink?: boolean;
 }
 
 export const CLIP_MENU_ACTIONS = [
@@ -39,6 +46,7 @@ export const CLIP_MENU_ACTIONS = [
   'split',
   'toggle-enabled',
   'unlink',
+  'link',
   'copy-attributes',
   'paste-attributes',
   'remove',
@@ -99,6 +107,13 @@ export function clipMenuItems(state: ClipMenuState): readonly ContextMenuItem[] 
       // Offered only on a linked clip: on anything else it would be a permanently dead row teaching
       // the user that this menu is mostly furniture.
       disabled: !linked,
+    },
+    {
+      // The other half of unlinking, which had no way back. `linkClips` existed, tested, with no
+      // caller — so splitting a pair was a one-way door, and the only recovery was undo.
+      id: 'link',
+      label: 'Link audio and video',
+      disabled: !state.canLink,
     },
 
     {

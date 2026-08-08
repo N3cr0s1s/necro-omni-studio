@@ -239,6 +239,23 @@ describe('track actions', () => {
   });
 });
 
+describe('linking', () => {
+  it('is offered when the caller says the selection can be linked', () => {
+    expect(item(clipMenuItems(state({ canLink: true })), 'link')?.disabled).toBe(false);
+  });
+
+  it('is disabled otherwise, rather than hidden', () => {
+    // The rows stay put whatever the state; a menu that changed shape under the pointer would be
+    // harder to use than one with a greyed row.
+    expect(item(clipMenuItems(state()), 'link')?.disabled).toBe(true);
+  });
+
+  it('sits beside unlinking, since they are the same decision either way', () => {
+    const ids = clipMenuItems(state()).map((entry) => entry.id);
+    expect(ids.indexOf('link')).toBe(ids.indexOf('unlink') + 1);
+  });
+});
+
 describe('shape', () => {
   it('keeps the same rows whatever the state, so the menu does not move under the pointer', () => {
     const full = clipMenuItems(state({ canPaste: true, hasAttributes: true })).map((entry) => entry.id);
