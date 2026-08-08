@@ -29,6 +29,9 @@
       "path": "packages/export"
     },
     {
+      "path": "packages/masks"
+    },
+    {
       "path": "packages/generators"
     },
     {

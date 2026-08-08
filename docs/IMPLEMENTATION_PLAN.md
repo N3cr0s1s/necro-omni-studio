@@ -140,9 +140,18 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] GPU semaphore: serialized, idempotent release, cancellable waits, status
       reporting. 16 tests.
 
-- [ ] Registry-driven parameter panel UI
-- [ ] In-place variant picking on the timeline
-- [ ] Manifest inspector
+- [x] Registry-driven parameter panel UI: controls chosen by declared *type*
+      only, live enum options, presets hiding their pins, variant control tied to
+      whether a seed exists. Nothing branches on a generator id. 33 tests.
+- [x] In-place variant picking: a pure staging model (candidates from a group's
+      runs, stepping across ready ones so partial results are usable at once,
+      accept/discard as outcomes rather than mutations) plus the picker and
+      placeholder from mockup 1d. Placeholder length comes from the manifest's
+      declared length parameter, provisional lengths flagged. 33 + 24 tests.
+- [x] Manifest inspector: a pure `ManifestDraft` with type/key inference,
+      validation split into blocking errors and non-blocking warnings so an
+      unbound contract can still be saved, and a two-column UI that lists a
+      graph's literal inputs and previews the file it writes. 37 + 26 tests.
 
 ### Phase 8 — M10: ComfyUI backend
 - [x] Graph patching (bind pointers, `also` templates, preset pins, batch size),
@@ -150,8 +159,12 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 - [x] `/prompt`, `/ws`, `/history`, `/upload/image`, `/object_info`, cancel.
       22 tests with a scripted transport.
 - [x] Output collection keyed by node, so the manifest decides what an output means
-- [ ] Manifests for the four supplied graphs (the two the spec documents are
-      exercised by the tests; the other two need authoring)
+- [x] Manifest file format: parser and serializer for the spec's on-disk
+      snake_case, in one module so the naming leaks into neither side.
+- [x] Manifests for **all five** supplied graphs, in `generators/`. A library test
+      validates each against its own real graph — pointers, output nodes and
+      `requires` — and checks coherence properties (defaults inside ranges, pins
+      naming real parameters, no two parameters on one pointer). 17 tests.
 
 ### Phase 9 — M11: SAM 2 masks
 - [ ] Mask model, RLE/PNG-sequence cache
@@ -165,12 +178,12 @@ Spec milestones M1..M11 map to the phases below. Each phase lands with unit test
 
 ## Current status
 
-**Phases 1–6 complete (M1–M8). Phase 7 and 8 substantially done — the generator
-framework works end to end against the mock backend, and the ComfyUI backend
-implements the contract with its patching verified against the real graphs.
-Remaining: the generator panel UI, in-place variant picking, the manifest
-inspector, and M11 (SAM 2 masks).**
-**994 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
+**Phases 1–8 complete (M1–M10). The generator framework works end to end: five
+manifests in `generators/` cover every supplied graph, the registry validates
+them against the real files, and the panel, variant picker and manifest inspector
+are all driven by the manifest alone. Remaining: M11 (SAM 2 masks) and
+Phase 10 hardening.**
+**1164 TypeScript tests + 82 Python tests passing; `tsc --build` clean, `ruff` clean,
 17/17 compositor GL assertions, 19/19 text rasterizer assertions.**
 
 Committed on branch `build/foundation` (local only, not pushed).
@@ -179,8 +192,7 @@ Packages: `@nos/core`, `@nos/media` (contracts), `@nos/sidecar-client`
 (HTTP implementation), `@nos/editing` (document transforms), `@nos/ui` (tokens +
 components), `apps/sidecar` (Python).
 
-Next: the registry-driven parameter panel and in-place variant picking (mockups
-1c and 1d), then M11 — SAM 2 masks. The Electron shell
+Next: M11 — SAM 2 masks — then Phase 10 hardening. The Electron shell
 (`apps/desktop`) is still to be created; the `@nos/ui` visual harness
 (`cd packages/ui && npx vite`, port 5199) stands in for it meanwhile and now renders
 the media browser plus a full timeline from mockup 1a.

@@ -1,0 +1,17 @@
+{
+  "name": "@nos/masks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mask model, RLE codec and segmentation session — the SAM 2 pipeline's engine-agnostic half.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts"
+  },
+  "dependencies": {
+    "@nos/core": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}
