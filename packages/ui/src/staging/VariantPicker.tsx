@@ -1,7 +1,12 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { ChevronLeftIcon, ChevronRightIcon, CircleXIcon, PlayIcon, SquareIcon, XIcon } from 'lucide-react';
 import { type VariantCandidate, type VariantSelection, describeSelection } from '@nos/generators';
-import { Badge, Button, Mono, SectionCaption } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@nos/ui/components/ui/card';
+import { Progress } from '@nos/ui/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * In-place variant picking (mockup 1d).
@@ -73,92 +78,114 @@ export function VariantPicker({
   }
 
   return (
-    <div
+    <Card
       role="group"
       aria-label={`Variants for ${selection.label}`}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: token.space3,
-        padding: token.space4,
-        minWidth: 232,
-        borderRadius: token.radiusCard,
-        // Purple, because the framework produced this. The mockups keep that meaning exact.
-        background: token.surface1,
-        border: `1px solid ${token.generatedDim}`,
-        boxShadow: '0 10px 28px rgba(0, 0, 0, 0.55)',
-        ...style,
-      }}
+      // `chart-4` is what the whole application uses for "a generator made this", so the picker is
+      // edged in it. The mockups made that meaning exact and it survives the change of palette.
+      className="min-w-58 gap-3 border-chart-4/40 py-3 shadow-lg"
+      style={style}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Variants</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.generatedText}>{describeSelection(selection)}</Mono>
-      </div>
+      <CardHeader className="flex-row items-center gap-3 px-3">
+        <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Variants
+        </CardTitle>
+        <span className="ml-auto font-mono text-xs text-chart-4">{describeSelection(selection)}</span>
+      </CardHeader>
 
-      <div
-        role="radiogroup"
-        aria-label="Variant"
-        style={{ display: 'flex', gap: token.space2, flexWrap: 'wrap' }}
-      >
-        {selection.candidates.map((candidate) => (
-          <CandidateChip
-            // Keyed and compared by the candidate's own key, never by its run: a batched run carries
-            // several variants, so three chips would share one React key and all highlight together.
-            key={candidate.key}
-            candidate={candidate}
-            selected={candidate.key === current?.key}
-            {...(onSelect !== undefined ? { onSelect } : {})}
-          />
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-        <Button disabled={!canStep} onClick={() => onStep?.(-1)} title="Previous variant (←)">
-          ◀
-        </Button>
-        <Button
-          tone={auditioning ? 'active' : 'default'}
-          disabled={!canAccept}
-          onClick={onAudition}
-          title="Play the staged clip in place"
-          style={{ flex: 1, justifyContent: 'center' }}
+      <CardContent className="flex flex-col gap-3 px-3">
+        <ToggleGroup
+          aria-label="Variant"
+          value={current === undefined ? [] : [current.key]}
+          onValueChange={(value) => {
+            const chosen = value.at(-1);
+            if (chosen !== undefined) onSelect?.(chosen);
+          }}
+          className="flex-wrap justify-start"
         >
-          {auditioning ? 'Stop' : 'Audition'}
-        </Button>
-        <Button disabled={!canStep} onClick={() => onStep?.(1)} title="Next variant (→)">
-          ▶
-        </Button>
-      </div>
+          {selection.candidates.map((candidate) => (
+            <CandidateChip
+              // Keyed and compared by the candidate's own key, never by its run: a batched run carries
+              // several variants, so three chips would share one React key and all highlight together.
+              key={candidate.key}
+              candidate={candidate}
+            />
+          ))}
+        </ToggleGroup>
 
-      {current !== undefined && (
-        // The seed is provenance: it is what makes a variant reproducible later, so it is shown rather
-        // than kept in the job record only.
-        <div style={{ display: 'flex', alignItems: 'center', gap: token.space2 }}>
-          <Mono tone={token.textFaint}>seed</Mono>
-          <Mono tone={token.generatedDim}>{current.seed}</Mono>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!canStep}
+            onClick={() => onStep?.(-1)}
+            aria-label="Previous variant"
+            title="Previous variant (←)"
+          >
+            <ChevronLeftIcon />
+          </Button>
+          <Button
+            variant={auditioning ? 'secondary' : 'outline'}
+            size="sm"
+            disabled={!canAccept}
+            onClick={onAudition}
+            title="Play the staged clip in place"
+            className="flex-1"
+          >
+            {auditioning ? <SquareIcon /> : <PlayIcon />}
+            {auditioning ? 'Stop' : 'Audition'}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!canStep}
+            onClick={() => onStep?.(1)}
+            aria-label="Next variant"
+            title="Next variant (→)"
+          >
+            <ChevronRightIcon />
+          </Button>
         </div>
-      )}
 
-      {selection.exhausted && <Mono tone={token.danger}>{firstError(selection.candidates)}</Mono>}
+        {current !== undefined && (
+          // The seed is provenance: it is what makes a variant reproducible later, so it is shown rather
+          // than kept in the job record only.
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="text-muted-foreground">seed</span>
+            <span className="text-chart-4">{current.seed}</span>
+          </div>
+        )}
 
-      <div style={{ display: 'flex', gap: token.space2 }}>
-        <Button
-          tone="primary"
-          disabled={!canAccept}
-          onClick={onAccept}
-          title={canAccept ? 'Keep this variant (Enter)' : 'No variant is ready yet'}
-          style={{ flex: 1, justifyContent: 'center' }}
-        >
-          Keep
-        </Button>
-        <Button onClick={onDiscard} title="Remove the placeholder; generated files are kept (Esc)">
-          Discard
-        </Button>
-      </div>
-    </div>
+        {selection.exhausted && (
+          <p className="flex items-center gap-1.5 text-xs text-destructive">
+            <CircleXIcon className="size-3.5 shrink-0" />
+            {firstError(selection.candidates)}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            disabled={!canAccept}
+            onClick={onAccept}
+            title={canAccept ? 'Keep this variant (Enter)' : 'No variant is ready yet'}
+            className="flex-1"
+          >
+            Keep
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDiscard}
+            title="Remove the placeholder; generated files are kept (Esc)"
+          >
+            Discard
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -168,62 +195,30 @@ export function VariantPicker({
  * A pending candidate is shown rather than hidden: seeing `3` greyed with its progress is what tells the
  * user that more is coming, and a chip list that grew as results arrived would move the target under a
  * clicking finger.
+ *
+ * The progress fill is a `Progress` behind the ordinal rather than a spinner — it reads at this size and
+ * says how far along the run is, which is what decides whether waiting is worth it.
  */
-function CandidateChip({
-  candidate,
-  selected,
-  onSelect,
-}: {
-  readonly candidate: VariantCandidate;
-  readonly selected: boolean;
-  readonly onSelect?: (candidate: string) => void;
-}): ReactNode {
+function CandidateChip({ candidate }: { readonly candidate: VariantCandidate }): ReactNode {
   const failed = candidate.status === 'failed' || candidate.status === 'cancelled';
-  const palette = selected
-    ? { bg: 'rgba(155, 140, 255, 0.18)', border: token.generated, fg: token.generatedText }
-    : failed
-      ? { bg: token.surface2, border: token.borderControl, fg: token.danger }
-      : candidate.ready
-        ? { bg: token.surface2, border: token.generatedDim, fg: token.textMuted }
-        : { bg: token.surface2, border: token.borderControl, fg: token.textGhost };
+  const running = candidate.progress !== undefined && !candidate.ready && !failed;
 
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
+    <ToggleGroupItem
+      value={candidate.key}
       aria-label={chipLabel(candidate)}
       disabled={!candidate.ready}
-      onClick={() => onSelect?.(candidate.key)}
-      style={{
-        position: 'relative',
-        minWidth: 34,
-        height: token.controlHeightSm,
-        padding: `0 ${token.space2}`,
-        borderRadius: token.radiusControl,
-        background: palette.bg,
-        border: `1px solid ${palette.border}`,
-        color: palette.fg,
-        font: token.textValue,
-        cursor: candidate.ready ? 'pointer' : 'default',
-        overflow: 'hidden',
-      }}
+      className={cn('relative min-w-9 overflow-hidden font-mono', failed && 'text-destructive')}
     >
-      {candidate.progress !== undefined && !candidate.ready && !failed && (
-        // A fill rather than a spinner: it reads at 34 px and shows how far along the run is, which is what
-        // decides whether waiting is worth it.
-        <span
-          role="presentation"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: `${Math.round(Math.min(1, Math.max(0, candidate.progress)) * 100)}%`,
-            background: 'rgba(155, 140, 255, 0.22)',
-          }}
+      {running && (
+        <Progress
+          aria-hidden="true"
+          value={Math.min(1, Math.max(0, candidate.progress ?? 0)) * 100}
+          className="absolute inset-0 block opacity-30 [&_[data-slot=progress-indicator]]:bg-chart-4 [&_[data-slot=progress-track]]:h-full [&_[data-slot=progress-track]]:rounded-none"
         />
       )}
-      <span style={{ position: 'relative' }}>{failed ? '×' : candidate.ordinal}</span>
-    </button>
+      <span className="relative">{failed ? <XIcon /> : candidate.ordinal}</span>
+    </ToggleGroupItem>
   );
 }
 
@@ -264,41 +259,24 @@ export function VariantPlaceholder({
   readonly onClick?: (() => void) | undefined;
 }): ReactNode {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       aria-label={`${selection.label} placeholder`}
       aria-pressed={selected}
       onClick={onClick}
-      style={{
-        position: 'absolute',
-        left,
-        width: Math.max(2, width),
-        height,
-        top: 0,
-        display: 'flex',
-        alignItems: 'center',
-        gap: token.space2,
-        padding: `0 ${token.space2}`,
-        borderRadius: token.radiusInset,
-        background: 'rgba(155, 140, 255, 0.10)',
+      className={cn(
+        'absolute top-0 justify-start gap-2 overflow-hidden border bg-chart-4/10 px-2 text-xs whitespace-nowrap text-chart-4',
         // Dashed while the length is provisional: a solid edge would claim a precision the manifest does
         // not have, and the clip is about to change length.
-        //
-        // Longhands rather than the `border` shorthand: a shorthand carrying a `var()` colour is dropped
-        // wholesale by stricter CSS parsers, and losing the edge would erase the provisional signal.
-        borderWidth: selected ? 2 : 1,
-        borderStyle: provisional ? 'dashed' : 'solid',
-        borderColor: selected ? token.generated : token.generatedDim,
-        color: token.generatedText,
-        font: token.textClip,
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
+        provisional ? 'border-dashed' : 'border-solid',
+        selected ? 'border-2 border-chart-4' : 'border-chart-4/40',
+      )}
+      style={{ left, width: Math.max(2, width), height }}
     >
-      <Badge tone="generated">{`${selection.readyCount}/${selection.totalCount}`}</Badge>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{selection.label}</span>
-    </button>
+      <Badge variant="secondary" className="font-mono">
+        {`${selection.readyCount}/${selection.totalCount}`}
+      </Badge>
+      <span className="truncate">{selection.label}</span>
+    </Button>
   );
 }

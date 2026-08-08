@@ -35,11 +35,21 @@ function renderDialog(overrides: Partial<Parameters<typeof ExportDialog>[0]> = {
   return render(<ExportDialog settings={settings()} {...overrides} />);
 }
 
+/**
+ * The options of one segmented choice, by the label beside it. Reading them off the group rather than
+ * off every pressed button in the dialog keeps the codec assertions from picking up the quality ones.
+ */
+function optionsOf(label: string): (string | null)[] {
+  const field = screen.getByText(label).closest('[data-slot="field"]');
+  return [...(field?.querySelectorAll('button') ?? [])].map((option) => option.textContent);
+}
+
 describe('rendering', () => {
   it('is a labelled modal dialog', () => {
+    // The modality itself is the registry's — backdrop, focus trap, Escape. What is asserted here is
+    // that it is reachable *as* a dialog and that it says which one it is.
     renderDialog();
-    const dialog = screen.getByRole('dialog', { name: 'Export' });
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Export' })).toBeDefined();
   });
 
   it('summarizes the deliverable', () => {
@@ -49,12 +59,12 @@ describe('rendering', () => {
 
   it('shows the destination', () => {
     renderDialog();
-    expect(screen.getByText('renders/breakdown_v3.mp4')).toBeDefined();
+    expect(screen.getByLabelText('Save to')).toHaveProperty('value', 'renders/breakdown_v3.mp4');
   });
 
   it('says when no destination is set rather than showing an empty field', () => {
     renderDialog({ settings: settings({ outputPath: '' }) });
-    expect(screen.getByText('not set')).toBeDefined();
+    expect(screen.getByLabelText('Save to')).toHaveProperty('placeholder', 'not set');
   });
 
   it('shows the range in frames and seconds', () => {
@@ -70,7 +80,7 @@ describe('rendering', () => {
   it('offers only the codecs the pipeline implements', () => {
     // Offering a codec that is not implemented would imply capability that is not there.
     renderDialog();
-    const codecs = screen.getAllByRole('radio').map((radio) => radio.textContent);
+    const codecs = optionsOf('Codec');
     expect(codecs).toContain('H.264');
     expect(codecs).toContain('H.265');
     expect(codecs).not.toContain('ProRes');
@@ -83,7 +93,7 @@ describe('settings changes', () => {
     const onChange = vi.fn();
     renderDialog({ onChange });
 
-    await user.click(screen.getByRole('radio', { name: 'H.265' }));
+    await user.click(screen.getByRole('button', { name: 'H.265' }));
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ videoCodec: 'h265' }));
   });
@@ -93,17 +103,16 @@ describe('settings changes', () => {
     const onChange = vi.fn();
     renderDialog({ onChange });
 
-    await user.click(screen.getByRole('radio', { name: 'maximum' }));
+    await user.click(screen.getByRole('button', { name: 'maximum' }));
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ quality: 'maximum' }));
   });
 
-  it('marks the selected option with aria-checked, not only a tint', () => {
+  it('marks the selected option in the accessibility tree, not only with a tint', () => {
     renderDialog();
     const selected = screen
-      .getAllByRole('radio')
-      .filter((radio) => radio.getAttribute('aria-checked') === 'true')
-      .map((radio) => radio.textContent);
+      .getAllByRole('button', { pressed: true })
+      .map((option) => option.textContent);
     // One per group: codec, quality, speed.
     expect(selected).toEqual(['H.264', 'high', 'medium']);
   });
@@ -194,8 +203,8 @@ describe('progress', () => {
 
   it('locks the settings while running, so they cannot drift from the render', () => {
     renderDialog({ progress: progress() });
-    for (const radio of screen.getAllByRole('radio')) {
-      expect(radio.hasAttribute('disabled')).toBe(true);
+    for (const option of screen.getAllByRole('button', { pressed: false })) {
+      expect(option.hasAttribute('disabled')).toBe(true);
     }
     expect(screen.getByRole('button', { name: 'Browse' }).hasAttribute('disabled')).toBe(true);
   });

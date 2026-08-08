@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo } from 'react';
+import { CircleCheckIcon, FolderOpenIcon, GaugeIcon, TriangleAlertIcon, UploadIcon } from 'lucide-react';
 import type { ValidationIssue } from '@nos/core';
 import {
   type EncoderSpeed,
@@ -16,8 +17,21 @@ import {
   formatRemaining,
   validateExportSettings,
 } from '@nos/export';
-import { Badge, Button, FieldRow, Mono, SectionCaption, ValueField } from '../primitives/Primitives.js';
-import { token } from '../tokens/tokens.js';
+import { Badge } from '@nos/ui/components/ui/badge';
+import { Button } from '@nos/ui/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@nos/ui/components/ui/dialog';
+import { Field, FieldError, FieldGroup, FieldLabel } from '@nos/ui/components/ui/field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@nos/ui/components/ui/input-group';
+import { Progress } from '@nos/ui/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
+import { cn } from '@nos/ui/lib/utils';
 
 /**
  * The export dialog.
@@ -28,10 +42,19 @@ import { token } from '../tokens/tokens.js';
  * Validation runs continuously rather than on submit, so a problem is visible next to the field that
  * caused it while the user is still looking at it. Export is a long operation; discovering a bad output
  * path after committing to it is a poor trade.
+ *
+ * The modal behaviour — backdrop, focus trap, Escape, returning focus to whatever opened it — is the
+ * registry's. It used to be a `div` with `aria-modal` on it, which claimed all of that and provided
+ * none of it.
  */
 
 export interface ExportDialogProps {
   readonly settings: ExportSettings;
+  /**
+   * Defaults to open, because the caller mounts this only when it wants it shown. Present so a caller
+   * that would rather keep it mounted can close it and get the exit animation.
+   */
+  readonly open?: boolean;
   /** Present while an export is running. Absent means the form is editable. */
   readonly progress?: ExportProgress;
   readonly onChange?: (settings: ExportSettings) => void;
@@ -46,6 +69,7 @@ export interface ExportDialogProps {
 
 export function ExportDialog({
   settings,
+  open = true,
   progress,
   onChange,
   onStart,
@@ -69,119 +93,135 @@ export function ExportDialog({
   const issueFor = (path: string): string | undefined => issues.find((issue) => issue.path === path)?.message;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Export"
-      style={{
-        width: 460,
-        background: token.bgPanel,
-        border: `1px solid ${token.border}`,
-        borderRadius: token.radiusPanel,
-        padding: token.space7,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: token.space6,
-        color: token.textPrimary,
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // A running export is not abandoned by a stray Escape: cancelling is a decision, and the
+        // Cancel button is where it is made.
+        if (!next && !running) onClose?.();
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <SectionCaption>Export</SectionCaption>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textFaint}>{describeSettings(settings)}</Mono>
-      </div>
+      <DialogContent aria-label="Export" className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UploadIcon className="size-4" />
+            Export
+          </DialogTitle>
+          <DialogDescription className="font-mono">{describeSettings(settings)}</DialogDescription>
+        </DialogHeader>
 
-      <FieldRow label="Save to">
-        <ValueField style={{ flex: 1, minWidth: 0 }}>
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              // The tail of a path is the informative part; a truncated head hides the filename.
-              direction: 'rtl',
-              textAlign: 'left',
-            }}
-          >
-            {settings.outputPath || 'not set'}
-          </span>
-        </ValueField>
-        <Button onClick={onBrowse} disabled={running}>
-          Browse
-        </Button>
-      </FieldRow>
-      <FieldIssue message={issueFor('outputPath')} />
+        <FieldGroup className="gap-4">
+          <Field orientation="horizontal">
+            <FieldLabel htmlFor="export-path" className="w-18 shrink-0">
+              Save to
+            </FieldLabel>
+            <InputGroup>
+              <InputGroupInput
+                id="export-path"
+                readOnly
+                value={settings.outputPath}
+                placeholder="not set"
+                aria-invalid={issueFor('outputPath') !== undefined}
+                // The tail of a path is the informative part; a truncated head hides the filename, so
+                // the overflow is pushed to the left.
+                dir="rtl"
+                className="text-left"
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton onClick={onBrowse} disabled={running}>
+                  <FolderOpenIcon />
+                  Browse
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+          </Field>
+          <FieldIssue message={issueFor('outputPath')} />
 
-      <FieldRow label="Codec">
-        <Choice
-          options={VIDEO_CODECS}
-          value={settings.videoCodec}
-          disabled={running}
-          label={(codec: VideoCodec) => (codec === 'h264' ? 'H.264' : 'H.265')}
-          onSelect={(videoCodec) => update({ videoCodec })}
-        />
-      </FieldRow>
+          <Field orientation="horizontal">
+            <FieldLabel className="w-18 shrink-0">Codec</FieldLabel>
+            <Choice
+              options={VIDEO_CODECS}
+              value={settings.videoCodec}
+              disabled={running}
+              label={(codec: VideoCodec) => (codec === 'h264' ? 'H.264' : 'H.265')}
+              onSelect={(videoCodec) => update({ videoCodec })}
+            />
+          </Field>
 
-      <FieldRow label="Quality">
-        <Choice
-          options={QUALITY_PRESETS}
-          value={settings.quality}
-          disabled={running}
-          label={(quality: QualityPreset) => quality}
-          onSelect={(quality) => update({ quality })}
-        />
-      </FieldRow>
+          <Field orientation="horizontal">
+            <FieldLabel className="w-18 shrink-0">Quality</FieldLabel>
+            <Choice
+              options={QUALITY_PRESETS}
+              value={settings.quality}
+              disabled={running}
+              label={(quality: QualityPreset) => quality}
+              onSelect={(quality) => update({ quality })}
+            />
+          </Field>
 
-      <FieldRow label="Speed">
-        <Choice
-          options={ENCODER_SPEEDS}
-          value={settings.speed}
-          disabled={running}
-          label={(speed: EncoderSpeed) => speed}
-          onSelect={(speed) => update({ speed })}
-        />
-      </FieldRow>
+          <Field orientation="horizontal">
+            <FieldLabel className="w-18 shrink-0">Speed</FieldLabel>
+            <Choice
+              options={ENCODER_SPEEDS}
+              value={settings.speed}
+              disabled={running}
+              label={(speed: EncoderSpeed) => speed}
+              onSelect={(speed) => update({ speed })}
+            />
+          </Field>
 
-      <FieldRow label="Range">
-        <ValueField style={{ flex: 1 }}>
-          {settings.range.duration} f · {durationSeconds.toFixed(1)} s
-        </ValueField>
-      </FieldRow>
-      <FieldIssue message={issueFor('range')} />
-      <FieldIssue message={issueFor('resolution')} />
+          <Field orientation="horizontal">
+            <FieldLabel className="w-18 shrink-0">Range</FieldLabel>
+            <span className="font-mono text-sm">
+              {settings.range.duration} f · {durationSeconds.toFixed(1)} s
+            </span>
+          </Field>
+          <FieldIssue message={issueFor('range')} />
+          <FieldIssue message={issueFor('resolution')} />
+        </FieldGroup>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <Mono tone={token.textDim}>about {formatEstimate(estimate)}</Mono>
-        <div style={{ flex: 1 }} />
-        {settings.useProxyResolution && <Badge tone="warn">proxy resolution</Badge>}
-      </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <GaugeIcon className="size-3.5" />
+          <span className="font-mono">about {formatEstimate(estimate)}</span>
+          {settings.useProxyResolution && (
+            <Badge variant="destructive" className="ml-auto">
+              <TriangleAlertIcon />
+              proxy resolution
+            </Badge>
+          )}
+        </div>
 
-      {progress !== undefined && (
-        <ProgressSection
-          progress={progress}
-          outputPath={settings.outputPath}
-          {...(onReveal !== undefined ? { onReveal } : {})}
-        />
-      )}
-
-      <div style={{ display: 'flex', gap: token.space3, justifyContent: 'flex-end' }}>
-        {running ? (
-          <Button onClick={onCancel}>Cancel</Button>
-        ) : (
-          <>
-            <Button onClick={onClose}>Close</Button>
-            <Button
-              tone="primary"
-              onClick={onStart}
-              disabled={!validation.ok}
-              title={validation.ok ? undefined : 'Fix the highlighted settings first'}
-            >
-              Export
-            </Button>
-          </>
+        {progress !== undefined && (
+          <ProgressSection
+            progress={progress}
+            outputPath={settings.outputPath}
+            {...(onReveal !== undefined ? { onReveal } : {})}
+          />
         )}
-      </div>
-    </div>
+
+        <DialogFooter>
+          {running ? (
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Close
+              </Button>
+              <Button
+                onClick={onStart}
+                disabled={!validation.ok}
+                title={validation.ok ? undefined : 'Fix the highlighted settings first'}
+              >
+                <UploadIcon />
+                Export
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -193,19 +233,15 @@ export function ExportDialog({
  */
 function FieldIssue({ message }: { readonly message: string | undefined }): ReactNode {
   if (message === undefined) return null;
-  return (
-    <div style={{ paddingLeft: 76, marginTop: -8 }}>
-      <Mono tone={token.danger}>{message}</Mono>
-    </div>
-  );
+  return <FieldError className="-mt-2 pl-19">{message}</FieldError>;
 }
 
 /**
  * A segmented choice.
  *
- * A radio group rather than a `<select>`: the option sets are small and fixed, and showing them all lets
- * the user compare rather than remember. `aria-checked` carries the state, so it is not conveyed by tint
- * alone.
+ * A toggle group rather than a `<select>`: the option sets are small and fixed, and showing them all
+ * lets the user compare rather than remember. The pressed state carries the answer, so it is not
+ * conveyed by tint alone.
  */
 function Choice<T extends string>({
   options,
@@ -221,35 +257,23 @@ function Choice<T extends string>({
   readonly onSelect: (option: T) => void;
 }): ReactNode {
   return (
-    <div role="radiogroup" style={{ display: 'flex', gap: token.space1, flex: 1 }}>
-      {options.map((option) => {
-        const selected = option === value;
-        return (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            disabled={disabled}
-            onClick={() => onSelect(option)}
-            style={{
-              flex: 1,
-              height: token.controlHeight,
-              borderRadius: token.radiusControl,
-              background: selected ? '#1c2333' : token.surface2,
-              border: `1px solid ${selected ? '#2f4a72' : token.borderControl}`,
-              color: selected ? '#9dc2ff' : token.textMuted,
-              font: `500 11px ${token.fontUi}`,
-              cursor: disabled ? 'default' : 'pointer',
-              opacity: disabled ? 0.5 : 1,
-              textTransform: 'capitalize',
-            }}
-          >
-            {label(option)}
-          </button>
-        );
-      })}
-    </div>
+    <ToggleGroup
+      value={[value]}
+      disabled={disabled}
+      onValueChange={(next) => {
+        // Base UI reports the whole set. Taking the last entry keeps this single-select without
+        // letting a click on the current option deselect it — there is no "no codec".
+        const chosen = next.at(-1) as T | undefined;
+        if (chosen !== undefined) onSelect(chosen);
+      }}
+      className="flex-1"
+    >
+      {options.map((option) => (
+        <ToggleGroupItem key={option} value={option} className="flex-1 capitalize">
+          {label(option)}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 
@@ -267,56 +291,49 @@ function ProgressSection({
   const done = progress.phase === 'complete';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: token.space3 }}>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(progress.fraction * 100)}
+    <div className="flex flex-col gap-3">
+      <Progress
         aria-label="Export progress"
-        style={{
-          height: 5,
-          borderRadius: 2,
-          background: token.surface2,
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            width: `${progress.fraction * 100}%`,
-            height: '100%',
-            background: failed ? token.danger : done ? token.ok : token.accent,
-            // The only place a transition is welcome in this app's motion budget: a progress bar that
-            // jumps per frame reads as jitter, and it never moves under the pointer.
-            transition: `width ${token.transition}`,
-          }}
-        />
-      </div>
+        value={Math.round(progress.fraction * 100)}
+        className={cn(
+          'block',
+          failed && '[&_[data-slot=progress-indicator]]:bg-destructive',
+          done && '[&_[data-slot=progress-indicator]]:bg-chart-2',
+        )}
+      />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: token.space3 }}>
-        <Mono tone={failed ? token.danger : token.textDim}>
+      <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
+        <span className={cn(failed && 'text-destructive')}>
           {progress.framesDone} / {progress.framesTotal} f
-        </Mono>
-        <Mono tone={token.textFaint}>{progress.fps} fps</Mono>
-        <div style={{ flex: 1 }} />
-        <Mono tone={token.textFaint}>
+        </span>
+        <span>{progress.fps} fps</span>
+        <span className="ml-auto flex items-center gap-1.5">
+          {done && <CircleCheckIcon className="size-3.5" />}
+          {failed && <TriangleAlertIcon className="size-3.5 text-destructive" />}
           {done
             ? 'complete'
             : failed
               ? (progress.message ?? 'failed')
               : formatRemaining(progress.remainingSeconds)}
-        </Mono>
+        </span>
       </div>
 
-      {progress.message !== undefined && !failed && <Mono tone={token.textGhost}>{progress.message}</Mono>}
+      {progress.message !== undefined && !failed && (
+        <p className="font-mono text-xs text-muted-foreground">{progress.message}</p>
+      )}
 
       {done && onReveal !== undefined && (
         // A way to get to the file. After a render that took minutes, "show me the file" is the next
         // thing anyone wants — and the destination is already named in the field above, so this adds
         // the action rather than repeating the path.
-        <div style={{ display: 'flex' }}>
-          <div style={{ flex: 1 }} />
-          <Button onClick={onReveal} title={`Show ${outputPath ?? 'the finished file'} in the file manager`}>
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onReveal}
+            title={`Show ${outputPath ?? 'the finished file'} in the file manager`}
+          >
+            <FolderOpenIcon />
             Reveal
           </Button>
         </div>

@@ -79,7 +79,7 @@ describe('rendering', () => {
   it('shows a chip per variant, including ones still generating', () => {
     // A chip list that grew as results arrived would move the target under a clicking finger.
     renderPicker({ selection: selectionOf(partial) });
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getByRole('group', { name: 'Variant' }).querySelectorAll('button')).toHaveLength(3);
   });
 
   it('says how many are still coming', () => {
@@ -89,13 +89,13 @@ describe('rendering', () => {
 
   it('names a pending chip by its state, not by number alone', () => {
     renderPicker({ selection: selectionOf(partial) });
-    expect(screen.getByRole('radio', { name: 'Variant 2 generating' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Variant 2 generating' })).toBeDefined();
   });
 
   it('marks a failed variant', () => {
     const failed = [done('r1', 11), run('r2', { status: 'failed', error: 'out of memory' })];
     renderPicker({ selection: selectionOf(failed) });
-    expect(screen.getByRole('radio', { name: 'Variant 2 failed' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Variant 2 failed' })).toBeDefined();
   });
 
   it('shows the seed, which is what makes a variant reproducible', () => {
@@ -139,13 +139,13 @@ describe('availability', () => {
 
   it('disables stepping when only one variant is ready', () => {
     renderPicker({ selection: selectionOf(partial) });
-    expect(screen.getByRole('button', { name: '◀' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: '▶' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Previous variant' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Next variant' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('disables a chip that is not ready', () => {
     renderPicker({ selection: selectionOf(partial) });
-    const pendingChip = screen.getByRole('radio', { name: 'Variant 2 generating' });
+    const pendingChip = screen.getByRole('button', { name: 'Variant 2 generating' });
     expect(pendingChip.hasAttribute('disabled')).toBe(true);
   });
 });
@@ -155,7 +155,7 @@ describe('interaction', () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     renderPicker({ onSelect });
-    await user.click(screen.getByRole('radio', { name: 'Variant 3' }));
+    await user.click(screen.getByRole('button', { name: 'Variant 3' }));
     // The candidate's key, not its run: three variants of a batched submit share a run id.
     expect(onSelect).toHaveBeenCalledWith('r3#0');
   });
@@ -164,8 +164,8 @@ describe('interaction', () => {
     const user = userEvent.setup();
     const onStep = vi.fn();
     renderPicker({ onStep });
-    await user.click(screen.getByRole('button', { name: '▶' }));
-    await user.click(screen.getByRole('button', { name: '◀' }));
+    await user.click(screen.getByRole('button', { name: 'Next variant' }));
+    await user.click(screen.getByRole('button', { name: 'Previous variant' }));
     expect(onStep.mock.calls).toEqual([[1], [-1]]);
   });
 
@@ -240,7 +240,7 @@ describe('the placeholder body', () => {
       <VariantPlaceholder selection={selectionOf(partial)} left={0} width={80} height={56} provisional />,
     );
     const body = screen.getByRole('button', { name: /placeholder/ });
-    expect(body.style.borderStyle).toBe('dashed');
+    expect(body.className).toContain('border-dashed');
   });
 
   it('stays clickable at any zoom', () => {
