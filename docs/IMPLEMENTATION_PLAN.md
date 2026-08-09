@@ -3649,3 +3649,44 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   draggable editor, a per-lane vertical zoom, and `KeyframeInspector`.
 
   3652 tests green; `tsc --build` clean.
+
+- 2026-08-09: What the harnesses found once the features were in.
+
+  Three of the four came from the *checks* being wrong in ways that looked like the application being
+  wrong, which is the failure mode a harness has to be watched for as carefully as the code.
+
+  **The completion check lied for two rounds.** It reported the editor broken while the engine answered
+  correctly throughout: Monaco auto-closes the `{` the harness inserts and re-indents what follows, so
+  the buffer is four lines rather than three, and a caret counted up from the end landed inside the
+  trailing brace where there is genuinely nothing to suggest. Counting down from the top is exact
+  whatever the editor adds below. The list is also named `Suggest`. And `readCode` compared rendered
+  text against a literal — Monaco renders significant spaces as U+00A0, so every completion that ends
+  in a space failed, which is all of them.
+
+  What settled it was dumping the widget's own class from the running window: `suggest-widget message
+  visible` with "No suggestions." is a provider that was **asked and had nothing to say**, which is a
+  different fault from a widget that never opened.
+
+  **The perf check measured the monitor.** Each pointer move waits on a frame, so the wall clock per
+  move is the application's work plus one frame of this display — and the assertion charged the
+  application for both. The same build read 12.9 ms on a 131 Hz run and 14.8 ms on a 101 Hz one. Two
+  hours went into hunting a regression that was a refresh rate. `frameMs` was already measured for
+  exactly this and never used; subtracting it leaves **6.1–6.6 ms**, stable across runs, against the
+  spec's 16 ms.
+
+  **One real regression, found on the way.** Allowing a single-clip drag to overlap meant routing every
+  drag through the many-clip operation, whose collision scan compared every pair on the track —
+  quadratic, unnoticed for as long as only a multi-clip drag reached it. 0.53 ms → 0.056 ms for one
+  move on a 400-clip track. The guard beside it asserts the **slope**, not a time, and was run against
+  the quadratic version before being trusted: its first draft wrote `Math.max(smallMs * 2.6, 1)` and
+  the floor swallowed the whole signal.
+
+  **And one real bug, found by the harness doing its job.** The keyboard nudge went through the
+  single-clip move, so a clip already crossfaded with its neighbour could not be nudged at all — every
+  arrow press was a collision with the very clip it had just been joined to — while dragging the same
+  clip worked. A keyboard that refuses what the pointer allows is two behaviours for one edit.
+
+  Verified in the running window: the fade reaches the clip and `project.json`; **dropping a clip onto
+  its neighbour makes a crossfade, both sides ramped**, and it survives the save; a lane names its
+  parameter and is measured to the same height as its header; magnifying makes it taller; the curve
+  draws; a marker opens in the right column and `bezier` gives it an editor.
