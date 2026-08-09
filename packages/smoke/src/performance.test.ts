@@ -16,7 +16,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { moveClip, splitClip, trimClipEnd } from '@nos/editing';
+import { eligibleTracksFor, moveClip, moveWithCrossfades, splitClip, trimClipEnd } from '@nos/editing';
 import { buildRenderPlan } from '@nos/compositor';
 import { buildMixPlan } from '@nos/audio';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
@@ -175,6 +175,62 @@ describe('editing', () => {
       moveClip(document, clipId('v500'), TRACKS.video, frameIndex(15_001));
     });
     expect(elapsed).toBeLessThan(BUDGET_MS);
+  });
+
+  it('drags a clip through the crossfade path within the budget', () => {
+    /*
+     * The operation a *drag* actually calls, which is not `moveClip`.
+     *
+     * A single-clip move used to take a path of its own; since dropping a clip onto its neighbour has
+     * to be allowed to overlap, every drag goes through the many-clip operation instead. That
+     * operation's overlap scan was quadratic in the track's clip count and nothing noticed, because
+     * only a multi-clip drag had ever reached it — a 200-clip track meant twenty thousand comparisons
+     * per pointer move, and the measured cost of a move went to 14.4 ms against a 16 ms budget.
+     *
+     * Guarded here rather than only in the Electron harness because this is where it is cheap to
+     * catch: the harness needs a build, a window and a real drag to say the same thing.
+     */
+    const elapsed = medianMs(20, () => {
+      moveWithCrossfades({
+        document,
+        ids: [clipId('v500')],
+        deltaFrames: 1,
+        deltaRows: 0,
+        eligibleTracks: (clip) => eligibleTracksFor(document.sequence.tracks, clip),
+      });
+    });
+    expect(elapsed).toBeLessThan(BUDGET_MS);
+  });
+
+  it('scans a drag against the clips that are not moving, not against every pair', () => {
+    /*
+     * The property behind the timing, which is what survives a change of machine.
+     *
+     * Doubling the clip count must roughly double the work, not quadruple it. Measured as a ratio so
+     * it says nothing about absolute speed — a loaded machine moves both numbers together.
+     */
+    const small = largeProject(400);
+    const large = largeProject(800);
+    const drag = (source: TimelineDocument) => () =>
+      moveWithCrossfades({
+        document: source,
+        ids: [clipId('v100')],
+        deltaFrames: 1,
+        deltaRows: 0,
+        eligibleTracks: (clip) => eligibleTracksFor(source.sequence.tracks, clip),
+      });
+
+    const smallMs = medianMs(30, drag(small));
+    const largeMs = medianMs(30, drag(large));
+    /*
+     * No absolute floor beside this ratio.
+     *
+     * The first version wrote `Math.max(smallMs * 2.6, 1)`, meaning to tolerate noise at sub-millisecond
+     * times — and the floor swallowed the whole signal: the quadratic version measured 0.53 ms against a
+     * 1 ms floor and passed while being 3.6× the linear one. A guard that cannot fail against the
+     * mutant it names is not a guard, and this one was run against that mutant before it was trusted.
+     */
+    expect(largeMs).toBeLessThan(smallMs * 2.4);
   });
 
   it('rebuilds only the path to the changed clip', () => {

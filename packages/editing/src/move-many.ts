@@ -223,15 +223,26 @@ function firstOverlap(
   moving: ReadonlySet<string>,
   permitted?: ReadonlySet<string>,
 ): ClipId | undefined {
-  for (let index = 0; index < clips.length; index += 1) {
-    const left = clips[index]!;
-    for (let other = index + 1; other < clips.length; other += 1) {
-      const right = clips[other]!;
-      if (moving.has(left.id) === moving.has(right.id)) continue;
-      if (!overlaps(left, right)) continue;
-      const stationary = moving.has(left.id) ? right.id : left.id;
-      if (permitted?.has(stationary) === true) continue;
-      return stationary;
+  /*
+   * Moving clips against stationary ones, rather than every pair against every other.
+   *
+   * The pairwise walk was quadratic in the track's clip count, and it went unnoticed while only a
+   * multi-clip drag reached here: a two-hundred-clip track is twenty thousand comparisons per pointer
+   * move. Routing every drag through this operation — which is what a crossfade needs, since a
+   * single-clip move now has to be allowed to overlap — made that the cost of *every* drag, and took
+   * the measured cost of a pointer move to 14.4 ms against a 16 ms budget.
+   *
+   * The set of movers is almost always one clip or a linked pair, so this is linear in practice and
+   * never worse than the walk it replaces.
+   */
+  const movers = clips.filter((clip) => moving.has(clip.id));
+  if (movers.length === 0) return undefined;
+
+  for (const stationary of clips) {
+    if (moving.has(stationary.id)) continue;
+    if (permitted?.has(stationary.id) === true) continue;
+    for (const mover of movers) {
+      if (overlaps(mover, stationary)) return stationary.id;
     }
   }
   return undefined;

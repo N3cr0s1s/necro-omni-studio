@@ -445,6 +445,76 @@ try {
   }
 
   /*
+   * The crossfade an overlap makes — the gesture issue #38 is actually about.
+   *
+   * Everything under it is unit-tested; what only the running window can show is that the drag reaches
+   * the operation at all, and that the ramps it writes survive to the file. The clip is duplicated
+   * first because the fixture has one clip per track and a crossfade needs two.
+   */
+  await page.keyboard.press('Control+d');
+  await page.waitForTimeout(900);
+
+  const audioClips = page.locator('[data-track-id="A1"] [data-clip-id]');
+  if ((await audioClips.count()) < 2) {
+    fail('duplicating a clip did not produce a second one to overlap');
+  } else {
+    pass('a clip can be duplicated, giving something to overlap');
+
+    const first = await audioClips.nth(0).boundingBox();
+    const second = await audioClips.nth(1).boundingBox();
+    if (first === null || second === null) {
+      fail('the duplicated clips have no box to drag');
+    } else {
+      // A third of the way in from the copy's left edge, dragged back over its neighbour. Well past
+      // the snap threshold, so the drop is where the pointer is rather than flush against the cut.
+      const overlapPx = Math.round(second.width / 3);
+      await page.mouse.move(second.x + second.width / 2, second.y + second.height / 2);
+      await page.mouse.down();
+      for (let step = 1; step <= 6; step += 1) {
+        await page.mouse.move(
+          second.x + second.width / 2 - (overlapPx * step) / 6,
+          second.y + second.height / 2,
+        );
+        await page.waitForTimeout(60);
+      }
+      await page.mouse.up();
+      await page.waitForTimeout(900);
+
+      await page.keyboard.press('Control+s');
+      let crossfaded;
+      for (let attempt = 0; attempt < 20 && crossfaded === undefined; attempt += 1) {
+        await page.waitForTimeout(500);
+        const saved = JSON.parse(readFileSync(join(project, 'project.json'), 'utf8'));
+        const track = saved.sequence.tracks.find((entry) => entry.id === 'A1');
+        const clips = [...(track?.clips ?? [])].sort((a, b) => a.span.start - b.span.start);
+        const [outgoing, incoming] = clips;
+        if (
+          clips.length === 2 &&
+          outgoing.span.start + outgoing.span.duration > incoming.span.start &&
+          (outgoing.fade?.outFrames ?? 0) > 0 &&
+          (incoming.fade?.inFrames ?? 0) > 0
+        ) {
+          crossfaded = { overlap: outgoing.span.start + outgoing.span.duration - incoming.span.start };
+        }
+      }
+
+      if (crossfaded !== undefined) {
+        // Both sides, because sound sums: a ramp on one alone leaves the other at full level under it
+        // and the join comes out louder than either clip.
+        pass(
+          `dropping a clip onto its neighbour makes a crossfade (${crossfaded.overlap} f, both sides ramped)`,
+        );
+      } else {
+        const saved = JSON.parse(readFileSync(join(project, 'project.json'), 'utf8'));
+        const track = saved.sequence.tracks.find((entry) => entry.id === 'A1');
+        fail(
+          `an overlap made no crossfade — ${JSON.stringify(track?.clips?.map((c) => ({ span: c.span, fade: c.fade })))}`,
+        );
+      }
+    }
+  }
+
+  /*
    * Keyframe lanes, per issue #37.
    *
    * The two symptoms the report gives are both about the *header column*, which no component test
