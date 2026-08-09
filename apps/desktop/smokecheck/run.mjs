@@ -622,6 +622,87 @@ try {
 } finally {
   await fresh?.browser.close().catch(() => undefined);
   if (fresh !== undefined) stop(fresh.child);
+}
+
+/*
+ * A project whose `project.json` will not load.
+ *
+ * The most destructive path this shell has had. It used to make the project current *before* reading
+ * the document, so a file that failed to validate left the editor showing an empty timeline under the
+ * project's name with Save enabled — and one click replaced a broken-but-repairable file with an
+ * empty `Untitled`. It is checked here rather than in a unit test because every part of it is a fact
+ * about the assembled application: which name the header shows, whether Save is offered, and what is
+ * on disk afterwards.
+ *
+ * The corruption is the realistic one: valid JSON of the wrong shape, which is what a hand edit or a
+ * schema change produces. A file that is not JSON at all takes a different branch and is easier.
+ */
+const brokenWork = join(work, 'broken');
+const brokenProject = join(brokenWork, 'project');
+mkdirSync(brokenWork, { recursive: true });
+cpSync(project, brokenProject, { recursive: true });
+writeFileSync(
+  join(brokenProject, 'project.json'),
+  readFileSync(join(brokenProject, 'project.json'), 'utf8').replace(
+    /"frameRate":\s*"[^"]*"/,
+    '"frameRate": 12345',
+  ),
+);
+const brokenBefore = readFileSync(join(brokenProject, 'project.json'), 'utf8');
+
+const brokenData = join(brokenWork, 'user-data');
+mkdirSync(brokenData, { recursive: true });
+writeFileSync(join(brokenData, 'session.json'), JSON.stringify({ lastProject: brokenProject }, null, 2));
+
+let broken;
+try {
+  broken = await launch(brokenData);
+  const page = broken.browser.contexts()[0].pages().at(-1);
+  await page.waitForTimeout(9000);
+
+  const header = await page
+    .locator('header')
+    .innerText()
+    .catch(() => '');
+  if (/no project open/i.test(header)) {
+    pass('a project that cannot be read does not become the open project');
+  } else {
+    fail(`a project that cannot be read was adopted anyway — the header says ${JSON.stringify(header)}`);
+  }
+
+  const dialog = await page
+    .getByRole('dialog')
+    .innerText()
+    .catch(() => '');
+  if (/could not be opened/i.test(dialog)) {
+    pass('and the shell says which project it was');
+    // The reason, not just the fact: the describer names the offending path for the same reason the
+    // spec makes a broken manifest name its broken pointer, and the shell used to throw it away.
+    if (/frameRate/i.test(dialog)) pass('and why, naming the field that is wrong');
+    else fail(`the reason does not name the field — it says ${JSON.stringify(dialog.slice(0, 160))}`);
+  } else {
+    fail('nothing explained why the project did not open');
+  }
+
+  const saveLive = await page
+    .getByRole('button', { name: 'Save', exact: true })
+    .first()
+    .isEnabled()
+    .catch(() => false);
+  if (saveLive) {
+    // Only clicked when it is live, because the click is the destructive act being guarded against.
+    await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await page.waitForTimeout(2000);
+  }
+
+  if (readFileSync(join(brokenProject, 'project.json'), 'utf8') === brokenBefore) {
+    pass('and the file it could not read is left exactly as it was');
+  } else {
+    fail('the shell overwrote a project.json it had failed to read');
+  }
+} finally {
+  await broken?.browser.close().catch(() => undefined);
+  if (broken !== undefined) stop(broken.child);
   if (failures === 0) rmSync(work, { recursive: true, force: true });
 }
 

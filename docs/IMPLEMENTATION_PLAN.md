@@ -854,6 +854,38 @@ list beside it.
 - Orphaned processes are not a tidiness problem. One took a port and the failure surfaced in an
   unrelated tool with a message pointing nowhere near the cause.
 
+### Opening a project (keep these)
+
+**Read the document before anything switches.** The shell made a project current and *then* parsed its
+`project.json`. A file that failed to validate left the editor showing an empty timeline under that
+project's name with Save enabled — and one click replaced a broken-but-repairable file with an empty
+`Untitled`. Driven against the running application before it was changed: the header claimed the
+project was open, Save was offered, and the click destroyed it. A project that cannot be read now never
+becomes the open project; nothing switches and the previous project stays exactly as it was.
+
+**Say which file and why.** `describeLoadError` names the offending path — the same reasoning as the
+spec's requirement that a broken manifest names its broken pointer — and the shell threw all of it
+away for "project.json could not be read". The dialog now shows the reason verbatim
+(`frameRate: expected string, got number`) and offers to reveal the file, because the file is still
+there and repairing it in a text editor is the only actual way forward.
+
+**A refusal needs its own state, not the notice stream.** Notices are cleared by the next successful
+edit, so the one message that must survive until the user acts on it cannot live there.
+
+**This is checked in `smokecheck`, not in a unit test**, because every part of it is a fact about the
+assembled application: which name the header shows, whether Save is offered, and what is on disk
+afterwards. Four checks, all three failure modes verified against the code as it actually shipped —
+the adoption, the missing explanation, and the overwrite.
+
+One note on the mutant: a first attempt left the dialog in place, and the file survived only because
+the modal blocked the click. An assertion that passes for an incidental reason is worth less than
+none, so the mutant was made faithful — no dialog, adopt first — and only then did the overwrite
+assertion fire.
+
+**`migrationsApplied` now has a reader**, though it cannot fire yet: `MIGRATIONS` is empty at schema
+version 1. Wired ahead of the first migration rather than left as a gap, and said plainly, because a
+path that has never run is exactly what this document keeps recording.
+
 ### Project rules (keep these)
 
 - A renderer **cannot name a file on disk**. Electron removed `File.path` so that naming one is a

@@ -18,6 +18,7 @@ import {
   documentDuration,
   frameIndex,
   jobRunId,
+  describeLoadError,
   loadDocument,
   locateClip,
   projectId,
@@ -68,6 +69,7 @@ import {
 } from '@nos/generators';
 import {
   FilmIcon,
+  ExternalLinkIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   PauseIcon,
@@ -240,6 +242,10 @@ export function App(): ReactNode {
   const [error, setError] = useState<string | undefined>(undefined);
   // Messages that say something worked, which have a different lifetime from ones that say it did not.
   const confirmation = useConfirmation();
+  // Held in a ref so `adopt` can speak without taking the confirmation as a dependency: it is called
+  // from a launch effect that must not re-run when an unrelated message changes.
+  const confirmationRef = useRef<((message: string) => void) | undefined>(undefined);
+  confirmationRef.current = confirmation.say;
 
   const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
   const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
@@ -337,25 +343,72 @@ export function App(): ReactNode {
    * Shared by the folder picker and the restore-on-launch path, so both produce exactly the same state.
    * Two of them would drift, and the difference would only appear on a relaunch.
    */
+  /**
+   * A project this shell could not read, held so it can be explained rather than merely refused.
+   *
+   * Its own state and not the shared notice stream: notices are cleared by the next successful edit,
+   * and this one has to survive until the user has done something about it.
+   */
+  const [unreadable, setUnreadable] = useState<
+    { readonly root: string; readonly name: string; readonly reason: string } | undefined
+  >(undefined);
+
   const adopt = useCallback(
     async (opened: ProjectInfo, api: DesktopBridge) => {
-      setProject(opened);
-      setSidecar(await api.sidecarInfo());
+      /*
+       * The document is read *before* anything switches, and this order is the whole point.
+       *
+       * It used to switch first and read second, so a `project.json` that failed to parse left the
+       * editor showing the previous project's timeline — or an empty one on launch — under the new
+       * project's name, with Save enabled. Pressing it wrote that document into the folder, and the
+       * broken-but-repairable file the user could still have fixed by hand became an empty `Untitled`
+       * project. Verified against the running application before it was changed: the header claimed
+       * the project was open, Save was offered, and one click destroyed it.
+       *
+       * So a project that cannot be read never becomes the open project. Nothing switches, the
+       * previous project stays exactly as it was, and the reason is kept where it can be shown.
+       */
+      let next: TimelineDocument;
+      let upgraded: readonly string[] = [];
 
       if (opened.document === undefined) {
         // A folder with no `project.json` is a *new* project, not a broken one.
-        store.reset(emptyProject(opened.name));
-        setError(undefined);
-        return;
+        next = emptyProject(opened.name);
+      } else {
+        const loaded = loadDocument(opened.document);
+        if (!loaded.ok) {
+          // The describer names the offending path, for the same reason the spec makes a broken
+          // manifest name its broken pointer. Throwing that away and saying "could not be read" left
+          // the user with a file to fix and nothing to fix it by.
+          setUnreadable({
+            root: opened.root,
+            name: opened.name,
+            reason: describeLoadError(loaded.error),
+          });
+          return;
+        }
+        next = loaded.value.document;
+        upgraded = loaded.value.migrationsApplied;
       }
 
-      const loaded = loadDocument(opened.document);
-      if (loaded.ok) {
-        store.reset(loaded.value.document);
-        setError(undefined);
-      } else {
-        // Never silently replaced with an empty timeline: that reads as "my project is gone".
-        setError(`${opened.name}/project.json could not be read`);
+      setUnreadable(undefined);
+      setProject(opened);
+      setSidecar(await api.sidecarInfo());
+      store.reset(next);
+      setError(undefined);
+
+      if (upgraded.length > 0) {
+        /*
+         * `migrationsApplied` is documented as existing "so the UI can say the project was upgraded",
+         * and nothing read it. It cannot fire yet — `MIGRATIONS` is empty at schema version 1 — so
+         * this is a seam wired ahead of the first migration rather than a bug being closed, and it is
+         * said plainly because a path that has never run is exactly what this codebase keeps finding.
+         *
+         * It is worth wiring now because the consequence is on the way *out*: the next save writes the
+         * current schema, which an older build will no longer open, and that should not be a silent
+         * result of double-clicking a file.
+         */
+        confirmationRef.current?.(`${opened.name} was upgraded — ${upgraded.join(', ')}`);
       }
     },
     [store],
@@ -1550,6 +1603,14 @@ export function App(): ReactNode {
 
       <ShortcutSheet groups={SHORTCUT_GROUPS} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
+      <UnreadableProject
+        project={unreadable}
+        onDismiss={() => setUnreadable(undefined)}
+        onReveal={() => {
+          if (unreadable !== undefined) void bridge()?.revealInFolder(`${unreadable.root}/project.json`);
+        }}
+      />
+
       <Dialog open={prune !== undefined} onOpenChange={(open) => !open && setPrune(undefined)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -2169,3 +2230,54 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
 }
 
 export { trimClipEnd, trimClipStart };
+
+/**
+ * A project that could not be opened, and what to do about it.
+ *
+ * A dialog rather than a line in the status bar, because this is the one message in the application
+ * that must not be missed: the alternative reading — "nothing happened when I opened my project" — is
+ * exactly what a user concludes from a notice that scrolls past.
+ *
+ * Three things it has to do, and the old one did none of them. Say *which* file. Say *why*, in the
+ * words the describer already produces, which names the offending path. And leave the file alone —
+ * the editor has not touched it, so a text editor can still repair it, which is the only actual way
+ * forward and is therefore what the button offers.
+ */
+function UnreadableProject({
+  project,
+  onDismiss,
+  onReveal,
+}: {
+  readonly project: { readonly root: string; readonly name: string; readonly reason: string } | undefined;
+  readonly onDismiss: () => void;
+  readonly onReveal: () => void;
+}): ReactNode {
+  return (
+    <Dialog open={project !== undefined} onOpenChange={(open) => !open && onDismiss()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{`${project?.name ?? 'That project'} could not be opened`}</DialogTitle>
+          <DialogDescription>
+            Nothing has been changed on disk. The file is still there and still repairable.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* The reason verbatim, wrapped rather than truncated: a schema failure names the path that
+            is wrong, and a path the user cannot read is a reason they cannot act on. */}
+        <pre className="bg-muted max-h-48 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
+          {project?.reason ?? ''}
+        </pre>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onDismiss}>
+            Close
+          </Button>
+          <Button variant="outline" onClick={onReveal}>
+            <ExternalLinkIcon />
+            Show project.json
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
