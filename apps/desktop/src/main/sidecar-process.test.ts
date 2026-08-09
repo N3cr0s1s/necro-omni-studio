@@ -46,6 +46,14 @@ describe('the launch command', () => {
     expect(sidecarCommand({ ...options, python: '/venv/bin/python' }).command).toBe('/venv/bin/python');
   });
 
+  it('tells the sidecar to end itself if this process dies', () => {
+    // `before-quit` and `window-all-closed` cover every ordinary close and none of the others. Without
+    // this a killed or crashed shell leaves a sidecar holding its port, its memory and whatever the
+    // segmenter left in VRAM — a session that killed the shell repeatedly left twenty-two behind, one
+    // of them squatting on a port an unrelated tool then failed to bind.
+    expect(sidecarCommand(options).args).toContain('--exit-with-parent');
+  });
+
   it('unbuffers python output, so a crash message arrives before the process dies', () => {
     expect(sidecarCommand(options).env['PYTHONUNBUFFERED']).toBe('1');
   });

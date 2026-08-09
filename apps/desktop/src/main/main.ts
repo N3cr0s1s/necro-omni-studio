@@ -125,7 +125,9 @@ async function startSidecar(root: string): Promise<SidecarInfo> {
       // The token is in the environment and nowhere else. `stdio: pipe` keeps the child's diagnostics
       // reachable without them landing in a terminal the user never sees.
       env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // stdin is a pipe this never writes to: closing it is the signal, and the operating system
+      // closes it for us however this process ends. `ignore` gave the child nothing to notice.
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (error) {
     return unavailable(describeLaunchFailure('spawn-failed', String(error)));

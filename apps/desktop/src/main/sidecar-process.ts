@@ -56,6 +56,19 @@ export function sidecarCommand(options: SidecarLaunchOptions): SidecarCommand {
       '127.0.0.1',
       '--port',
       String(options.port),
+      /*
+       * The sidecar ends itself if this process dies without stopping it.
+       *
+       * `before-quit` and `window-all-closed` cover every ordinary close, and neither runs when the
+       * shell is killed or crashes — after which the sidecar keeps its port, its memory and anything
+       * the segmenter left in VRAM, forever. A development session that killed the shell repeatedly
+       * left twenty-two of them behind, one holding a port an unrelated tool then failed to bind.
+       *
+       * It watches the stdin pipe for end-of-file, which the operating system produces when this
+       * process goes away regardless of how it went. That is why `stdio` gives it a pipe it never
+       * writes to rather than `ignore`.
+       */
+      '--exit-with-parent',
     ],
     env: {
       // Never argv: the process table is world-readable on every platform this runs on.

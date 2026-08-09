@@ -18,6 +18,7 @@ from pathlib import Path
 import uvicorn
 
 from .app import create_app
+from .parent_watch import watch_parent
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -30,6 +31,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "user's filesystem, so a non-loopback value is rejected.",
     )
     parser.add_argument("--port", default=0, type=int, help="0 selects a free port")
+    parser.add_argument(
+        "--exit-with-parent",
+        action="store_true",
+        help="Exit when stdin reaches end-of-file, which happens when the parent process dies. "
+        "Opt-in because a sidecar started by hand may have stdin on /dev/null, which reads "
+        "end-of-file immediately and would make the service impossible to run for debugging.",
+    )
     parser.add_argument(
         "--log-level",
         default="warning",
@@ -78,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     # The handshake line. Emitted before serving so the parent never polls a port that is not yet
     # bound, and flushed explicitly because stdout is a pipe here, not a terminal.
     print(json.dumps({"event": "listening", "host": args.host, "port": port}), flush=True)
+
+    # Armed before serving, so a parent that dies during startup is noticed rather than leaving a
+    # sidecar that never had anyone to serve.
+    if args.exit_with_parent:
+        watch_parent()
 
     app = create_app(root, token)
     config = uvicorn.Config(app, log_level=args.log_level, access_log=False)
