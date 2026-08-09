@@ -933,6 +933,15 @@ that cannot work.
 **A notice that names a problem it can solve should offer to solve it.** Missing media was announced
 in the status bar while the repair lived only in a clip's context menu.
 
+**A status about the system belongs outside the empty state.** The backend's state rendered only in
+the branch that draws a generator, so a project holding no manifests never learned its backend was
+unreachable. Chasing a failing check found it; printing what the panel actually said found it, not a
+guess.
+
+**Drive the control, not the bridge.** A check that writes a setting through the IPC bypasses the
+renderer's own state, so nothing downstream reacts — which looks exactly like a feature that does not
+work.
+
 **A check that cannot run must say so, not pass.** The first version of the missing-media check found
 nothing missing — smokecheck synthesizes the fixture's audio — and printed that rather than passing
 quietly, which is the only reason the gap was visible. It now makes the file go while the editor runs,
