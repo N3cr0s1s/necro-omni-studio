@@ -8,3 +8,4 @@
 export * from './manifest/effect-manifest.js';
 export * from './registry/effect-registry.js';
 export * from './builtin/builtin-effects.js';
+export * from './manifest/effect-draft.js';
