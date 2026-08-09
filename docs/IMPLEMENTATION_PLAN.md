@@ -751,6 +751,14 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Project rules (keep these)
 
+- The **main process may import types from the workspace packages, never values**. It is loaded as
+  source rather than bundled, so a value import fails to resolve and the application does not start at
+  all. Put the rule in the renderer and leave the privileged parts — dialogs, filesystem — to main.
+- Importing **copies**. A reference to somewhere else on the machine breaks the zip-and-move promise
+  invisibly: the cut plays until it is opened elsewhere.
+- A free name is numbered **before** the extension, from two, and resolved against the folder *and the
+  rest of the batch* — two cards each holding `shot.mp4` is an ordinary import.
+
 - **Media can leave.** A project is a folder, so a clip's file can be renamed, moved or unplugged. The
   document keeps the project-relative path; whether it still resolves is a question about the *folder*,
   derived from the tree — never stored, because it is true of one machine at one moment.
