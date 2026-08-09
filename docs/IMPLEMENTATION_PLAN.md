@@ -727,6 +727,20 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   Offering one would produce a manifest that patches a value the graph immediately
   overwrites.
 
+### Process lifetime rules (keep these)
+
+- A child process must **end itself** when its parent dies without stopping it. `before-quit` covers
+  every ordinary close and none of the others; a killed shell otherwise leaves a sidecar holding its
+  port, its memory and whatever the segmenter left in VRAM.
+- The portable signal is **stdin end-of-file**, not a parent pid. `os.kill(pid, 0)` is POSIX and
+  Windows Python does not implement signal 0, and pid reuse makes the check wrong in principle. A pipe
+  the operating system closes needs no dependency, no polling and no permissions — but the parent has
+  to actually give the child one, so `stdio` passes a pipe rather than `ignore`.
+- The watchdog is **opt-in**: a sidecar run by hand may have stdin on /dev/null, which is end-of-file
+  immediately, and an unconditional watch would make the service impossible to debug.
+- Orphaned processes are not a tidiness problem. One took a port and the failure surfaced in an
+  unrelated tool with a message pointing nowhere near the cause.
+
 ### Export rules (keep these)
 
 - A **review copy** renders smaller *and* reads the proxies. Scaling at the encoder saves nothing, and
