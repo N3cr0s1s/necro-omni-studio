@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { FileJsonIcon, PlusIcon, SaveIcon, SearchIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import {
   type AlsoBinding,
@@ -10,12 +10,18 @@ import {
   type ManifestDraft,
   PARAM_TYPES,
   TEXT_SOURCES,
+  capabilitySource,
+  choiceMode,
+  choicesAsText,
   draftHasErrors,
   draftManifestJson,
   editConsumes,
   missingConsumes,
   removeConsumes,
+  optionsForMode,
+  parseChoices,
   suggestedConsumes,
+  toCapabilityOptions,
   unmatchedConsumes,
   validateDraft,
 } from '@nos/generators';
@@ -478,7 +484,7 @@ function Identity({
             id={id}
             value={draft.surfaces.join(', ')}
             placeholder="media_browser, clip_context_menu"
-            onChange={(event) => set({ surfaces: splitList(event.target.value) })}
+            onChange={(event) => set({ surfaces: parseChoices(event.target.value) })}
           />
         )}
       </Labelled>
@@ -487,7 +493,7 @@ function Identity({
           <Input
             id={id}
             value={draft.requires.join(', ')}
-            onChange={(event) => set({ requires: splitList(event.target.value) })}
+            onChange={(event) => set({ requires: parseChoices(event.target.value) })}
           />
         )}
       </Labelled>
@@ -503,13 +509,6 @@ function Identity({
       </Labelled>
     </div>
   );
-}
-
-function splitList(value: string): readonly string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '');
 }
 
 /**
@@ -593,6 +592,7 @@ function ParamRow({
           </>
         )}
       </div>
+      {param.type === 'enum' && <ChoiceEditor param={param} {...(onEdit !== undefined ? { onEdit } : {})} />}
       <AlsoBindings param={param} {...(onEdit !== undefined ? { onEdit } : {})} />
     </div>
   );
@@ -939,6 +939,115 @@ function Consumes({
         <p className="font-mono text-xs text-muted-foreground">
           {`${unmatched.map((input) => input.role ?? input.type).join(', ')}: no parameter of that key, so the panel cannot ask for it`}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where an enum's choices come from.
+ *
+ * Shown only for `enum`, beside the range fields that appear only for numbers — an inspector that
+ * offers meaningless fields teaches the user to ignore all of them.
+ *
+ * It exists because `enum` was in the type list and had no field at all: choosing it produced "an enum
+ * needs options", Save is disabled while a draft has errors, and nothing on screen could clear it. A
+ * type you can pick and cannot finish is worse than one that is not offered.
+ *
+ * Both shapes the file format allows are here, as one control with a mode rather than two fields,
+ * because they answer the same question — *where do the choices come from* — and a parameter carrying
+ * both at once has no meaning in the format.
+ */
+function ChoiceEditor({
+  param,
+  onEdit,
+}: {
+  readonly param: DraftParam;
+  readonly onEdit?: (id: string, changes: DraftParamChanges) => void;
+}): ReactNode {
+  const mode = choiceMode(param.options);
+  const source = capabilitySource(param.options);
+
+  /*
+   * The list field holds what was *typed*, not a re-rendering of what was parsed.
+   *
+   * Derived straight from the draft it is unusable, and only driving it showed why: the moment you
+   * type the comma between two values, `parseChoices` drops the empty entry after it, the field
+   * re-renders from the shortened list, and the comma vanishes under the cursor. A second value can
+   * never be entered.
+   *
+   * So the text is local and the draft is written on every keystroke. It is re-seeded only when the
+   * draft's list is not what this field currently spells — which is true when the mode changes or
+   * another parameter is selected, and false while someone is mid-word.
+   */
+  const [text, setText] = useState(() => choicesAsText(param.options));
+  useEffect(() => {
+    const stored = choicesAsText(param.options);
+    setText((current) => (choicesAsText(parseChoices(current)) === stored ? current : stored));
+  }, [param.options]);
+
+  return (
+    <div className="grid items-end gap-3 grid-cols-[0.8fr_1fr_1fr]">
+      <Labelled label="Choices">
+        {(id) => (
+          <NativeSelect
+            id={id}
+            className="w-full"
+            value={mode}
+            onChange={(event) =>
+              onEdit?.(param.id, {
+                options: optionsForMode(event.target.value as 'list' | 'capabilities', param.options),
+              })
+            }
+          >
+            <NativeSelectOption value="list">a fixed list</NativeSelectOption>
+            <NativeSelectOption value="capabilities">from the backend</NativeSelectOption>
+          </NativeSelect>
+        )}
+      </Labelled>
+      {mode === 'list' ? (
+        <Labelled label="Values, comma separated">
+          {(id) => (
+            <Input
+              id={id}
+              className="col-span-2"
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                onEdit?.(param.id, { options: parseChoices(event.target.value) });
+              }}
+            />
+          )}
+        </Labelled>
+      ) : (
+        <>
+          <Labelled label="Node class">
+            {(id) => (
+              <Input
+                id={id}
+                value={source.nodeClass}
+                onChange={(event) =>
+                  onEdit?.(param.id, {
+                    options: toCapabilityOptions(event.target.value, source.input),
+                  })
+                }
+              />
+            )}
+          </Labelled>
+          <Labelled label="Input">
+            {(id) => (
+              <Input
+                id={id}
+                value={source.input}
+                onChange={(event) =>
+                  onEdit?.(param.id, {
+                    options: toCapabilityOptions(source.nodeClass, event.target.value),
+                  })
+                }
+              />
+            )}
+          </Labelled>
+        </>
       )}
     </div>
   );

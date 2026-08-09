@@ -22,3 +22,4 @@ export * from './provenance/recall.js';
 export * from './staging/placeholder.js';
 export * from './staging/variant-selection.js';
 export * from './backends/mock-backend.js';
+export * from './manifest/choices.js';

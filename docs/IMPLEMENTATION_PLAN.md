@@ -519,6 +519,47 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   some entries are multi-line, and undercounting reports every diagnostic several
   lines off what the author wrote.
 
+### Round-trip rules (keep these)
+
+Two formats in this project are written by hand and read back: `project.json` and a generator
+manifest. Both have a round-trip test that saves a rich fixture and compares what comes back. Both
+tests were **blind in the same way**: they can only check the fields the fixture happens to set, so a
+field added to the model and forgotten in both the writer and the fixture round-trips perfectly by
+being absent from both sides.
+
+**So the fixture is checked too.** `every-field.test.ts` — one in `@nos/core`, one in `@nos/generators`
+— reads the property names out of the model's own source and asserts each appears in what was written.
+A field missing is either not serialized or not exercised, and from a user's chair those are the same
+bug: the setting they made does not survive closing the project.
+
+Two consequences worth stating:
+
+- **A default is not exercise.** The serializer omits a value equal to its default, so a flag written
+  only at its default never reaches the file and proves nothing. Every flag is set away from its
+  default *somewhere* in the fixture. `track.muted` was the last one that was not.
+- **Exemptions name interfaces, not fields.** A field-name exemption silently covers any future field
+  that shares the name. There are three in total across both checks, each with its reason, and a test
+  asserts the list stays short.
+
+**What this found immediately, in shipped files.** `GeneratorParam.options` may be a fixed list *or*
+`{ from: 'capabilities' }` naming a node class and input — three of the five shipped manifests use the
+second for their sampler, scheduler, LoRA and aspect-ratio dropdowns. `ManifestDraft` typed it as a
+list alone, so opening one of those manifests in the inspector and saving **deleted the source**, and
+the validator — written around `.length` — reported four perfectly good dropdowns as "an enum needs
+options". `shipped-manifests.test.ts` now drives every real file in `generators/` through the
+inspector and back, which is the check that would have caught all three previous losses.
+
+**A type you can pick and cannot finish is worse than one not offered.** `enum` was in the inspector's
+type list with no field for its choices anywhere on the panel, so choosing it raised an error nothing
+on screen could clear, with Save disabled the whole time. Fixed by a choices control that offers both
+shapes as one mode switch.
+
+**A field that re-renders from parsed state cannot be typed into.** The choices field derived its text
+from the parsed list, so the comma between two values was swallowed the instant it was typed and a
+second value could never be entered. It holds the typed text and writes the draft on each keystroke,
+re-seeding only when the stored list is not what the field spells. Only driving the control found this
+— the pure functions under it were all correct.
+
 ### Generator framework rules (keep these)
 
 - Parameters that are **alternatives** are declared, never inferred. §2.3's voice is an enum or a

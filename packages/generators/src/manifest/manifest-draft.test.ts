@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { generatorId } from '@nos/core';
 import type { GraphLiteral } from '../contracts/introspection.js';
 import type { GeneratorManifest } from '../contracts/manifest.js';
+import { AUTHORED_MANIFEST } from './authored-manifest.js';
 import {
   type ManifestDraft,
   addOutput,
@@ -317,55 +317,7 @@ describe('writing the manifest', () => {
 });
 
 describe('round tripping an authored manifest', () => {
-  const authored: GeneratorManifest = {
-    id: generatorId('minimax_h3_i2v'),
-    name: 'MiniMax H3 i2v',
-    backend: 'comfyui',
-    graph: 'video_minimax_h3_i2v.json',
-    produces: 'video',
-    consumes: [{ type: 'image', role: 'first_frame', required: true }],
-    surfaces: ['frame_context_menu'],
-    duration: 'declared',
-    durationFrom: { param: 'duration_s', unit: 'seconds' },
-    defaultVariants: 1,
-    requires: ['MiniMaxNode'],
-    outputs: [{ key: 'video', type: 'video', node: '92' }],
-    params: [
-      {
-        key: 'first_frame',
-        type: 'image',
-        required: true,
-        bind: '/114/inputs/image',
-        transport: 'upload_image',
-      },
-      { key: 'duration_s', type: 'float', min: 0.5, max: 30, default: 15, bind: '/105:111/inputs/value' },
-      {
-        key: 'fps',
-        type: 'int',
-        default: 25,
-        bind: '/105:110/inputs/value',
-        // The spec's own `also` example, copied from the project's real MiniMax manifests: `fps` is
-        // both a literal and part of a length expression, and a round trip that kept only the first
-        // left the expression stale and delivered a clip of the wrong duration.
-        also: [
-          {
-            pointer: '/105:107/inputs/expression',
-            template: 'max(5, round(a * {fps}))',
-          },
-        ],
-      },
-      {
-        key: 'width',
-        type: 'int',
-        default: 1280,
-        bind: '/105:20/inputs/width',
-        defaultFrom: 'project_width',
-      },
-      { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
-    ],
-    presets: [],
-    exclusive: [{ members: ['fps', 'width'], label: 'Timing', required: true }],
-  };
+  const authored = AUTHORED_MANIFEST;
 
   it('reaches the same manifest again, so editing does not degrade a file', () => {
     // An inspector that lost `transport` or a range on every open would quietly break manifests people

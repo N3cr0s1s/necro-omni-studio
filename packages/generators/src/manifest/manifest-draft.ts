@@ -3,6 +3,7 @@ import { generatorId } from '@nos/core';
 import type { GraphLiteral } from '../contracts/introspection.js';
 import type {
   AlsoBinding,
+  CapabilityOptions,
   ExclusiveGroupDescriptor,
   DurationMode,
   GeneratorManifest,
@@ -42,7 +43,16 @@ export interface DraftParam {
   readonly max?: number;
   readonly step?: number;
   readonly default?: string | number | boolean;
-  readonly options?: readonly string[];
+  /**
+   * The choices an enum offers: a fixed list, or a source the backend answers for.
+   *
+   * Both, because manifests in this project use both — three of the five shipped ones populate a
+   * dropdown from the backend's node definitions, which is what `{ from: 'capabilities' }` means.
+   * Typed as a list alone, the draft could not hold that shape at all, and `fromManifest` dropped it:
+   * opening `krea2_img2img` in the inspector and saving turned its sampler, scheduler and LoRA
+   * dropdowns into free text, and its aspect-ratio list with them.
+   */
+  readonly options?: readonly string[] | CapabilityOptions;
   readonly required?: boolean;
   readonly multiline?: boolean;
   readonly transport?: string;
@@ -276,7 +286,10 @@ export function validateDraft(draft: ManifestDraft): readonly DraftIssue[] {
     if (param.min !== undefined && param.max !== undefined && param.min > param.max) {
       error(`${path}/min`, 'the minimum is above the maximum');
     }
-    if (param.type === 'enum' && (param.options ?? []).length === 0) {
+    // An enum has its choices either as a list or from the backend. Written as a length check alone,
+    // this reported every capability-driven dropdown in the project as invalid — an object has no
+    // length, so the fallback made it look empty.
+    if (param.type === 'enum' && !hasChoices(param.options)) {
       error(`${path}/options`, 'an enum needs options');
     }
     if (param.pointer.trim() === '') {
@@ -402,7 +415,7 @@ export function fromManifest(manifest: GeneratorManifest): ManifestDraft {
       ...(param.max !== undefined ? { max: param.max } : {}),
       ...(param.step !== undefined ? { step: param.step } : {}),
       ...(param.default !== undefined ? { default: param.default } : {}),
-      ...(Array.isArray(param.options) ? { options: param.options } : {}),
+      ...(param.options !== undefined ? { options: param.options } : {}),
       ...(param.required !== undefined ? { required: param.required } : {}),
       ...(param.multiline !== undefined ? { multiline: param.multiline } : {}),
       ...(param.transport !== undefined ? { transport: param.transport } : {}),
@@ -412,6 +425,12 @@ export function fromManifest(manifest: GeneratorManifest): ManifestDraft {
     presets: manifest.presets,
     ...(manifest.exclusive !== undefined ? { exclusive: manifest.exclusive } : {}),
   };
+}
+
+/** Whether an enum can offer anything: a non-empty list, or a source the backend resolves. */
+export function hasChoices(options: DraftParam['options']): boolean {
+  if (options === undefined) return false;
+  return Array.isArray(options) ? options.length > 0 : true;
 }
 
 /** Which preset ids a draft defines, for the inspector's preset editor. */

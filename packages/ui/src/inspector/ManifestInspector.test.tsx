@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { type ReactNode, useState } from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -396,5 +397,95 @@ describe('the fields that decide how a parameter behaves', () => {
     // otherwise.
     renderInspector({ draft: { ...withFps(), duration: 'discovered' } });
     expect(screen.queryByLabelText('Length from')).toBeNull();
+  });
+});
+
+describe('what an enum offers', () => {
+  /**
+   * The dead end this control was built to remove.
+   *
+   * `enum` was in the type list and had no field for its choices anywhere on the panel, so choosing it
+   * raised "an enum needs options" — and Save is disabled while a draft has errors. A type a user can
+   * pick and cannot finish is worse than one that is not offered at all.
+   */
+  const withEnum = (options?: ManifestDraft['params'][number]['options']): ManifestDraft => {
+    const promoted = promote(usable(), literals[1]!);
+    const param = promoted.params[0]!;
+    return editParam(promoted, param.id, {
+      key: 'sampler',
+      type: 'enum',
+      ...(options !== undefined ? { options } : {}),
+    });
+  };
+
+  it('is asked for as soon as the type is an enum', () => {
+    renderInspector({ draft: withEnum() });
+    expect(screen.getByLabelText('Choices')).toBeDefined();
+  });
+
+  it('is not asked for on a type that has none', () => {
+    // A panel that offers meaningless fields teaches the user to ignore all of them.
+    renderInspector();
+    expect(screen.queryByLabelText('Choices')).toBeNull();
+  });
+
+  it('takes a typed list', async () => {
+    /*
+     * Wired to real state rather than to a mock, because the field is controlled by the draft: with a
+     * handler that never updates it, every keystroke is typed into the same empty field and the last
+     * one is all that survives. That is a fact about how the panel is driven, not about the control,
+     * and asserting through a live draft is the only version of this that means anything.
+     */
+    let latest = withEnum([]);
+    function Harness(): ReactNode {
+      const [draft, setDraft] = useState(latest);
+      latest = draft;
+      return (
+        <ManifestInspector
+          draft={draft}
+          literals={literals}
+          onEditParam={(id, changes) => setDraft((current) => editParam(current, id, changes))}
+        />
+      );
+    }
+    render(<Harness />);
+
+    await userEvent.type(screen.getByLabelText('Values, comma separated'), 'euler, ddim');
+
+    expect(latest.params[0]?.options).toEqual(['euler', 'ddim']);
+    // The comma is still under the cursor. Derived from the parsed list it is swallowed the instant it
+    // is typed, and a second value can never be entered — which is what this assertion is for.
+    expect((screen.getByLabelText('Values, comma separated') as HTMLInputElement).value).toBe('euler, ddim');
+  });
+
+  it('switches to a source the backend answers for', async () => {
+    const onEditParam = vi.fn();
+    renderInspector({ draft: withEnum(['euler']), onEditParam });
+
+    await userEvent.selectOptions(screen.getByLabelText('Choices'), 'capabilities');
+
+    const [, changes] = onEditParam.mock.calls.at(-1) ?? [];
+    expect(changes?.options).toEqual({ from: 'capabilities' });
+  });
+
+  it('shows the node and input of a backend source, which is how a wrong list is diagnosed', () => {
+    // Three of the five shipped manifests fill a dropdown this way. Before this control they could be
+    // opened, and the source could neither be seen nor corrected.
+    renderInspector({
+      draft: withEnum({ from: 'capabilities', nodeClass: 'KSampler', input: 'sampler_name' }),
+    });
+    expect((screen.getByLabelText('Node class') as HTMLInputElement).value).toBe('KSampler');
+    expect((screen.getByLabelText('Input') as HTMLInputElement).value).toBe('sampler_name');
+  });
+
+  it('clears the error it used to be impossible to clear', () => {
+    // The whole point, stated as the user's experience rather than as a field's presence.
+    const { rerender } = render(
+      <ManifestInspector draft={withEnum()} literals={literals} onEditParam={vi.fn()} />,
+    );
+    expect(screen.getAllByText(/an enum needs options/).length).toBeGreaterThan(0);
+
+    rerender(<ManifestInspector draft={withEnum(['euler'])} literals={literals} onEditParam={vi.fn()} />);
+    expect(screen.queryByText(/an enum needs options/)).toBeNull();
   });
 });
