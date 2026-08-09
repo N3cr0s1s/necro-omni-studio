@@ -48,7 +48,7 @@ import { cn } from '@nos/ui/lib/utils';
 import { ASSET_DRAG_TYPE } from '../media-browser/MediaBrowser.js';
 import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
 import { EditableName } from '../controls/EditableName.js';
-import { ClipBody } from './ClipBody.js';
+import { type FadeEdge, ClipBody } from './ClipBody.js';
 import { TransitionBody } from './TransitionBody.js';
 import type { ClipStrip } from './clip-strip.js';
 import {
@@ -135,6 +135,8 @@ export interface TimelineProps {
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+  /** Dragging a clip's fade handle, which is the direct route to a ramp without an overlap. */
+  readonly onFadeDrag?: (clip: ClipId, edge: FadeEdge, event: React.PointerEvent<HTMLDivElement>) => void;
 
   /*
    * Transitions, which the timeline drew nothing of until now: one could be created from the clip
@@ -442,6 +444,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                     {...(props.menu !== undefined ? { menu: props.menu } : {})}
                     {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
                     {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
+                    {...(props.onFadeDrag !== undefined ? { onFadeDrag: props.onFadeDrag } : {})}
                     {...(props.selectedTransition !== undefined
                       ? { selectedTransition: props.selectedTransition }
                       : {})}
@@ -1354,6 +1357,7 @@ function TrackLane({
   menu,
   onTrimStart,
   onTrimEnd,
+  onFadeDrag,
   dropAt,
   selectedTransition,
   onSelectTransition,
@@ -1382,6 +1386,8 @@ function TrackLane({
   readonly onSelectRegion?: (region: SelectionRegion, additive: boolean) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+  /** Dragging a clip's fade handle, which is the direct route to a ramp without an overlap. */
+  readonly onFadeDrag?: (clip: ClipId, edge: FadeEdge, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly selectedTransition?: EffectInstanceId;
   readonly onSelectTransition?: (id: EffectInstanceId) => void;
   readonly onResizeTransition?: (id: EffectInstanceId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -1442,6 +1448,7 @@ function TrackLane({
               : {})}
             {...(onTrimStart !== undefined ? { onTrimStart } : {})}
             {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
+            {...(onFadeDrag !== undefined ? { onFadeDrag } : {})}
           />
         ))}
 

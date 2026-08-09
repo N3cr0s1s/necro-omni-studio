@@ -7,7 +7,15 @@ import {
   SquareDashedIcon,
   UnplugIcon,
 } from 'lucide-react';
-import { type Clip, type ClipId, hasAnimation, isGenerated, linkedPartner, passCount } from '@nos/core';
+import {
+  type Clip,
+  type ClipId,
+  clipFade,
+  hasAnimation,
+  isGenerated,
+  linkedPartner,
+  passCount,
+} from '@nos/core';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
@@ -51,6 +59,14 @@ export interface ClipBodyProps {
   readonly rollableEnd?: boolean | undefined;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+  /**
+   * Grabbing a fade handle, which is the direct way to make or unmake a ramp.
+   *
+   * Separate from trimming because it is a different edit on the same edge: a trim changes how much
+   * of the clip plays, a fade changes how it arrives. Absent leaves the handles off entirely, so a
+   * read-only timeline draws the ramps without offering to change them.
+   */
+  readonly onFadeDrag?: (clip: ClipId, edge: FadeEdge, event: React.PointerEvent<HTMLDivElement>) => void;
   /** Above the spec's 8-pass budget, the clip carries a warning badge. */
   readonly passWarningThreshold?: number;
   /** Whether this clip's parameter lanes are showing beneath its track. */
@@ -94,9 +110,29 @@ function clipPalette(clip: Clip): string {
   }
 }
 
+/** Which edge of a clip a fade handle belongs to. */
+export type FadeEdge = 'in' | 'out';
+
 /** Trim handles need enough width to grab; below this a clip is body-only. */
 const TRIM_HANDLE_PX = 6;
 const MIN_HANDLE_CLIP_WIDTH_PX = 24;
+
+/**
+ * How wide a fade handle's grab square is.
+ *
+ * It sits at the *top* corner rather than filling the edge, because the trim handle is already there
+ * and an edge that does two things depending on how near the top you grabbed is a coin toss. A corner
+ * is a place, and places are learnable.
+ */
+const FADE_HANDLE_PX = 9;
+
+/**
+ * The narrowest clip that offers fade handles.
+ *
+ * Wider than the trim threshold: two corners and two edges on a 24-pixel clip leaves nothing that is
+ * the clip itself, and dragging it would become impossible.
+ */
+const MIN_FADE_CLIP_WIDTH_PX = 44;
 
 /**
  * Below this lane height a clip is a bar and nothing else.
@@ -119,6 +155,7 @@ export function ClipBody({
   rollableEnd,
   onTrimStart,
   onTrimEnd,
+  onFadeDrag,
   passWarningThreshold = 8,
   expanded = false,
   onToggleExpand,
@@ -130,6 +167,13 @@ export function ClipBody({
   // Handles are hidden in a compact lane too: a 10 px bar cannot be trimmed with any precision, and
   // the grab zones would sit exactly where the user is aiming to click the clip itself.
   const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX && !compact;
+  // Ramps are drawn from the clip's own proportions, so they need no viewport: a fade is a fraction
+  // of the clip and the clip's width in pixels is already known.
+  const fade = clipFade(clip);
+  const perFrame = clip.span.duration === 0 ? 0 : geometry.widthPx / clip.span.duration;
+  const fadeIn = fade.inFrames * perFrame;
+  const fadeOut = fade.outFrames * perFrame;
+  const showFades = geometry.widthPx >= MIN_FADE_CLIP_WIDTH_PX && !compact;
   const Disclosure = expanded ? ChevronDownIcon : ChevronRightIcon;
   // Less inset when there is less to inset. The default six pixels top and bottom is most of a
   // collapsed lane, and would leave the bar too thin to see the colour that says what kind it is.
@@ -254,6 +298,29 @@ export function ClipBody({
             />
           </>
         )}
+
+        {showFades && (
+          <>
+            <FadeRamp edge="in" widthPx={fadeIn} />
+            <FadeRamp edge="out" widthPx={fadeOut} />
+            {onFadeDrag !== undefined && (
+              <>
+                <FadeHandle
+                  edge="in"
+                  clip={clip}
+                  offsetPx={fadeIn}
+                  onPointerDown={(event) => onFadeDrag(clip.id, 'in', event)}
+                />
+                <FadeHandle
+                  edge="out"
+                  clip={clip}
+                  offsetPx={fadeOut}
+                  onPointerDown={(event) => onFadeDrag(clip.id, 'out', event)}
+                />
+              </>
+            )}
+          </>
+        )}
       </div>
     </ActionMenu>
   );
@@ -326,6 +393,92 @@ function TrimHandle({
         side === 'start' ? 'left-0' : 'right-0',
       )}
       style={{ width: TRIM_HANDLE_PX }}
+    />
+  );
+}
+
+/**
+ * The ramp itself, as a wedge over the clip.
+ *
+ * Drawn rather than left implicit, because a fade is the one edit whose *result* is invisible on the
+ * timeline: a clip that ramps in over twenty frames looks exactly like one that does not, and a
+ * crossfade a drop created silently would be indistinguishable from a collision that was allowed by
+ * mistake. The wedge is the confirmation.
+ *
+ * A polygon rather than a gradient: the shape says how long the ramp is and where it ends, which a
+ * soft edge cannot. It is `foreground` at low alpha rather than a colour of its own — the clip
+ * already carries a categorical role for its media kind, and a second hue there would read as a
+ * different kind of material.
+ */
+function FadeRamp({ edge, widthPx }: { readonly edge: FadeEdge; readonly widthPx: number }): ReactNode {
+  if (widthPx < 1) return undefined;
+
+  return (
+    <div
+      aria-hidden="true"
+      data-fade-ramp={edge}
+      className={cn(
+        'pointer-events-none absolute inset-y-0 bg-foreground/25',
+        edge === 'in' ? 'left-0' : 'right-0',
+      )}
+      style={{
+        width: widthPx,
+        // The wedge covers what is *silenced*: full at the outer edge, nothing at the inner one.
+        clipPath: edge === 'in' ? 'polygon(0 0, 100% 0, 0 100%)' : 'polygon(100% 0, 100% 100%, 0 0)',
+      }}
+    />
+  );
+}
+
+/**
+ * The grab square that sets a ramp's length.
+ *
+ * At the top corner, and it starts at the very corner when there is no fade — which is what makes a
+ * fade *discoverable*. A control that only appears once the thing it controls exists can only be
+ * found by someone who already knows it is there, and "making a crossfade is bloody hard" is exactly
+ * what that costs.
+ */
+function FadeHandle({
+  edge,
+  clip,
+  offsetPx,
+  onPointerDown,
+}: {
+  readonly edge: FadeEdge;
+  readonly clip: Clip;
+  readonly offsetPx: number;
+  readonly onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+}): ReactNode {
+  const frames = edge === 'in' ? clipFade(clip).inFrames : clipFade(clip).outFrames;
+
+  return (
+    <div
+      data-fade-handle={edge}
+      role="button"
+      tabIndex={-1}
+      aria-label={`${edge === 'in' ? 'Fade in' : 'Fade out'} ${clip.label}, ${frames} frames`}
+      title={
+        frames === 0
+          ? `Drag to fade ${edge === 'in' ? 'in' : 'out'}`
+          : `Fade ${edge === 'in' ? 'in' : 'out'} over ${frames} frames`
+      }
+      onPointerDown={(event) => {
+        // Without this the clip underneath starts a move, and the fade would never get a pointer.
+        event.stopPropagation();
+        onPointerDown(event);
+      }}
+      className={cn(
+        'absolute top-0 cursor-ew-resize rounded-full border',
+        frames > 0 ? 'bg-foreground/70 border-foreground/70' : 'bg-foreground/25 border-foreground/40',
+      )}
+      style={{
+        width: FADE_HANDLE_PX,
+        height: FADE_HANDLE_PX,
+        // Centred on the ramp's inner end, so the square marks the frame the fade finishes at.
+        ...(edge === 'in'
+          ? { left: Math.max(0, offsetPx - FADE_HANDLE_PX / 2) }
+          : { right: Math.max(0, offsetPx - FADE_HANDLE_PX / 2) }),
+      }}
     />
   );
 }

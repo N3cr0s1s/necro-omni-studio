@@ -1021,6 +1021,57 @@ describe('trim handles', () => {
 });
 
 /**
+ * Fade handles and ramps.
+ *
+ * A fade is the one edit whose *result* is invisible on the timeline — a clip that ramps in over
+ * twenty frames looks exactly like one that does not — so the wedge is not decoration, it is the
+ * confirmation that a drop created a crossfade rather than being allowed by mistake.
+ */
+describe('fades', () => {
+  const faded = () => makeDocument([video('a', 0, 300, { fade: { inFrames: 60, outFrames: 30 } })]);
+
+  it('draws a wedge for each ramp, sized from the clip’s own proportions', () => {
+    renderTimeline({ document: faded() });
+    const clip = document.querySelector('[data-clip-id="a"]');
+    const rampIn = clip?.querySelector('[data-fade-ramp="in"]') as HTMLElement | null;
+    // 300 frames across 75 px at 4 f/px, so 60 frames of ramp is a fifth of it.
+    expect(rampIn?.style.width).toBe('15px');
+    expect((clip?.querySelector('[data-fade-ramp="out"]') as HTMLElement | null)?.style.width).toBe('7.5px');
+  });
+
+  it('draws no wedge where there is no ramp', () => {
+    renderTimeline();
+    const clip = document.querySelector('[data-clip-id="a"]');
+    expect(clip?.querySelector('[data-fade-ramp="in"]')).toBeNull();
+  });
+
+  it('offers a handle at each corner even with no fade, so one can be found at all', () => {
+    // A control that appears only once the thing it controls exists can be found only by someone who
+    // already knows it is there.
+    renderTimeline({ onFadeDrag: () => {} });
+    const clip = document.querySelector('[data-clip-id="a"]');
+    expect(clip?.querySelector('[data-fade-handle="in"]')).not.toBeNull();
+    expect(clip?.querySelector('[data-fade-handle="out"]')).not.toBeNull();
+  });
+
+  it('leaves the handles off when nothing can act on them', () => {
+    renderTimeline();
+    expect(document.querySelector('[data-fade-handle="in"]')).toBeNull();
+  });
+
+  it('names the ramp’s length on the handle, for anyone not reading the wedge', () => {
+    renderTimeline({ document: faded(), onFadeDrag: () => {} });
+    const handle = document.querySelector('[data-clip-id="a"] [data-fade-handle="in"]');
+    expect(handle?.getAttribute('aria-label')).toBe('Fade in a, 60 frames');
+  });
+
+  it('omits handles on a clip too narrow to hold them', () => {
+    renderTimeline({ document: makeDocument([video('tiny', 0, 100)]), onFadeDrag: () => {} });
+    expect(document.querySelector('[data-fade-handle="in"]')).toBeNull();
+  });
+});
+
+/**
  * Collapsing a track.
  *
  * `Track.collapsed` was in the document model, defaulted, serialized and round-tripped — and nothing

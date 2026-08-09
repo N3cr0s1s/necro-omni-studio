@@ -44,6 +44,7 @@ import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
+import { ClipFadeSection } from './ClipFadeSection.js';
 import { ClipTiming } from './ClipTiming.js';
 import { ClipSpeedSection } from './ClipSpeedSection.js';
 import type { LibraryProblem } from './use-generator-library.js';
@@ -214,6 +215,17 @@ export function ClipInspector({
           fields above describe. */}
       {shows('timing') && (
         <ClipSpeedSection
+          document={document}
+          clip={located.clip}
+          onChange={onChange}
+          {...(onReject !== undefined ? { onReject } : {})}
+        />
+      )}
+
+      {/* After speed and before framing: a ramp is a duration at an edge, which is the same kind of
+          question the two fields above answer, and it is not a geometric property. */}
+      {shows('timing') && (
+        <ClipFadeSection
           document={document}
           clip={located.clip}
           onChange={onChange}

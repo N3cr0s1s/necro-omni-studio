@@ -5,6 +5,7 @@ import {
   type FrameIndex,
   type Result,
   type TimelineDocument,
+  clipFade,
   frameIndex,
   locateClip,
 } from '@nos/core';
@@ -24,6 +25,7 @@ import {
   moveWithCrossfades,
   reachableTrimDelta,
   rollEdit,
+  setClipFade,
   trackForOffset,
   slipClip,
   snapEdgeDelta,
@@ -32,7 +34,7 @@ import {
   trimGroup,
   withLinkedClips,
 } from '@nos/editing';
-import { type TimelineViewport, pxToFrames } from '@nos/ui';
+import { type FadeEdge, type TimelineViewport, pxToFrames } from '@nos/ui';
 import { describeEditError } from './edit-errors.js';
 
 /**
@@ -58,7 +60,7 @@ import { describeEditError } from './edit-errors.js';
  * one edit whose result is invisible in the clip's outline — nothing moves — so a user who triggered
  * it by accident would see no reason for the picture changing.
  */
-export type DragKind = 'move' | 'trim-start' | 'trim-end' | 'slip' | 'roll';
+export type DragKind = 'move' | 'trim-start' | 'trim-end' | 'slip' | 'roll' | 'fade-in' | 'fade-out';
 
 export interface DragState {
   readonly clip: ClipId;
@@ -236,6 +238,7 @@ function labelForCrossfade(plans: readonly CrossfadePlan[]): string {
 function labelFor(kind: DragKind): string {
   if (kind === 'move') return 'move clip';
   if (kind === 'slip') return 'slip clip';
+  if (kind === 'fade-in' || kind === 'fade-out') return 'set clip fade';
   return 'trim clip';
 }
 
@@ -286,6 +289,9 @@ function applyDrag(
 
   if (state.kind === 'trim-start' || state.kind === 'trim-end') {
     return applyTrim(state, state.kind === 'trim-start' ? 'start' : 'end', deltaFrames, context);
+  }
+  if (state.kind === 'fade-in' || state.kind === 'fade-out') {
+    return applyFade(state, state.kind === 'fade-in' ? 'in' : 'out', deltaFrames, clip);
   }
   if (state.kind === 'slip') {
     // Dragging left pulls later material into the window, which is what the hand expects: the content
@@ -426,6 +432,34 @@ function applyTrim(
   return limited.ok
     ? { ok: true, value: { document: limited.value, snappedTo: undefined, crossfades: [] } }
     : limited;
+}
+
+/**
+ * Dragging a fade handle.
+ *
+ * Deliberately not snapped. A ramp's length is a duration, not a position: a fade that jumped to
+ * whatever cut was nearby would be governed by clips it has nothing to do with, and the frame it
+ * would land on is the one place snapping has nothing useful to say.
+ *
+ * The in-handle grows rightwards and the out-handle leftwards, so both follow the pointer outward
+ * from the edge they belong to. Clamped by `setClipFade` rather than here — the limit is the clip's
+ * own length, which the operation already knows.
+ */
+function applyFade(
+  state: DragState,
+  edge: FadeEdge,
+  deltaFrames: number,
+  clip: Clip,
+): Result<DragOutcome, EditError> {
+  const current = clipFade(clip);
+  const wanted =
+    edge === 'in'
+      ? Math.max(0, current.inFrames + deltaFrames)
+      : Math.max(0, current.outFrames - deltaFrames);
+
+  return plain(
+    setClipFade(state.document, state.clip, edge === 'in' ? { inFrames: wanted } : { outFrames: wanted }),
+  );
 }
 
 /** An operation that neither snaps nor crossfades, in the shape the caller expects. */

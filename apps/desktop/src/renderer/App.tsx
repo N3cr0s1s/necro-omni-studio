@@ -2117,6 +2117,12 @@ export function App(): ReactNode {
                       drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)
                     }
                     onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
+                    // A fade is its own gesture on its own handle. Overlapping two clips writes the
+                    // ramps automatically, and this is how one is made — or unmade — without moving
+                    // anything.
+                    onFadeDrag={(clip, edge, event) =>
+                      drag.begin(edge === 'in' ? 'fade-in' : 'fade-out', clip, event)
+                    }
                     {...(selectedTransition !== undefined ? { selectedTransition } : {})}
                     onSelectTransition={(id) => {
                       setSelectedTransition(id);
