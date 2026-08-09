@@ -2,6 +2,8 @@ import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useS
 import {
   type Clip,
   type ClipId,
+  type EffectId,
+  type EffectInstanceId,
   type FrameIndex,
   type FrameSpan,
   type Marker,
@@ -47,6 +49,7 @@ import { ASSET_DRAG_TYPE } from '../media-browser/MediaBrowser.js';
 import { type MenuBinding, ActionMenu } from '../menus/ActionMenu.js';
 import { EditableName } from '../controls/EditableName.js';
 import { ClipBody } from './ClipBody.js';
+import { TransitionBody } from './TransitionBody.js';
 import type { ClipStrip } from './clip-strip.js';
 import {
   type RulerTick,
@@ -132,6 +135,17 @@ export interface TimelineProps {
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+
+  /*
+   * Transitions, which the timeline drew nothing of until now: one could be created from the clip
+   * inspector, was honoured by the compositor, and appeared nowhere in the sequence it was part of.
+   */
+  readonly selectedTransition?: EffectInstanceId;
+  readonly onSelectTransition?: (id: EffectInstanceId) => void;
+  readonly onResizeTransition?: (id: EffectInstanceId, event: React.PointerEvent<HTMLDivElement>) => void;
+  readonly onRemoveTransition?: (id: EffectInstanceId) => void;
+  /** What to call an effect. The registry knows; the timeline deliberately does not. */
+  readonly transitionLabel?: (effect: EffectId) => string;
   readonly onToggleSnap?: () => void;
   readonly onToggleScrubAudio?: () => void;
   readonly onToggleRipple?: () => void;
@@ -428,6 +442,21 @@ export function Timeline(props: TimelineProps): ReactNode {
                     {...(props.menu !== undefined ? { menu: props.menu } : {})}
                     {...(props.onTrimStart !== undefined ? { onTrimStart: props.onTrimStart } : {})}
                     {...(props.onTrimEnd !== undefined ? { onTrimEnd: props.onTrimEnd } : {})}
+                    {...(props.selectedTransition !== undefined
+                      ? { selectedTransition: props.selectedTransition }
+                      : {})}
+                    {...(props.onSelectTransition !== undefined
+                      ? { onSelectTransition: props.onSelectTransition }
+                      : {})}
+                    {...(props.onResizeTransition !== undefined
+                      ? { onResizeTransition: props.onResizeTransition }
+                      : {})}
+                    {...(props.onRemoveTransition !== undefined
+                      ? { onRemoveTransition: props.onRemoveTransition }
+                      : {})}
+                    {...(props.transitionLabel !== undefined
+                      ? { transitionLabel: props.transitionLabel }
+                      : {})}
                   />
                   {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
                     <div data-clip-lanes={props.expandedClip} className="relative">
@@ -1326,6 +1355,11 @@ function TrackLane({
   onTrimStart,
   onTrimEnd,
   dropAt,
+  selectedTransition,
+  onSelectTransition,
+  onResizeTransition,
+  onRemoveTransition,
+  transitionLabel,
 }: {
   readonly track: Track;
   readonly viewport: TimelineViewport;
@@ -1348,6 +1382,12 @@ function TrackLane({
   readonly onSelectRegion?: (region: SelectionRegion, additive: boolean) => void;
   readonly onTrimStart?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   readonly onTrimEnd?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
+  readonly selectedTransition?: EffectInstanceId;
+  readonly onSelectTransition?: (id: EffectInstanceId) => void;
+  readonly onResizeTransition?: (id: EffectInstanceId, event: React.PointerEvent<HTMLDivElement>) => void;
+  readonly onRemoveTransition?: (id: EffectInstanceId) => void;
+  /** What to call an effect. The registry knows; the timeline deliberately does not. */
+  readonly transitionLabel?: (effect: EffectId) => string;
 }): ReactNode {
   // Off-screen clips are skipped entirely. With the spec's 200-clip target this is not yet critical,
   // but it keeps the DOM proportional to what is visible rather than to project length.
@@ -1404,6 +1444,24 @@ function TrackLane({
             {...(onTrimEnd !== undefined ? { onTrimEnd } : {})}
           />
         ))}
+
+        {/* After the clips, so the band paints over the cut rather than under it. */}
+        {track.kind === 'video' &&
+          onSelectTransition !== undefined &&
+          track.transitions
+            .filter((transition) => isSpanVisible(viewport, transition.span))
+            .map((transition) => (
+              <TransitionBody
+                key={transition.id}
+                transition={transition}
+                geometry={spanGeometry(viewport, transition.span)}
+                label={transitionLabel?.(transition.effect) ?? (transition.effect as string)}
+                selected={selectedTransition === transition.id}
+                onSelect={onSelectTransition}
+                {...(onResizeTransition !== undefined ? { onResize: onResizeTransition } : {})}
+                {...(onRemoveTransition !== undefined ? { onRemove: onRemoveTransition } : {})}
+              />
+            ))}
       </div>
     </ActionMenu>
   );

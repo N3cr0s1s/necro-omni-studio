@@ -4,6 +4,7 @@ import {
   type AutosaveStatus,
   type Clip,
   type ClipId,
+  type EffectInstanceId,
   type FrameIndex,
   type FrameRate,
   type TimelineDocument,
@@ -57,6 +58,8 @@ import {
   type TrackFlag,
   clipsUsing,
   relinkAsset,
+  describeTransitionError,
+  removeTransition,
 } from '@nos/editing';
 import {
   type GeneratorManifest,
@@ -133,6 +136,7 @@ import { WorkspaceTabs } from '@nos/ui';
 import { EffectAuthoring } from './EffectAuthoring.js';
 import { TextEditorTab } from './TextEditorTab.js';
 import { StoryTab } from './StoryTab.js';
+import { findTransition, useTransitionDrag } from './use-transition-drag.js';
 import { actionFor, effectForShader } from './file-open.js';
 import {
   type Workspace,
@@ -1505,6 +1509,17 @@ export function App(): ReactNode {
    * One object because the two halves are useless apart, and because the panels render the menu
    * themselves now — this describes it, and `ActionMenu` turns the description into markup.
    */
+  /*
+   * The selected transition, which the timeline had no way to express.
+   *
+   * Kept apart from the clip selection rather than folded into it: a transition is not a clip, and
+   * every operation that reads `selected` — split, delete, nudge, the effect stack — would have to
+   * learn to ignore an id that is not one. Two small pieces of state that each mean one thing beat one
+   * that means either.
+   */
+  const [selectedTransition, setSelectedTransition] = useState<EffectInstanceId>();
+  const transitionDrag = useTransitionDrag({ document, viewport, commit: commitDocument });
+
   const timelineMenu: MenuBinding<TimelineMenuTarget> = useMemo(
     () => ({
       items: (target) =>
@@ -2099,6 +2114,29 @@ export function App(): ReactNode {
                       drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)
                     }
                     onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
+                    {...(selectedTransition !== undefined ? { selectedTransition } : {})}
+                    onSelectTransition={(id) => {
+                      setSelectedTransition(id);
+                      // Selecting a transition clears the clip selection, so the inspector is about
+                      // one thing and Delete has one meaning.
+                      setSelected(new Set());
+                    }}
+                    onResizeTransition={(id, event) => {
+                      const transition = findTransition(document, id);
+                      if (transition !== undefined) transitionDrag.begin(transition, event);
+                    }}
+                    onRemoveTransition={(id) => {
+                      const result = removeTransition(document, id);
+                      if (result.ok) {
+                        commitDocument('remove transition', result.value);
+                        setSelectedTransition(undefined);
+                      } else confirmation.say(describeTransitionError(result.error));
+                    }}
+                    // The registry's own name for the effect, so the band says "Cross dissolve"
+                    // rather than `cross_dissolve`.
+                    transitionLabel={(effect) =>
+                      effectRegistry.manifestFor(effect)?.name ?? (effect as string)
+                    }
                     {...(expandedClip !== undefined ? { expandedClip } : {})}
                     onToggleExpandClip={(clip) =>
                       setExpandedClip((current) => (current === clip ? undefined : clip))

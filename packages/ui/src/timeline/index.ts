@@ -6,3 +6,4 @@ export * from './clip-strip.js';
 export * from './ClipBody.js';
 export * from './Timeline.js';
 export * from './KeyframeLane.js';
+export * from './TransitionBody.js';
