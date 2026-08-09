@@ -92,7 +92,10 @@ describe('dragging a handle', () => {
      */
     const { onChange, onCommit, grab } = mount();
     // 100 px across of 200 is x = 0.5; 160 px down of 320 is the middle of the box, y = 0.5.
-    grab(1, { x: 100, y: 160 }, [{ x: 40, y: 60 }, { x: 70, y: 100 }]);
+    grab(1, { x: 100, y: 160 }, [
+      { x: 40, y: 60 },
+      { x: 70, y: 100 },
+    ]);
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit.mock.calls.at(-1)![0]).toMatchObject({ x1: 0.5, y1: 0.5 });
