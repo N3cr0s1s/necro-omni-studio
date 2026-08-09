@@ -504,7 +504,10 @@ try {
 
         const list = page.getByRole('listbox', { name: 'Suggestions' });
         if ((await list.count()) === 0) {
-          const shown = await page.locator('section[aria-label="File editor"] header span').first().textContent();
+          const shown = await page
+            .locator('section[aria-label="File editor"] header span')
+            .first()
+            .textContent();
           fail(`the completion list did not open on Ctrl+Space (editing ${String(shown)})`);
         } else {
           pass('and suggests what belongs at the caret');
@@ -1019,8 +1022,8 @@ try {
   await broken?.browser.close().catch(() => undefined);
   if (broken !== undefined) stop(broken.child);
   // Retried: the shell is still shutting down and may write into the folder while it is being
-// removed, which surfaces as ENOTEMPTY and would fail a run that actually passed.
-if (failures === 0) rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  // removed, which surfaces as ENOTEMPTY and would fail a run that actually passed.
+  if (failures === 0) rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 if (failures === 0) console.log('smokecheck passed');
