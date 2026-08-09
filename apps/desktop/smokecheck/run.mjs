@@ -358,7 +358,17 @@ try {
       else fail('saving an effect did not produce both files');
 
       // Usable without a restart, which is what `onSaved` reloading the library is for.
+      //
+      // Back to the editor *workspace* tab first: since issue #31 the effect editor fills the window,
+      // so the panel's own tabs are not on screen while it is showing.
       await page.waitForTimeout(2500);
+      await page.getByRole('tab', { name: 'Editor' }).click();
+      await page.waitForTimeout(1000);
+      await page
+        .locator('[data-clip-id]')
+        .first()
+        .click({ force: true })
+        .catch(() => undefined);
       await page.getByRole('tab', { name: 'Effects' }).click();
       await page.waitForTimeout(1000);
       const add = page.getByRole('button', { name: /Add effect/i }).first();
@@ -374,6 +384,89 @@ try {
       await page.getByRole('tab', { name: 'Editor' }).click();
       await page.waitForTimeout(800);
     }
+  }
+
+  /*
+   * Opening a source file, per issue #32.
+   *
+   * A `.frag` used to be refused with "…is not something that can go on the timeline" — true, and it
+   * left the user with no way to reach an editor that existed. And the only route to the effect editor
+   * started with selecting a clip, so a user who had not selected one saw an empty column and no hint.
+   */
+  await page.getByRole('tab', { name: 'Effects' }).click();
+  await page.waitForTimeout(800);
+  if ((await page.getByRole('button', { name: /Write a new effect/i }).count()) > 0) {
+    pass('the effect editor is reachable with no clip selected');
+  } else {
+    fail('with nothing selected there is no way to reach the effect editor');
+  }
+
+  // `effects/` holds the fixture's shader and its manifest, which is one of each kind worth opening.
+  await page
+    .getByRole('treeitem', { name: /effects/ })
+    .first()
+    .click()
+    .catch(() => undefined);
+  await page.waitForTimeout(1200);
+
+  const shaderRow = page.getByRole('treeitem', { name: /\.frag/ }).first();
+  if ((await shaderRow.count()) === 0) {
+    fail('the browser does not list the project’s shader');
+  } else {
+    await shaderRow.dblclick();
+    await page.waitForTimeout(2000);
+
+    if ((await page.getByRole('region', { name: 'Effect editor' }).count()) > 0) {
+      // On the *effect*, not on the file: a shader is half of one, and the editor holds both halves.
+      pass('and a shader opens the effect that names it');
+    } else {
+      fail('double-clicking a shader did not open the effect editor');
+    }
+
+    await page.getByRole('tab', { name: 'Editor' }).click();
+    await page.waitForTimeout(1000);
+    await page
+      .getByRole('treeitem', { name: /effects/ })
+      .first()
+      .click()
+      .catch(() => undefined);
+    await page.waitForTimeout(1200);
+
+    const jsonRow = page.getByRole('treeitem', { name: /\.json/ }).first();
+    if ((await jsonRow.count()) === 0) {
+      fail('the browser does not list the project’s manifest');
+    } else {
+      await jsonRow.dblclick();
+      await page.waitForTimeout(2000);
+
+      const fileEditor = page.getByRole('region', { name: 'File editor' });
+      if ((await fileEditor.count()) === 0) {
+        fail('double-clicking a manifest did not open the text editor');
+      } else {
+        // Loaded, not merely opened: an editor that shows an empty buffer for a file that exists is
+        // one save away from destroying it.
+        const contents = await page.getByLabel('File contents').inputValue();
+        if (contents.trim().startsWith('{')) pass('and a manifest opens in the text editor, loaded');
+        else fail(`the text editor opened empty — ${contents.length} characters`);
+      }
+    }
+
+    /*
+     * Put back what this section disturbed.
+     *
+     * The checks after it need the editor tab showing and a clip selected — the effect stack's own
+     * controls, and the toolbar, are both inside those. Restoring the state a section found is the
+     * same discipline as the backend-address check putting the setting back.
+     */
+    await page.getByRole('tab', { name: 'Editor' }).click();
+    await page.waitForTimeout(800);
+    await page
+      .locator('[data-clip-id]')
+      .first()
+      .click({ force: true })
+      .catch(() => undefined);
+    await page.getByRole('tab', { name: 'Effects' }).click();
+    await page.waitForTimeout(900);
   }
 
   // The dialogs, each of which is a tree that never mounts until it is asked for.

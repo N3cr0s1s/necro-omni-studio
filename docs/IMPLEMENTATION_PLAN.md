@@ -615,6 +615,50 @@ the settings checks are on `Project` now and the effect-editor entry on `Effects
 names UI is a harness that has to be edited when the UI is right to change — which is the cost of
 checking the assembled application, and worth paying.
 
+### Opening a file (keep these)
+
+Issue #32: double-clicking a `.frag` said *"…is not something that can go on the timeline"* — true, and
+it left the user nowhere, because the shader editor existed and the only route to it started with
+selecting a clip. A project folder is not only a bag of media; some of its files are **sources**.
+
+**A table, not a chain of ifs.** `actionFor` maps an extension to what to do — timeline, a tab of a
+given kind, or an honest nothing. Every new editor is a row, and the browser stays ignorant of what a
+`.frag` is.
+
+**A shader opens the effect, not the file.** A `.frag` is half of an effect and the editor holds both
+halves, so the manifest naming it decides which effect opens. Matched by what the manifest *names*
+rather than by the `<id>.frag` convention, because a manifest may name any shader beside it. One
+nothing claims is an orphan — real while a shader is being written — and opens as text instead.
+
+**Reachable without a clip.** The empty state offers the editor now. A feature whose only entry point
+requires an unrelated selection is one nobody finds.
+
+**Highlighting is written, not vendored.** The renderer runs under a CSP that forbids fetching, so a
+library would have to be vendored; what is needed is a JSON tokenizer, which is small and testable. It
+emits **tokens, never HTML** — an escaping bug in a highlighter is an injection bug in an editor that
+opens files from disk — and it is tolerant, because a file being edited is malformed most of the time.
+It must cover every character, whitespace included: the coloured layer sits *under* a transparent
+textarea, and a dropped space puts the caret on the wrong glyph.
+
+**Emphasis, not hue — and that is measured.** Highlighting wants a categorical palette and shadcn's is
+the chart ramp, which this application forbids as text because it runs to 1.42:1 across the six
+themes. `primary` fails too: 17:1 in five themes and **2.49:1** in the one the editor opens in. Only
+`foreground` and `muted-foreground` clear AA everywhere, and `destructive` means an error. Two tones
+and a weight is what this palette can honestly carry.
+
+**Saving invalid JSON is refused**, because that is how a project stops loading — and the editor can
+see it before the file exists.
+
+**Only media is probed.** The detail pane probed whatever was selected, so clicking a shader or a
+manifest sent ffprobe a file it cannot read and the sidecar answered **422** — a request that could
+only fail, on every selection. Found by driving the browser right after source files became openable,
+which is when people start clicking them.
+
+**A harness section restores what it disturbs.** The new checks opened tabs and left the workspace on
+one, and two later checks failed because the panel's tabs are not on screen while an editor tab is
+showing. Ordering them last and putting the state back is the same discipline the backend-address
+check already follows.
+
 ### Workspace tab rules (keep these)
 
 Issue #31 asked for tabs at the framework level; #30 for line tabs spanning the full width. Both are

@@ -150,6 +150,22 @@ export function useAssetDetail(options: AssetDetailOptions): AssetDetail | undef
       return;
     }
 
+    /*
+     * Only media is probed.
+     *
+     * The pane used to probe whatever was selected, so clicking a `.frag`, a manifest or a note sent
+     * ffprobe a file it cannot read and the sidecar answered **422** — a request that could only ever
+     * fail, fired on every selection. Found by driving the browser after issue #32 made source files
+     * openable, which is exactly when people started clicking them.
+     *
+     * `classifyAsset` is the same rule the browser's glyphs and the timeline's import use, so what
+     * counts as media has one definition.
+     */
+    if (classifyAsset(asset) === undefined) {
+      setProbed(undefined);
+      return;
+    }
+
     const cached = cache.current.get(asset);
     if (cached !== undefined) {
       setProbed(cached);

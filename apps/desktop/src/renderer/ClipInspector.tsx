@@ -26,7 +26,14 @@ import {
 } from '@nos/editing';
 import type { MaskId } from '@nos/core';
 import type { ClipSection } from './panel-tabs.js';
-import { DiamondIcon, PlusIcon, TriangleAlertIcon, WandSparklesIcon, XIcon } from 'lucide-react';
+import {
+  DiamondIcon,
+  FileCode2Icon,
+  PlusIcon,
+  TriangleAlertIcon,
+  WandSparklesIcon,
+  XIcon,
+} from 'lucide-react';
 import { type EffectStackEntry, EditableName, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldTitle } from '@nos/ui/components/ui/field';
@@ -132,8 +139,19 @@ export function ClipInspector({
   const located = clip === undefined ? undefined : locateClip(document, clip as never);
   if (located === undefined) {
     return (
-      <div className="p-4">
-        <p className="font-mono text-xs text-muted-foreground">no clip selected</p>
+      <div className="flex flex-col gap-3 p-4">
+        <p className="text-muted-foreground font-mono text-xs">no clip selected</p>
+        {/*
+          Writing an effect does not need a clip, and issue #32 was that the only way in was through
+          one: with nothing selected the panel said "no clip selected" and stopped, so a user looking
+          for the effect editor found an empty column and no hint that one existed.
+        */}
+        {onCreateEffect !== undefined && sections?.has('effects') !== false && (
+          <Button variant="outline" size="sm" onClick={onCreateEffect}>
+            <FileCode2Icon />
+            Write a new effect
+          </Button>
+        )}
       </div>
     );
   }

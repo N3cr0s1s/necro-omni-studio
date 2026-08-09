@@ -130,6 +130,8 @@ import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { WorkspaceTabs } from '@nos/ui';
 import { EffectAuthoring } from './EffectAuthoring.js';
+import { TextEditorTab } from './TextEditorTab.js';
+import { actionFor, effectForShader } from './file-open.js';
 import {
   type Workspace,
   type WorkspaceTabKind,
@@ -1762,6 +1764,17 @@ export function App(): ReactNode {
         />
       )}
 
+      {showing.kind === 'text' && showing.subject !== undefined && (
+        <TextEditorTab
+          path={showing.subject}
+          // Saving a manifest takes effect without a restart: both libraries re-read the folder.
+          onSaved={() => {
+            effects.reload();
+            library.reload();
+          }}
+        />
+      )}
+
       {showing.kind === 'effect' && (
         <EffectAuthoring
           // The project's own effects, so saving cannot silently replace one — the id is two filenames
@@ -1890,6 +1903,45 @@ export function App(): ReactNode {
                 });
               }}
               onActivate={(asset) => {
+                /*
+                 * A project folder is not only a bag of media. Issue #32: double-clicking a `.frag`
+                 * said "…is not something that can go on the timeline", which is true and left the
+                 * user nowhere — a shader has an editor, and a manifest and a note now do too.
+                 */
+                const action = actionFor(asset);
+
+                if (action.kind === 'none') {
+                  setError(action.reason);
+                  return;
+                }
+
+                if (action.kind === 'tab') {
+                  // A shader is half of an effect: the editor opens on the *effect*, found by the
+                  // manifest that names the file. One nothing claims is an orphan — real while a
+                  // shader is being written — and opens as text so it can still be edited.
+                  const effect =
+                    action.tab === 'effect'
+                      ? effectForShader(
+                          asset,
+                          projectEffects.map((entry) => ({
+                            id: entry.manifest.id as string,
+                            shader: entry.manifest.shader,
+                          })),
+                        )
+                      : undefined;
+
+                  setWorkspace((current) =>
+                    action.tab === 'effect' && effect === undefined
+                      ? openTab(current, { kind: 'text', subject: asset, title: baseNameOf(asset) })
+                      : openTab(current, {
+                          kind: action.tab,
+                          subject: effect ?? asset,
+                          title: effect ?? baseNameOf(asset),
+                        }),
+                  );
+                  return;
+                }
+
                 void mediaImport.run(asset, playhead).then((id) => {
                   // Selected on arrival, because the next thing a user does with a clip they just added is
                   // almost always to it.
@@ -2366,6 +2418,11 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
 }
 
 export { trimClipEnd, trimClipStart };
+
+/** The last path segment, which is what a tab should be called rather than the whole path. */
+function baseNameOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
 
 /**
  * The icon for a tab's kind.
