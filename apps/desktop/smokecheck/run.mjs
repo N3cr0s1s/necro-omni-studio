@@ -242,6 +242,21 @@ try {
    * A renderer that can put bytes anywhere on the machine is a different security posture from one
    * that can fill a project folder.
    */
+  /*
+   * The way in, before the thing it does.
+   *
+   * A capability reachable only by calling the bridge from a test is not a capability: the checks
+   * below drive `copyIntoProject` directly, which would keep passing even if the menu entry that leads
+   * to it had never been added.
+   */
+  await page.getByRole('tree', { name: 'Project folder' }).click({ button: 'right' });
+  await page.waitForTimeout(800);
+  const importItem = page.getByRole('menuitem', { name: /Import/i });
+  if ((await importItem.count()) > 0) pass('the browser offers a way to import media');
+  else fail('nothing in the browser offers to import media');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+
   const outside = join(work, 'outside.txt');
   writeFileSync(outside, 'imported');
 
