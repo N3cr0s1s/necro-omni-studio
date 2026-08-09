@@ -878,6 +878,12 @@ the screen looking fine. It is shallow and wide on purpose: depth belongs to the
 capability, and this is the coverage no unit test gives, because a unit test renders a component with
 the props it chose rather than the ones the shell passes.
 
+**The state a new user meets first was covered by nobody.** Every harness writes a session file and
+opens a project, so the no-project path had never been exercised. Smokecheck gives it its own shell —
+the application has no way to close a project, and inventing one purely to be testable would be the
+tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
+that cannot work.
+
 **A harness's own first failures are usually its own.** Smokecheck's were: it copied a fixture without
 synthesizing the tone made at runtime, and it looked for the status bar as a `region` when a `<footer>`
 is `contentinfo`. Check the harness before filing a defect — and take the failures as proof the checks
