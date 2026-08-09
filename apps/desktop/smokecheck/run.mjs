@@ -290,6 +290,27 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
 
+  /*
+   * The step a drop depends on and no component test can reach.
+   *
+   * A renderer cannot name a file on disk, so a drop resolves its paths through the preload. If that
+   * binding were missing the drop would silently do nothing — the panel would light up, the files
+   * would filter to none, and nothing would be imported or said. Dragging a *real* file is not
+   * something this can do, so it checks the binding is there and that a synthetic file answers with
+   * the empty string rather than throwing, which is the path every non-file drag takes.
+   */
+  const naming = await page.evaluate(() => {
+    const nos = globalThis.nos;
+    if (typeof nos?.pathForFile !== 'function') return 'missing';
+    try {
+      return typeof nos.pathForFile(new File(['x'], 'shot.mp4')) === 'string' ? 'ok' : 'wrong type';
+    } catch (error) {
+      return `threw: ${String(error)}`;
+    }
+  });
+  if (naming === 'ok') pass('a dropped file can be named through the preload');
+  else fail(`a drop could not resolve its paths — ${naming}`);
+
   const outside = join(work, 'outside.txt');
   writeFileSync(outside, 'imported');
 
