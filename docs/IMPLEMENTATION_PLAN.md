@@ -908,6 +908,15 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**Print as you go, not in a `finally`.** Two throwaway probes were lost to this: a process killed
+before the end printed nothing at all, and the absence looked like a broken feature rather than a
+broken probe. The harnesses print incrementally, which is why they survive — and is a reason to put a
+check in one rather than in a script.
+
+**An escape throws where an unreadable file is skipped**, and the difference is deliberate: a file
+that will not read is ordinary and should be survived, while a path pointing out of the project is a
+programming error and should be loud.
+
 **A binding that does nothing looks exactly like one that was never added**, which makes it the
 easiest regression to ship and the hardest to notice. The transport keys are checked against the
 playhead's own readout, which names the current time in its accessible label.
