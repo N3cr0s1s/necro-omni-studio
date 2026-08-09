@@ -124,6 +124,7 @@ import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { ModeToggle } from './ModeToggle.js';
+import { ThemePicker, useThemeAttribute } from './ThemePicker.js';
 import {
   derivationActivity,
   exportActivity,
@@ -266,6 +267,9 @@ export function App(): ReactNode {
   // greyed for the real reason rather than because the backend was still starting.
   const graphsRef = useRef<ReadonlyMap<string, unknown> | undefined>(undefined);
   const appSettings = useAppSettings();
+  // Stamped on `<html>` from the stored setting, so the palette applies as soon as it is known rather
+  // than only when the picker is used.
+  useThemeAttribute(appSettings.settings?.theme);
   const runtime = useGeneratorRuntime({
     graphs: graphsRef,
     projectRoot: project?.root,
@@ -1540,6 +1544,8 @@ export function App(): ReactNode {
         onExport={openExport}
         autosaveStatus={autosave.status}
         onShowShortcuts={() => setShortcutsOpen(true)}
+        themeId={appSettings.settings?.theme}
+        onChangeTheme={(theme) => appSettings.update({ theme })}
       />
 
       <ShortcutSheet groups={SHORTCUT_GROUPS} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
@@ -1994,6 +2000,8 @@ function TitleBar({
   onExport,
   autosaveStatus,
   onShowShortcuts,
+  themeId,
+  onChangeTheme,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -2003,6 +2011,8 @@ function TitleBar({
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
   readonly onShowShortcuts: () => void;
+  readonly themeId: string | undefined;
+  readonly onChangeTheme: (theme: string) => void;
 }): ReactNode {
   return (
     <header className="flex h-11 flex-none items-center gap-3 border-b px-4">
@@ -2036,6 +2046,7 @@ function TitleBar({
         <KeyboardIcon />
         <span className="sr-only">Keyboard and pointer</span>
       </Button>
+      <ThemePicker themeId={themeId} onChange={onChangeTheme} />
       <ModeToggle />
       <Separator orientation="vertical" className="h-4" />
       <Button variant="ghost" size="sm" onClick={onOpen}>

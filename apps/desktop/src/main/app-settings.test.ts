@@ -49,7 +49,7 @@ describe('reading what was on disk', () => {
 });
 
 describe('applying a change', () => {
-  const current = { variantMaximum: 5, backendUrl: 'http://127.0.0.1:9000' };
+  const current = { variantMaximum: 5, backendUrl: 'http://127.0.0.1:9000', theme: 'zinc' };
 
   it('changes what was named', () => {
     expect(mergeSettings(current, { variantMaximum: 2 }).variantMaximum).toBe(2);
@@ -101,15 +101,49 @@ describe('where the backend is', () => {
 
   it('lets the field be cleared, which is how it says "use the default"', () => {
     expect(
-      mergeSettings({ variantMaximum: 3, backendUrl: 'http://x.test' }, { backendUrl: '' }).backendUrl,
+      mergeSettings({ variantMaximum: 3, backendUrl: 'http://x.test', theme: '' }, { backendUrl: '' })
+        .backendUrl,
     ).toBe('');
   });
 
   it('keeps the current address when a change is refused', () => {
     const kept = mergeSettings(
-      { variantMaximum: 3, backendUrl: 'http://x.test' },
+      { variantMaximum: 3, backendUrl: 'http://x.test', theme: '' },
       { backendUrl: 'file:///x' },
     );
     expect(kept.backendUrl).toBe('http://x.test');
+  });
+});
+
+describe('which palette the editor draws in', () => {
+  const current = { variantMaximum: 5, backendUrl: '', theme: 'zinc' };
+
+  it('is empty by default, meaning whatever the application ships in', () => {
+    // Not the default id itself: that is named once, in `@nos/ui`, and a copy here would be a second
+    // answer to a question that has one.
+    expect(parseSettings({}).theme).toBe('');
+  });
+
+  it('keeps an id it has never heard of', () => {
+    // The list of themes lives in a package the main process may not import values from, so an
+    // unknown id is not something this side can recognise — and a settings file written by a later
+    // build is the ordinary way one arrives. The renderer falls back when it resolves it.
+    expect(parseSettings({ theme: 'a-theme-from-next-year' }).theme).toBe('a-theme-from-next-year');
+  });
+
+  it('refuses anything that is not shaped like an attribute value', () => {
+    // The guard that matters: this string is interpolated into an HTML attribute and matched by a CSS
+    // attribute selector, and a settings file is exactly the kind of thing that gets pasted into.
+    for (const value of ['" onload="x', 'Zinc Two', 'a'.repeat(40), 42, null]) {
+      expect(mergeSettings(current, { theme: value }).theme).toBe('zinc');
+    }
+  });
+
+  it('takes an empty string as a deliberate return to the default', () => {
+    expect(mergeSettings(current, { theme: '' }).theme).toBe('');
+  });
+
+  it('leaves the palette alone when a change does not mention it', () => {
+    expect(mergeSettings(current, { variantMaximum: 3 }).theme).toBe('zinc');
   });
 });

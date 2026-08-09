@@ -35,6 +35,24 @@ export interface AppSettings {
    * not in the project.
    */
   readonly variantMaximum: number;
+  /**
+   * Which palette the editor draws in, per issue #21's "lehet majd több theme is".
+   *
+   * An installation setting rather than a project one, and for the same reason as the others here: a
+   * palette is a property of the person and the screen, not of the cut. Two people opening the same
+   * project should not be arguing about its colours through `project.json`.
+   *
+   * Empty means "whichever theme the application ships in", exactly as `backendUrl` does. The list of
+   * themes lives in `@nos/ui`, and the main process may import types from the workspace but never
+   * values — so it cannot ask whether an id is one this build has, and it does not try. What it
+   * guarantees is the *shape*: something safe to interpolate into a `data-theme` attribute. Deciding
+   * whether the id names a real theme is the renderer's job, and `themeById` already falls back for
+   * an id it does not recognise, which is what a settings file written by a later build looks like.
+   *
+   * It sits beside the appearance — light, dark or system — which `next-themes` keeps for itself; the
+   * two axes are independent and every theme answers for both.
+   */
+  readonly theme: string;
 }
 
 /** What every setting is when nothing says otherwise. */
@@ -45,6 +63,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Empty rather than the address itself: the default belongs to whoever resolves it, and storing a
   // copy here would freeze today's default into every settings file ever written.
   backendUrl: '',
+  // Empty for the same reason: the application's default theme is named once, in `@nos/ui`, and a
+  // copy here would be a second answer to a question that has one.
+  theme: '',
 };
 
 /** The narrowest and widest a cap can usefully be. One means "never batch"; the ceiling is a rail. */
@@ -68,6 +89,7 @@ export function parseSettings(value: unknown): AppSettings {
       DEFAULT_SETTINGS.variantMaximum,
     ),
     backendUrl: httpUrl(raw['backendUrl'], DEFAULT_SETTINGS.backendUrl),
+    theme: themeId(raw['theme'], DEFAULT_SETTINGS.theme),
   };
 }
 
@@ -94,7 +116,25 @@ export function mergeSettings(current: AppSettings, patch: unknown): AppSettings
           ),
     backendUrl:
       raw['backendUrl'] === undefined ? current.backendUrl : httpUrl(raw['backendUrl'], current.backendUrl),
+    theme: raw['theme'] === undefined ? current.theme : themeId(raw['theme'], current.theme),
   };
+}
+
+/**
+ * An id safe to write into a `data-theme` attribute, or the fallback.
+ *
+ * Shape only — lowercase letters, digits and dashes — because that is the whole of what this side of
+ * the boundary can know. The guard is not about a mistyped theme name, which is harmless and falls
+ * back in the renderer; it is about the fact that this string ends up inside a CSS attribute selector
+ * and an HTML attribute, and a settings file is exactly the kind of thing that gets pasted into.
+ *
+ * Empty is allowed and meaningful: it is how the field says "the application's default".
+ */
+function themeId(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (trimmed === '') return '';
+  return /^[a-z0-9-]{1,32}$/.test(trimmed) ? trimmed : fallback;
 }
 
 /**

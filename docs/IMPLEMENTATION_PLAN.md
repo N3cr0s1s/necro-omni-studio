@@ -1182,6 +1182,60 @@ so it can gate a release:
   side-by-side below). Heights are persisted and user-resizable, so a fixed layout
   clips its label — which is exactly what happened at the mockups' 46 px text track.
 
+### Theme rules (keep these)
+
+Issue #21's remaining half — "lehet majd több theme is" — is closed. Six palettes: the one the editor
+was built in, read back out of the stylesheet `npx shadcn init` wrote, and shadcn's five base colours
+from its own registry. **No colour here was chosen by eye**, and each theme records the URL it came
+from, because the request was for shadcn's theming and a palette invented to look shadcn-ish is the
+one thing that could not be called that.
+
+**A theme is data.** Append to `THEMES` and it is offered by the picker, emitted into the stylesheet
+and measured by the audit, with nothing else written. `ThemePalette` names all thirty-one roles and
+none is optional: a theme that forgets one is not a theme with a gap, it is a theme under which one
+control silently keeps the previous palette's colour.
+
+**Colour only — geometry is not a theme.** `--radius` is left out although shadcn's registry carries
+it beside the colours. Squared corners are this application's shape; a palette that also reshaped every
+control would be a different application. It is also what makes switching safe mid-edit: nothing moves,
+nothing reflows, a timeline measured in pixels stays where it was.
+
+**Applied as CSS, pinned to the data.** The blocks are written into `globals.css` between markers, so
+nothing flashes a frame late and the cascade is the browser's. Two copies of anything drift, so
+`theme-css.test.ts` rebuilds the region from `THEMES` and fails if the file differs. `:root` and
+`.dark` are left exactly as shadcn wrote them, which is why a build that never sets the attribute
+renders precisely what it rendered before.
+
+**Contrast is measured, not admired.** A palette is thirty-one strings and reading them tells you
+nothing about whether text on a surface can be read. `auditTheme` converts to sRGB and holds every
+text pair to WCAG in both appearances — and it is a *function*, so `theme-audit.test.ts` can point it
+at deliberately broken palettes and prove each fault it claims to find. A check nobody has watched
+fail is not a check.
+
+**Distinctness is a different question from contrast, and conflating them is a bug I made.** WCAG's
+ratio is a function of luminance alone, so shadcn's orange `chart-1` and teal `chart-2` — equally
+bright, wholly different — score 1.02:1. Measured that way every colourful ramp shadcn publishes looks
+broken. Categories are compared by OKLab distance instead.
+
+**Two things this measurement found, both real and neither new:**
+
+- The colour conversion linearized twice. `oklchToSrgb` returned the matrix's *linear* output and
+  `relativeLuminance` linearized it again, so every dark colour scored far darker than it is. A
+  conversion wrong by a gamma curve returns a plausible colour for every input; only a number from an
+  outside source catches it — here, that `oklch(0.5 0 0)` is `#636363`.
+- **`chart-*` is drawn as text in a dozen places and it is not a text palette.** Measured against the
+  surface it sits on it runs from 10.5:1 down to 1.7:1 across shadcn's own palettes, and in the
+  application's default dark appearance the variant picker's seed sits at 2.90:1 — below AA today,
+  before any theme was added. The timeline already found this once and wrote it down: "those roles are
+  chosen to be legible as a fill behind something, and `chart-1` on a light background is barely
+  there." The fix it applied there — colour on the icon, the words at full contrast — is the rule, and
+  it has not yet been applied everywhere else. **This is the next thing to do**, and it is a legibility
+  fix rather than a theme one.
+
+**Never revert a mutant with `git checkout` on a file holding uncommitted work.** Doing so here
+discarded the whole setting the mutant was testing, not just the mutant. Copy the file aside first, or
+commit before mutating.
+
 ### UI rules (keep these)
 
 - Filtering the project folder **opens every folder**, and restores the user's own

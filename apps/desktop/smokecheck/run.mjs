@@ -223,6 +223,62 @@ try {
   if ((await cap.count()) > 0) pass('the global variant ceiling can be set');
   else fail('nothing offers the global variant ceiling');
 
+  /*
+   * Issue #21's "lehet majd több theme is", driven the way a user reaches it.
+   *
+   * The assertion is on the **computed** background colour, not on the attribute. An attribute is
+   * trivially easy to set and proves nothing: if the stylesheet's blocks were missing, misspelled, or
+   * beaten on specificity by `:root`, the attribute would still read back exactly right while the
+   * window stayed the colour it always was. What a user sees is the computed value, so that is what
+   * is compared — before and after, and they have to differ.
+   *
+   * It also checks that the choice survives a reload, because a palette that resets every launch is
+   * not a setting.
+   */
+  const paintedBefore = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--background').trim(),
+  );
+
+  await page.getByRole('button', { name: 'Theme' }).click();
+  await page.waitForTimeout(400);
+  const zinc = page.getByRole('menuitem', { name: 'Zinc' });
+
+  if ((await zinc.count()) === 0) {
+    fail('the theme picker offers nothing to choose');
+  } else {
+    await zinc.click();
+    await page.waitForTimeout(700);
+
+    const stamped = await page.evaluate(() => document.documentElement.dataset.theme ?? '');
+    const paintedAfter = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--background').trim(),
+    );
+
+    if (stamped !== 'zinc') {
+      fail(`choosing a theme left data-theme at ${JSON.stringify(stamped)}`);
+    } else if (paintedAfter === paintedBefore || paintedAfter === '') {
+      // The failure this check exists for: the attribute lands and nothing is painted differently.
+      fail(`the theme changed but --background stayed ${JSON.stringify(paintedBefore)}`);
+    } else {
+      pass('a theme can be chosen and the window is actually painted in it');
+
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(3000);
+      const afterReload = await page.evaluate(() => document.documentElement.dataset.theme ?? '');
+      if (afterReload === 'zinc') pass('and the chosen theme survives a reload');
+      else fail(`the chosen theme was forgotten on reload — data-theme is ${JSON.stringify(afterReload)}`);
+
+      // Back to the theme the editor ships in, so nothing after this reads a different window.
+      await page.getByRole('button', { name: 'Theme' }).click();
+      await page.waitForTimeout(400);
+      await page
+        .getByRole('menuitem', { name: 'Studio' })
+        .click()
+        .catch(() => undefined);
+      await page.waitForTimeout(600);
+    }
+  }
+
   // Back to the inspector with a clip selected, which is the state most of the panel's controls need.
   await page
     .locator('[data-clip-id]')

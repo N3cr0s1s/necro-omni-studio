@@ -32,3 +32,8 @@ export * from './export/index.js';
 export * from './generators/index.js';
 export * from './staging/index.js';
 export * from './segmentation/index.js';
+export * from './theme/palette.js';
+export * from './theme/themes.js';
+export * from './theme/theme-audit.js';
+export * from './theme/oklch.js';
+export * from './theme/theme-css.js';
