@@ -25,7 +25,7 @@ import {
   moveWithCrossfades,
   reachableTrimDelta,
   rollEdit,
-  setClipFade,
+  setGroupFade,
   trackForOffset,
   slipClip,
   snapEdgeDelta,
@@ -457,8 +457,10 @@ function applyFade(
       ? Math.max(0, current.inFrames + deltaFrames)
       : Math.max(0, current.outFrames - deltaFrames);
 
+  // Through the group, so an imported video's own sound ramps with the picture. Fading one and not
+  // the other is more obviously wrong than the trim case was, because you can hear it.
   return plain(
-    setClipFade(state.document, state.clip, edge === 'in' ? { inFrames: wanted } : { outFrames: wanted }),
+    setGroupFade(state.document, state.clip, edge === 'in' ? { inFrames: wanted } : { outFrames: wanted }),
   );
 }
 

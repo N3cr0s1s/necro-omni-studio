@@ -276,6 +276,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       id: 'close-gap',
       label: gap === undefined ? 'Close the gap' : `Close the gap (${gap.frames} f)`,
       icon: ChevronsLeftIcon,
+      shortcut: shortcutLabel('close-gap'),
       disabled: gap === undefined,
       separated: true,
     },

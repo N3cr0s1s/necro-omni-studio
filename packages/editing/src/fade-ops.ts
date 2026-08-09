@@ -15,6 +15,7 @@ import {
 } from '@nos/core';
 import type { EditError } from './errors.js';
 import { assertUnlocked, locateClipOrFail, replaceClip, replaceTrack } from './mutate.js';
+import { withLinkedClips } from './selection.js';
 
 /**
  * Fades, and the crossfade that overlapping two clips makes.
@@ -193,6 +194,42 @@ export function setClipFade(
   if (next.inFrames === current.inFrames && next.outFrames === current.outFrames) return ok(document);
 
   return ok(replaceTrack(document, replaceClip(track, withFade(clip, next))));
+}
+
+/**
+ * Sets the ramps on a clip and everything linked to it.
+ *
+ * The same rule the linked trim follows, for the same reason: a picture and the sound split out of it
+ * are one thing to a user, so fading one and not the other is a success that half happened. Dragging
+ * the handle on an imported video would otherwise ramp the image while its own audio arrived at full
+ * level — which is more obviously wrong than the trim case, because you can *hear* it.
+ *
+ * **Not** all-or-nothing, unlike the trim. A fade cannot collide with anything and cannot run out of
+ * material; the only way one half can refuse is a locked track, and refusing the whole gesture then
+ * would mean a locked audio track silently prevented fading the picture above it. Each side is
+ * clamped to its own length, which is what a pair of different lengths needs anyway.
+ */
+export function setGroupFade(
+  document: TimelineDocument,
+  clipId: ClipId,
+  change: FadeChange,
+): Result<TimelineDocument, EditError> {
+  const group = withLinkedClips(document, [clipId]);
+  if (group.length === 0) return err({ kind: 'clip-not-found', clip: clipId });
+
+  let current = document;
+  let firstRefusal: Result<TimelineDocument, EditError> | undefined;
+
+  for (const member of group) {
+    const set = setClipFade(current, member, change);
+    if (set.ok) current = set.value;
+    else if (member === clipId) firstRefusal = set;
+  }
+
+  // The clip the user actually grabbed decides the outcome. A partner that could not follow — a
+  // locked track — leaves the gesture reported as done, because it did what was asked of the thing
+  // under the pointer.
+  return firstRefusal ?? ok(current);
 }
 
 /** Removes both ramps. */

@@ -24,6 +24,7 @@ import {
   crossfadeForPlacement,
   maxFadeFrames,
   setClipFade,
+  setGroupFade,
 } from './fade-ops.js';
 
 /**
@@ -284,5 +285,79 @@ describe('setting a fade by hand', () => {
     expect(broken.ok).toBe(true);
     if (!broken.ok) return;
     expect(fadeOf(broken.value, 'a').inFrames).toBe(0);
+  });
+});
+
+/**
+ * Fading a linked pair.
+ *
+ * The same rule the linked trim follows, and the case where getting it wrong is *more* obvious: a
+ * picture that ramps while its own sound arrives at full level is something you hear.
+ */
+describe('setting a fade on a linked pair', () => {
+  const pair = (extra: Partial<Clip> = {}) =>
+    documentWith({
+      v1: [video('v', 0, 100, { linkedAudio: clipId('a'), ...extra } as Partial<Clip>)],
+      a1: [audio('a', 0, 100, { linkedVideo: clipId('v') })],
+    });
+
+  it('ramps both halves, grabbed from either side', () => {
+    const fromVideo = setGroupFade(pair(), clipId('v'), { inFrames: 12 });
+    expect(fromVideo.ok).toBe(true);
+    if (!fromVideo.ok) return;
+    expect(fadeOf(fromVideo.value, 'v').inFrames).toBe(12);
+    expect(fadeOf(fromVideo.value, 'a').inFrames).toBe(12);
+
+    const fromAudio = setGroupFade(pair(), clipId('a'), { outFrames: 8 });
+    expect(fromAudio.ok).toBe(true);
+    if (!fromAudio.ok) return;
+    expect(fadeOf(fromAudio.value, 'v').outFrames).toBe(8);
+    expect(fadeOf(fromAudio.value, 'a').outFrames).toBe(8);
+  });
+
+  it('clamps each half to its own length, since a pair need not be the same length', () => {
+    const uneven = documentWith({
+      v1: [video('v', 0, 100, { linkedAudio: clipId('a') } as Partial<Clip>)],
+      a1: [audio('a', 0, 30, { linkedVideo: clipId('v') })],
+    });
+    const result = setGroupFade(uneven, clipId('v'), { inFrames: 60 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(fadeOf(result.value, 'v').inFrames).toBe(60);
+    expect(fadeOf(result.value, 'a').inFrames).toBe(30);
+  });
+
+  it('still fades the picture when its sound is on a locked track', () => {
+    // Not all-or-nothing, unlike the trim: a fade cannot collide and cannot run out of material, so
+    // the only way a partner refuses is a lock — and refusing the whole gesture then would let a
+    // locked audio track silently prevent fading the picture above it.
+    const locked = documentWith({
+      v1: [video('v', 0, 100, { linkedAudio: clipId('a') } as Partial<Clip>)],
+      a1: [audio('a', 0, 100, { linkedVideo: clipId('v') })],
+      lock: A1,
+    });
+    const result = setGroupFade(locked, clipId('v'), { inFrames: 12 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(fadeOf(result.value, 'v').inFrames).toBe(12);
+    expect(fadeOf(result.value, 'a').inFrames).toBe(0);
+  });
+
+  it('refuses when the clip under the pointer is the locked one', () => {
+    const locked = documentWith({
+      v1: [video('v', 0, 100, { linkedAudio: clipId('a') } as Partial<Clip>)],
+      a1: [audio('a', 0, 100, { linkedVideo: clipId('v') })],
+      lock: V1,
+    });
+    const result = setGroupFade(locked, clipId('v'), { inFrames: 12 });
+    expect(result.ok).toBe(false);
+  });
+
+  it('leaves an unlinked clip on the ordinary path', () => {
+    const lone = documentWith({ v1: [video('v', 0, 100)], a1: [audio('a', 0, 100)] });
+    const result = setGroupFade(lone, clipId('v'), { inFrames: 12 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(fadeOf(result.value, 'a').inFrames).toBe(0);
   });
 });

@@ -15,6 +15,7 @@ import {
   EMPTY_CLIPBOARD,
   allClips,
   clearWorkRange,
+  closeGapBefore,
   copyAttributes,
   copyClips,
   describeAttributes,
@@ -56,6 +57,15 @@ export interface ClipEdits {
   split(): void;
   /** Splits every unlocked track at the playhead, keeping layers aligned. */
   splitAllTracks(): void;
+  /**
+   * Pulls the selection back until it meets what precedes it.
+   *
+   * Bound to a key as well as offered in the menu because the gap it closes is one frame wide most of
+   * the time — invisible on screen, unmistakable in the delivered file — so the user who needs it
+   * needs it repeatedly, on clip after clip, and a menu round trip each time is the difference
+   * between a fix and a chore.
+   */
+  closeGap(): void;
   /**
    * Removes the marked in/out range from every unlocked track and closes the gaps.
    *
@@ -192,6 +202,21 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
 
         const origin = Math.min(...copied.entries.map((entry) => entry.clip.span.start));
         pasteAt(latest.current, copied, frameIndex(origin + copied.durationFrames));
+      },
+
+      closeGap() {
+        const { store, selected, onReject } = latest.current;
+        const target = [...selected][0] as ClipId | undefined;
+        if (target === undefined) return;
+
+        store.commit('close the gap', (current) => {
+          const closed = closeGapBefore(current, target);
+          if (!closed.ok) {
+            onReject(describeEditError(closed.error));
+            return current;
+          }
+          return closed.value;
+        });
       },
 
       copyAttributes() {
@@ -436,6 +461,10 @@ function useEditKeys(actions: EditActions): void {
         case 'S':
           if (event.shiftKey) current.splitAllTracks();
           else current.split();
+          break;
+        case 'g':
+        case 'G':
+          current.closeGap();
           break;
         default:
           return;

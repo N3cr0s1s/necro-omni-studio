@@ -44,6 +44,12 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['E'], action: 'Enable or disable', command: 'toggle-enabled', note: 'the selection' },
       { keys: ['Delete'], action: 'Remove', command: 'remove', note: 'ripple, if it is on' },
       { keys: ['Shift', 'Delete'], action: 'Remove the other way', note: 'ripple, if it is off' },
+      {
+        keys: ['G'],
+        action: 'Close the gap before the clip',
+        command: 'close-gap',
+        note: 'the one frame of black you cannot see',
+      },
       { keys: ['Escape'], action: 'Clear the selection' },
     ],
   },

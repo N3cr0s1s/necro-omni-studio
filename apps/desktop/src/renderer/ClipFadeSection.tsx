@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { TrendingDownIcon, TrendingUpIcon } from 'lucide-react';
 import { type Clip, type TimelineDocument, clipFade, formatFrames, frameIndex } from '@nos/core';
-import { clearClipFade, describeEditError, maxFadeFrames, setClipFade } from '@nos/editing';
+import { describeEditError, maxFadeFrames, setGroupFade } from '@nos/editing';
 import { NumberField } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 
@@ -35,7 +35,7 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
   const fade = clipFade(clip);
   const limit = maxFadeFrames(clip);
 
-  const commit = (label: string, result: ReturnType<typeof setClipFade>): void => {
+  const commit = (label: string, result: ReturnType<typeof setGroupFade>): void => {
     if (result.ok) onChange(label, result.value);
     else onReject?.(describeEditError(result.error));
   };
@@ -50,7 +50,9 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
             size="xs"
             className="ml-auto h-5 px-1.5 text-[11px]"
             title="Remove both ramps"
-            onClick={() => commit('clear clip fade', clearClipFade(document, clip.id))}
+            onClick={() =>
+              commit('clear clip fade', setGroupFade(document, clip.id, { inFrames: 0, outFrames: 0 }))
+            }
           >
             clear
           </Button>
@@ -63,7 +65,7 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
         value={fade.inFrames}
         limit={limit}
         rate={document.frameRate}
-        onCommit={(next) => commit('set fade in', setClipFade(document, clip.id, { inFrames: next }))}
+        onCommit={(next) => commit('set fade in', setGroupFade(document, clip.id, { inFrames: next }))}
       />
       <FadeRow
         label="out"
@@ -71,7 +73,7 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
         value={fade.outFrames}
         limit={limit}
         rate={document.frameRate}
-        onCommit={(next) => commit('set fade out', setClipFade(document, clip.id, { outFrames: next }))}
+        onCommit={(next) => commit('set fade out', setGroupFade(document, clip.id, { outFrames: next }))}
       />
     </section>
   );
