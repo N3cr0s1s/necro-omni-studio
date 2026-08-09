@@ -908,6 +908,14 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**A notice that names a problem it can solve should offer to solve it.** Missing media was announced
+in the status bar while the repair lived only in a clip's context menu.
+
+**A check that cannot run must say so, not pass.** The first version of the missing-media check found
+nothing missing — smokecheck synthesizes the fixture's audio — and printed that rather than passing
+quietly, which is the only reason the gap was visible. It now makes the file go while the editor runs,
+which is the shape of the real thing and covers the watcher, the recompute and the notice at once.
+
 **Recovered work is unsaved work.** Restoring a recovery resets the store, and a reset marks the
 document saved — so the editor believed unwritten work was on disk: no autosave, no marker, no prompt
 on close, and the rescued work lost by the next quit. A reset now says whether the document is what is
