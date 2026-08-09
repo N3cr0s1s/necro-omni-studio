@@ -3833,3 +3833,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   drifts take.
 
   `Shift+F`, not `F`: bare `F` fits the sequence to the window and is a binding people use constantly.
+
+- 2026-08-10: Two more of the same shape, both in code written hours earlier.
+
+  The pattern this ledger keeps recording is a seam that exists and nothing uses. It is worth noting
+  that **new** code produces it just as readily as old code — neither of these was inherited.
+
+  **A still went to source frame −10.** `handleBefore` answers infinity for an image and a title,
+  correctly: a frame held longer is what the viewer sees either way. What that must not license is
+  moving a source position they do not have, and a crossfade at a cut did. That is the kind of wrong
+  number whose symptom appears three layers from the edit that caused it, because every reader
+  downstream clamps or rounds a negative source frame differently.
+
+  **`side` was reachable and its behaviour was not.** Every caller passed the default, so selecting the
+  *second* clip of a pair and asking for a crossfade did nothing at all, with no reason given — which
+  reads as a broken command rather than as a preference about sides. `crossfadeSideFor` is now the one
+  derivation the row, the menu action and the keyboard all read.
+
+  And one more harness lie: the smoke check pressed `Ctrl+D` with focus still in the `source in` field
+  it had just committed. Every shortcut in this shell ignores keys while a text field has focus —
+  deliberately, because a `d` typed into a name is a `d` — so the duplicate never happened and the
+  check reported a broken command rather than a harness typing into a box. **After committing a field,
+  put focus back where the gesture belongs.**
+
+  The crossfade-at-cut row had also only ever been checked in its *disabled* state, because the
+  fixture's tone starts at source frame zero and has no handle to fade through. A check written against
+  that can confirm nothing but the refusal. The harness slips the clip six frames in first, through the
+  control a user would use, and then drives the edit: offered 12 frames, made a 12-frame overlap, both
+  sides ramped.
