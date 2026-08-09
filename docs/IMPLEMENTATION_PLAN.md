@@ -3763,3 +3763,26 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   nothing had ever read them. "Undo" is a promise with no content; "Undo close the gap" is one you can
   act on. This is the same shape as every other gap this ledger records — a field with no reader —
   and it was found the same way.
+
+- 2026-08-10: A fade that follows a curve you choose.
+
+  A ramp had one shape per domain and no way to ask for another, and editors care about fade curves —
+  a logarithmic fade-out and a linear one are audibly different things.
+
+  It reuses `Easing` rather than growing a fade-shaped vocabulary of its own. **A ramp and a keyframe
+  segment are the same question** — how does a value get from one place to another over a span — and
+  two answers would mean two evaluators, two serializations and two editors, of which the second would
+  be the one missing `bezier`. As it is, the curve editor built for keyframes edits a fade curve with
+  no new code.
+
+  **Absence stays meaningful.** No shape means *each renderer's own* default, and they differ: equal
+  power for sound, linear for picture. So the control offers `default` as a first-class choice rather
+  than naming it `linear`, which would be a lie on the audio side. A chosen curve *replaces* the
+  default rather than compounding with it — asking for `linear` has to give a linear ramp, and a sine
+  applied on top would give something that is neither.
+
+  `FadeChange` reads its curve with `in` rather than `??`, because mentioning a key and omitting it are
+  different gestures: omitted leaves the curve alone, mentioned-as-undefined clears it. Under
+  `exactOptionalPropertyTypes` there is no other way to say "set this back to absent", and without the
+  distinction the `default` button could not be pressed — its value *is* absence. Worth remembering the
+  next time an optional field grows a control.
