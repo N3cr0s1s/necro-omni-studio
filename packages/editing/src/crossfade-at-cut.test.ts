@@ -237,3 +237,42 @@ describe('how long a cut can carry', () => {
     expect(maxCrossfadeAtCut(documentWith([video('a', 0, 100)]), clipId('a'))).toBe(0);
   });
 });
+
+/**
+ * Stills and titles.
+ *
+ * `handleBefore` answers infinity for both, correctly: a frame held longer is what the viewer sees
+ * either way. What that must *not* license is moving a source position they do not have.
+ */
+describe('a clip with no source timeline', () => {
+  function image(id: string, from: number, to: number): Clip {
+    return {
+      kind: 'image',
+      id: clipId(id),
+      span: spanFromBounds(frameIndex(from), frameIndex(to)),
+      label: id,
+      enabled: true,
+      effects: [],
+      source: { asset: assetPath('media/a.png'), sourceIn: frameIndex(0), sourceRate: FRAME_RATES.WEB_30 },
+      transform,
+    } as Clip;
+  }
+
+  it('holds a still longer without moving its source position below zero', () => {
+    const document = documentWith([image('a', 0, 100), image('b', 100, 200)]);
+    const result = crossfadeAtCut({ document, clip: clipId('a'), frames: 20 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(spanOf(result.value, 'a')).toEqual([0, 110]);
+    expect(spanOf(result.value, 'b')).toEqual([90, 200]);
+    // The bug this pins: a still at source frame −10, in a file with one frame in it. Every reader
+    // downstream clamps or rounds that differently, and the symptom appears layers away.
+    expect(sourceInOf(result.value, 'b')).toBe(0);
+  });
+
+  it('lets a still carry a fade as long as the clips allow', () => {
+    const document = documentWith([image('a', 0, 100), image('b', 100, 200)]);
+    expect(maxCrossfadeAtCut(document, clipId('a'))).toBe(99);
+  });
+});

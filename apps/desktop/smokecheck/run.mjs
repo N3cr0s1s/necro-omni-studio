@@ -467,6 +467,21 @@ try {
     await page.waitForTimeout(600);
   }
 
+  /*
+   * Back to the timeline before pressing a chord.
+   *
+   * Every shortcut in this shell ignores keys while a text field has focus — deliberately, because a
+   * `d` typed into a name is a `d`. Enter commits the field and leaves focus in it, so `Ctrl+D` went
+   * to the input and the duplicate never happened: the check reported "duplicating did not produce a
+   * second clip", which reads as a broken command rather than a harness typing into a box.
+   */
+  await page
+    .locator('[data-clip-id]')
+    .first()
+    .click({ force: true })
+    .catch(() => undefined);
+  await page.waitForTimeout(400);
+
   await page.keyboard.press('Control+d');
   await page.waitForTimeout(900);
 

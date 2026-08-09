@@ -212,7 +212,16 @@ function pullStart(clip: Clip, frames: number, options: EditOptions): Result<Cli
   return ok({
     ...clip,
     span: spanFromBounds(frameIndex(clip.span.start - frames), endExclusive(clip.span)),
-    ...(clip.kind === 'text'
+    /*
+     * A still and a title keep their source position; only a moving picture has one to move.
+     *
+     * `handleBefore` answers infinity for both — correctly, because a frame held longer is exactly
+     * what the viewer sees either way — and decrementing `sourceIn` on the strength of that put an
+     * image at frame −6 of a file with one frame in it. Every reader downstream then clamps or
+     * rounds it differently, which is the kind of wrong number that shows up as a blank frame three
+     * layers away from the edit that caused it.
+     */
+    ...(clip.kind === 'text' || clip.kind === 'image'
       ? {}
       : { source: { ...clip.source, sourceIn: frameIndex(clip.source.sourceIn - frames) } }),
   } as Clip);
