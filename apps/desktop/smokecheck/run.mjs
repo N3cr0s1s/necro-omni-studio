@@ -296,6 +296,66 @@ try {
 }
 
 /*
+ * Crash recovery, which §8 asks for and whose failure is the one an editor cannot apologise for.
+ *
+ * Driven the only way that means anything: make an edit, kill the shell *hard* so nothing gets to run
+ * a shutdown handler, and start again. A test that closed the window politely would exercise the path
+ * that was never in doubt.
+ */
+let crashed;
+try {
+  crashed = await launch(userData);
+  const page = crashed.browser.contexts()[0].pages().at(-1);
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+    timeout: 30_000,
+  });
+  const discardFirst = page.getByRole('button', { name: 'Discard' });
+  if (await discardFirst.count()) await discardFirst.first().click();
+
+  // An edit the autosave will pick up, and one whose absence afterwards would be obvious: the title
+  // moves a frame, which is a document change and nothing else.
+  await page
+    .locator('body')
+    .click({ position: { x: 4, y: 4 } })
+    .catch(() => undefined);
+  await page
+    .locator('[data-clip-id]')
+    .first()
+    .click({ force: true })
+    .catch(() => undefined);
+  await page.keyboard.press('.');
+  await page.waitForTimeout(1200);
+
+  /*
+   * The autosave runs on §8's thirty-second timer, so this waits past it — and then checks the file
+   * rather than inferring. A wait that was too short would look exactly like an autosave that never
+   * wrote, and my first attempt at this waited six seconds and blamed the application.
+   */
+  const recoveryFile = join(project, 'project.recovery.json');
+  for (let waited = 0; waited < 40 && !existsSync(recoveryFile); waited += 1) {
+    await page.waitForTimeout(1000);
+  }
+  if (existsSync(recoveryFile)) pass('an edit is written to the recovery file');
+  else fail('no recovery file was written within forty seconds of an edit');
+
+  stop(crashed.child);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  const after = await launch(userData);
+  const recovered = after.browser.contexts()[0].pages().at(-1);
+  await recovered.waitForTimeout(9000);
+  const body = await recovered.locator('body').innerText();
+
+  if (/was recovered/i.test(body)) pass('unsaved work is offered back after a hard kill');
+  else fail('a hard kill lost unsaved work — nothing was offered back');
+
+  await after.browser.close().catch(() => undefined);
+  stop(after.child);
+} finally {
+  await crashed?.browser.close().catch(() => undefined);
+}
+
+/*
  * The state a new user actually meets first.
  *
  * Nothing covered it: every harness writes a session file and opens a project, so the path where there
