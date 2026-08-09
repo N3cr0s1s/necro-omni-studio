@@ -7,10 +7,14 @@ import {
   type DraftParamChanges,
   type GeneratorParamType,
   type GraphLiteral,
+  type ExclusiveGroupDescriptor,
   type ManifestDraft,
+  type OutputDescriptor,
   type ParamField,
+  type PresetRole,
   DERIVED_DEFAULTS,
   PARAM_TYPES,
+  PRESET_ROLES,
   TEXT_SOURCES,
   capabilitySource,
   choiceMode,
@@ -23,9 +27,17 @@ import {
   defaultAsText,
   defaultControl,
   hasField,
+  addPreset,
+  editPreset,
   optionsForMode,
   parseChoices,
   parseDefault,
+  parsePresetValue,
+  removePreset,
+  roleOf,
+  setRole,
+  setValue,
+  valueIn,
   suggestedConsumes,
   toCapabilityOptions,
   unmatchedConsumes,
@@ -128,6 +140,7 @@ export function ManifestInspector({
         />
         <DraftColumn
           draft={draft}
+          literals={literals}
           nodeIds={nodeIds ?? []}
           issues={issues}
           {...(onChange !== undefined ? { onChange } : {})}
@@ -288,12 +301,16 @@ function LiteralRow({
 
 function DraftColumn({
   draft,
+  literals,
   nodeIds,
   issues,
   onChange,
   onEditParam,
 }: {
   readonly draft: ManifestDraft;
+  // Threaded through for the batch pointer, which is chosen from the graph's own inputs rather than
+  // typed: a mistyped pointer is a batch that silently never applies.
+  readonly literals: readonly GraphLiteral[];
   readonly nodeIds: readonly string[];
   readonly issues: readonly DraftIssue[];
   readonly onChange?: (draft: ManifestDraft) => void;
@@ -325,6 +342,12 @@ function DraftColumn({
         <Consumes draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
         <Separator />
         <Outputs draft={draft} nodeIds={nodeIds} {...(onChange !== undefined ? { onChange } : {})} />
+        <Separator />
+        <Batching draft={draft} literals={literals} {...(onChange !== undefined ? { onChange } : {})} />
+        <Separator />
+        <Exclusive draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
+        <Separator />
+        <Presets draft={draft} {...(onChange !== undefined ? { onChange } : {})} />
         <Issues issues={issues} />
         <Preview draft={draft} />
       </div>
@@ -770,7 +793,7 @@ function Outputs({
       </div>
 
       {draft.outputs.map((output, index) => (
-        <div key={output.key} className="grid grid-cols-2 items-end gap-3">
+        <div key={output.key} className="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-3">
           <Labelled label="Key">
             {(id) => (
               <Input
@@ -813,10 +836,65 @@ function Outputs({
               </NativeSelect>
             )}
           </Labelled>
+          <Labelled label="Format">
+            {(id) => (
+              <Input
+                id={id}
+                // The container the node writes, where the graph cannot be read for it. Three of the
+                // five shipped manifests declare one and none could be authored here.
+                placeholder="whatever the node writes"
+                value={output.format ?? ''}
+                onChange={(event) =>
+                  onChange?.({
+                    ...draft,
+                    outputs: draft.outputs.map((entry, position) =>
+                      // Rebuilt without the key rather than set to `undefined`: under
+                      // `exactOptionalPropertyTypes` an absent field and one holding `undefined` are
+                      // different types, and the second serializes as `null`.
+                      position === index ? withFormat(entry, event.target.value) : entry,
+                    ),
+                  })
+                }
+              />
+            )}
+          </Labelled>
+          {/* An optional output may simply not appear — a mask a graph emits only sometimes. Without
+              this, a run missing it is reported as a failure rather than as a run that produced what
+              it was going to produce. */}
+          <Label className="flex items-center gap-2 pb-2 text-xs font-normal">
+            <Checkbox
+              checked={output.optional === true}
+              onCheckedChange={(checked) =>
+                onChange?.({
+                  ...draft,
+                  outputs: draft.outputs.map((entry, position) =>
+                    position === index ? withOptional(entry, checked === true) : entry,
+                  ),
+                })
+              }
+            />
+            Optional
+          </Label>
         </div>
       ))}
     </div>
   );
+}
+
+/**
+ * An output with its declared container, or without one when the field is cleared.
+ *
+ * The key is dropped rather than set to `undefined`: `exactOptionalPropertyTypes` makes those different
+ * types, and the second reaches the file as `null`, which the schema rejects on the way back in.
+ */
+function withFormat(output: OutputDescriptor, format: string): OutputDescriptor {
+  const { format: _dropped, ...rest } = output;
+  return format === '' ? rest : { ...rest, format };
+}
+
+function withOptional(output: OutputDescriptor, optional: boolean): OutputDescriptor {
+  const { optional: _dropped, ...rest } = output;
+  return optional ? { ...rest, optional: true } : rest;
 }
 
 /**
@@ -924,7 +1002,7 @@ function Consumes({
 
       {draft.consumes.map((input, index) => (
         <div key={`${input.type}:${input.role ?? index}`} className="flex flex-col gap-2">
-          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+          <div className="grid grid-cols-[1fr_1fr_auto_auto] items-end gap-3">
             <Labelled label="Role">
               {(id) => (
                 <Input
@@ -942,6 +1020,20 @@ function Consumes({
             <Labelled label="Type">
               {(id) => <Input id={id} value={input.type} readOnly aria-readonly="true" />}
             </Labelled>
+            {/* Whether a run can start without it. Absent means optional, which is why unticking
+                clears the field rather than writing `false` into every manifest. */}
+            <Label className="flex items-center gap-2 pb-2 text-xs font-normal">
+              <Checkbox
+                checked={input.required === true}
+                onCheckedChange={(checked) =>
+                  onChange?.({
+                    ...draft,
+                    consumes: editConsumes(draft.consumes, index, { required: checked === true }),
+                  })
+                }
+              />
+              Required
+            </Label>
             <Button
               variant="ghost"
               size="sm"
@@ -1245,4 +1337,376 @@ function RequiredToggle({
       Required
     </Label>
   );
+}
+
+/**
+ * The generator's presets.
+ *
+ * §5.7's presets are what make one graph feel like several tools — "Music", "SFX", "One-shot" over a
+ * single audio generator, which is what the shipped audio manifest does. The panel did not mention
+ * `presets` at all, so a generator authored here had none and no way to get any.
+ *
+ * ## Three states, not two records
+ *
+ * The file stores a preset as `pin` and `set`, and a parameter must never be in both. Asking for the
+ * *role* rather than editing two lists is what makes that impossible to express, and it also puts the
+ * distinction in front of the author — which matters, because confusing the two is a bug this project
+ * has already had: every value became a lock, and a one-shot preset that pinned its length left no way
+ * to ask for a slightly longer one, since the control was gone rather than pre-filled.
+ */
+function Presets({
+  draft,
+  onChange,
+}: {
+  readonly draft: ManifestDraft;
+  readonly onChange?: (draft: ManifestDraft) => void;
+}): ReactNode {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Presets</span>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => onChange?.(addPreset(draft))}>
+          <PlusIcon />
+          Add preset
+        </Button>
+      </div>
+
+      {draft.presets.length === 0 ? (
+        <p className="text-muted-foreground font-mono text-xs">
+          none — the panel offers the parameters and nothing else
+        </p>
+      ) : (
+        draft.presets.map((preset) => (
+          <PresetRow
+            key={preset.id}
+            preset={preset}
+            draft={draft}
+            {...(onChange !== undefined ? { onChange } : {})}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function PresetRow({
+  preset,
+  draft,
+  onChange,
+}: {
+  readonly preset: ManifestDraft['presets'][number];
+  readonly draft: ManifestDraft;
+  readonly onChange?: (draft: ManifestDraft) => void;
+}): ReactNode {
+  const update = (next: ManifestDraft['presets'][number]): void =>
+    onChange?.(editPreset(draft, preset.id, next));
+
+  return (
+    <div className="bg-muted/50 flex flex-col gap-3 rounded-md border p-3">
+      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+        <Labelled label="Id">
+          {(id) => (
+            <Input
+              id={id}
+              value={preset.id}
+              // Part of the file format: a clip's provenance records which preset made it, so renaming
+              // an id is what breaks "load these settings again" on work already on the timeline.
+              onChange={(event) => update({ ...preset, id: event.target.value as typeof preset.id })}
+            />
+          )}
+        </Labelled>
+        <Labelled label="Name">
+          {(id) => (
+            <Input
+              id={id}
+              value={preset.name}
+              onChange={(event) => update({ ...preset, name: event.target.value })}
+            />
+          )}
+        </Labelled>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Remove preset ${preset.name}`}
+          onClick={() => onChange?.(removePreset(draft, preset.id))}
+        >
+          <Trash2Icon />
+        </Button>
+      </div>
+
+      {draft.params.length === 0 ? (
+        <p className="text-muted-foreground font-mono text-xs">
+          a preset sets parameters — this generator has none yet
+        </p>
+      ) : (
+        draft.params.map((param) => {
+          const role = roleOf(preset, param.key);
+          return (
+            <div key={param.id} className="grid grid-cols-[1fr_1fr_1fr] items-end gap-3">
+              {/* By key, not by display label: the key is what the preset actually stores, so it is
+                  what an author is choosing about — and a label is free to be blank or to repeat. */}
+              <Labelled label={param.key}>
+                {(id) => (
+                  <NativeSelect
+                    id={id}
+                    className="w-full"
+                    value={role}
+                    onChange={(event) =>
+                      update(setRole(preset, param.key, event.target.value as PresetRole, param.default))
+                    }
+                  >
+                    {PRESET_ROLES.map((option) => (
+                      <NativeSelectOption key={option} value={option}>
+                        {/* Named by what they do rather than by the field they land in: "pin" and
+                            "set" are the file's words and say nothing to the person choosing. */}
+                        {option === 'free'
+                          ? 'not in this preset'
+                          : option === 'pinned'
+                            ? 'fixed — hidden from the panel'
+                            : 'pre-filled — still editable'}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                )}
+              </Labelled>
+              {role !== 'free' && (
+                <Labelled label="Value">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      {...(defaultControl(param.type) === 'number' ? { type: 'number' } : {})}
+                      value={defaultAsText(valueIn(preset, param.key))}
+                      onChange={(event) => {
+                        const value = parsePresetValue(param, event.target.value);
+                        update(
+                          value === undefined
+                            ? setRole(preset, param.key, role, '')
+                            : setValue(preset, param.key, value),
+                        );
+                      }}
+                    />
+                  )}
+                </Labelled>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/**
+ * How several variants are asked for in one submit.
+ *
+ * Present only when the graph can do it — a batch size input the runner writes the variant count into.
+ * Absent means sequential runs, which works on *any* graph and is why it is not the default. The
+ * shipped audio manifest declares one and nothing here could author it, so a generator written in the
+ * application always took the slow path.
+ *
+ * The pointer is chosen from the graph's own literals rather than typed: a mistyped pointer is a batch
+ * that silently never applies, and the run then produces one variant while the panel offered three.
+ */
+function Batching({
+  draft,
+  literals,
+  onChange,
+}: {
+  readonly draft: ManifestDraft;
+  readonly literals: readonly GraphLiteral[];
+  readonly onChange?: (draft: ManifestDraft) => void;
+}): ReactNode {
+  const batch = draft.batch;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Batching</span>
+      <div className="grid grid-cols-[2fr_1fr] items-end gap-3">
+        <Labelled label="Batch size input">
+          {(id) => (
+            <NativeSelect
+              id={id}
+              className="w-full"
+              value={batch?.bind ?? ''}
+              onChange={(event) =>
+                onChange?.(
+                  event.target.value === ''
+                    ? withoutBatch(draft)
+                    : { ...draft, batch: { bind: event.target.value, max: batch?.max ?? 4 } },
+                )
+              }
+            >
+              <NativeSelectOption value="">none — one submit per variant</NativeSelectOption>
+              {literals.map((literal) => (
+                <NativeSelectOption key={literal.pointer} value={literal.pointer}>
+                  {`${literal.nodeClass} · ${literal.input}`}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </Labelled>
+        {batch !== undefined && (
+          <Labelled label="Most per submit">
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                value={batch.max}
+                onChange={(event) =>
+                  onChange?.({
+                    ...draft,
+                    // At least one: a ceiling of zero is a generator that can never run, and the
+                    // control should not be able to express it.
+                    batch: { ...batch, max: Math.max(1, Math.round(Number(event.target.value) || 1)) },
+                  })
+                }
+              />
+            )}
+          </Labelled>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function withoutBatch(draft: ManifestDraft): ManifestDraft {
+  const { batch: _dropped, ...rest } = draft;
+  return rest;
+}
+
+/**
+ * Parameters that are alternatives to one another.
+ *
+ * §2.3's voice: either an enum the backend knows or an audio sample to clone, one of the two. A
+ * manifest that says nothing keeps every parameter independent, which is what every manifest written
+ * before the field existed did — and nothing here could declare one, so it stayed that way for
+ * anything authored in the application.
+ */
+function Exclusive({
+  draft,
+  onChange,
+}: {
+  readonly draft: ManifestDraft;
+  readonly onChange?: (draft: ManifestDraft) => void;
+}): ReactNode {
+  const groups = draft.exclusive ?? [];
+
+  const write = (next: readonly ExclusiveGroupDescriptor[]): void =>
+    onChange?.(next.length === 0 ? withoutExclusive(draft) : { ...draft, exclusive: next });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+          Alternatives
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={() => write([...groups, { members: [] }])}
+        >
+          <PlusIcon />
+          Add group
+        </Button>
+      </div>
+
+      {groups.length === 0 ? (
+        <p className="text-muted-foreground font-mono text-xs">none — every parameter stands on its own</p>
+      ) : (
+        groups.map((group, index) => (
+          <div key={index} className="bg-muted/50 flex flex-col gap-3 rounded-md border p-3">
+            <div className="grid grid-cols-[1fr_auto_auto] items-end gap-3">
+              <Labelled label="Group label">
+                {(id) => (
+                  <Input
+                    id={id}
+                    placeholder="what the choice is called"
+                    value={group.label ?? ''}
+                    onChange={(event) =>
+                      write(
+                        groups.map((entry, position) =>
+                          position === index ? withLabel(entry, event.target.value) : entry,
+                        ),
+                      )
+                    }
+                  />
+                )}
+              </Labelled>
+              <Label className="flex items-center gap-2 pb-2 text-xs font-normal">
+                <Checkbox
+                  checked={group.required === true}
+                  onCheckedChange={(checked) =>
+                    write(
+                      groups.map((entry, position) =>
+                        position === index ? withRequired(entry, checked === true) : entry,
+                      ),
+                    )
+                  }
+                />
+                One is required
+              </Label>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove group ${index + 1}`}
+                onClick={() => write(groups.filter((_entry, position) => position !== index))}
+              >
+                <Trash2Icon />
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {draft.params.length === 0 ? (
+                <p className="text-muted-foreground font-mono text-xs">
+                  a group chooses between parameters — this generator has none yet
+                </p>
+              ) : (
+                draft.params.map((param) => (
+                  <Label key={param.id} className="flex items-center gap-1.5 text-xs font-normal">
+                    <Checkbox
+                      checked={group.members.includes(param.key)}
+                      onCheckedChange={(checked) => {
+                        const members = new Set(group.members);
+                        if (checked === true) members.add(param.key);
+                        else members.delete(param.key);
+                        write(
+                          groups.map((entry, position) =>
+                            position === index
+                              ? // Ordered by the parameter list rather than by click order, so the
+                                // file reads the same however it was assembled.
+                                {
+                                  ...entry,
+                                  members: draft.params.filter((p) => members.has(p.key)).map((p) => p.key),
+                                }
+                              : entry,
+                          ),
+                        );
+                      }}
+                    />
+                    {param.key}
+                  </Label>
+                ))
+              )}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function withoutExclusive(draft: ManifestDraft): ManifestDraft {
+  const { exclusive: _dropped, ...rest } = draft;
+  return rest;
+}
+
+function withLabel(group: ExclusiveGroupDescriptor, label: string): ExclusiveGroupDescriptor {
+  const { label: _dropped, ...rest } = group;
+  return label === '' ? rest : { ...rest, label };
+}
+
+function withRequired(group: ExclusiveGroupDescriptor, required: boolean): ExclusiveGroupDescriptor {
+  const { required: _dropped, ...rest } = group;
+  return required ? { ...rest, required: true } : rest;
 }

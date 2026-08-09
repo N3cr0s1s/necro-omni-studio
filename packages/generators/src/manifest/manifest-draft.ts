@@ -13,6 +13,9 @@ import type {
   SurfaceId,
 } from '../contracts/manifest.js';
 import type { DurationSource } from '../staging/placeholder.js';
+// One-directional: `preset-draft` takes only *types* from this module, so folding its rules in here
+// adds no runtime cycle.
+import { presetIssues } from './preset-draft.js';
 
 /**
  * The manifest draft.
@@ -296,6 +299,15 @@ export function validateDraft(draft: ManifestDraft): readonly DraftIssue[] {
       warn(`${path}/pointer`, 'this parameter is not bound to the graph yet');
     }
   });
+
+  // Presets are validated by their own module and folded in here, so the panel's problem list and the
+  // gate on Save cannot disagree about whether a draft is ready — a second list rendered beside the
+  // first would show an error next to an enabled Save button.
+  for (const issue of presetIssues(draft)) {
+    const path = `/presets/${issue.index}`;
+    if (issue.severity === 'error') error(path, issue.message);
+    else warn(path, issue.message);
+  }
 
   const seeds = draft.params.filter((param) => param.type === 'seed');
   if (seeds.length > 1) error('/params', 'only one seed parameter is meaningful');

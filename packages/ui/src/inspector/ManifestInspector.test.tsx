@@ -3,15 +3,17 @@ import { type ReactNode, useState } from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { GraphLiteral, ManifestDraft } from '@nos/generators';
+import type { GeneratorManifest, GraphLiteral, ManifestDraft } from '@nos/generators';
 import {
   DERIVED_DEFAULTS,
   addOutput,
+  draftHasErrors,
   draftManifestJson,
   editParam,
   emptyDraft,
   promote,
 } from '@nos/generators';
+import { presetId } from '@nos/core';
 import { ManifestInspector } from './ManifestInspector.js';
 
 afterEach(cleanup);
@@ -615,5 +617,185 @@ describe('the fields a manifest needs and this panel never offered', () => {
     };
     expect(written.params[0]?.label).toBe('Prompt');
     expect(written.params[0]?.multiline).toBe(true);
+  });
+});
+
+describe('presets', () => {
+  /**
+   * §5.7's presets are what make one graph feel like several tools, and two of the shipped manifests
+   * carry six between them. The panel did not mention `presets` at all, so a generator authored inside
+   * the application had none and no way to get any.
+   */
+  const withParam = (): ManifestDraft => {
+    const promoted = promote(usable(), literals[1]!);
+    return editParam(promoted, promoted.params[0]!.id, { key: 'category', type: 'text' });
+  };
+
+  it('says so when there are none, rather than showing nothing', () => {
+    renderInspector({ draft: withParam() });
+    expect(screen.getByText(/the panel offers the parameters and nothing else/)).toBeDefined();
+  });
+
+  it('adds one that is distinguishable before it is renamed', async () => {
+    let latest = withParam();
+    function Harness(): ReactNode {
+      const [draft, setDraft] = useState(latest);
+      latest = draft;
+      return <ManifestInspector draft={draft} literals={literals} onChange={setDraft} />;
+    }
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add preset' }));
+
+    expect(latest.presets).toHaveLength(1);
+    expect(latest.presets[0]?.name).toBe('Preset 1');
+  });
+
+  it('asks what a preset says about a parameter, in words rather than field names', () => {
+    // "pin" and "set" are the file's vocabulary and say nothing to the person choosing.
+    const draft: ManifestDraft = {
+      ...withParam(),
+      presets: [{ id: presetId('sfx'), name: 'SFX', pin: { category: 'SFX' } }],
+    };
+    renderInspector({ draft });
+
+    const roles = [...(screen.getByLabelText('category') as HTMLSelectElement).options].map(
+      (option) => option.text,
+    );
+    expect(roles).toEqual([
+      'not in this preset',
+      'fixed — hidden from the panel',
+      'pre-filled — still editable',
+    ]);
+  });
+
+  it('moves a value between fixed and pre-filled without losing it', async () => {
+    /*
+     * The distinction the whole editor exists to make visible, and a bug this project has already had:
+     * every value became a lock, so a one-shot preset that pinned its length left no way to ask for a
+     * slightly longer one — the control was gone rather than pre-filled.
+     */
+    let latest: ManifestDraft = {
+      ...withParam(),
+      presets: [{ id: presetId('sfx'), name: 'SFX', pin: { category: 'SFX' } }],
+    };
+    function Harness(): ReactNode {
+      const [draft, setDraft] = useState(latest);
+      latest = draft;
+      return <ManifestInspector draft={draft} literals={literals} onChange={setDraft} />;
+    }
+    render(<Harness />);
+
+    await userEvent.selectOptions(screen.getByLabelText('category'), 'prefilled');
+
+    expect(latest.presets[0]?.set?.['category']).toBe('SFX');
+    expect(latest.presets[0]?.pin['category']).toBeUndefined();
+  });
+
+  it('removes one by name, so the button says which', async () => {
+    let latest: ManifestDraft = {
+      ...withParam(),
+      presets: [{ id: presetId('sfx'), name: 'SFX', pin: {} }],
+    };
+    function Harness(): ReactNode {
+      const [draft, setDraft] = useState(latest);
+      latest = draft;
+      return <ManifestInspector draft={draft} literals={literals} onChange={setDraft} />;
+    }
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove preset SFX' }));
+
+    expect(latest.presets).toEqual([]);
+  });
+
+  it('reports a preset pointing at a parameter that no longer exists', () => {
+    // A rename is an ordinary consequence of editing. Naming it lets the author re-point it; dropping
+    // it silently would lose a value they meant to keep.
+    const draft: ManifestDraft = {
+      ...withParam(),
+      presets: [{ id: presetId('sfx'), name: 'SFX', pin: { gone: 'x' } }],
+    };
+    renderInspector({ draft });
+    expect(screen.getByText(/names a parameter that does not exist: "gone"/)).toBeDefined();
+  });
+
+  it('blocks Save on two presets that cannot be told apart, and not on a stale key', () => {
+    // The panel's problem list and the gate on Save read the same rules, so they cannot disagree.
+    const base = withParam();
+    const duplicate: ManifestDraft = {
+      ...base,
+      presets: [
+        { id: presetId('a'), name: 'A', pin: {} },
+        { id: presetId('a'), name: 'B', pin: {} },
+      ],
+    };
+    expect(draftHasErrors(duplicate)).toBe(true);
+
+    const stale: ManifestDraft = {
+      ...base,
+      presets: [{ id: presetId('a'), name: 'A', pin: { gone: 'x' } }],
+    };
+    expect(draftHasErrors(stale)).toBe(false);
+  });
+});
+
+describe('every field of the manifest format has a control', () => {
+  /**
+   * The claim §5.9 makes — a new generative capability is a JSON file authored from inside the
+   * application, with no code — stated as a check rather than as a sentence in a plan.
+   *
+   * The map below is `Record<keyof GeneratorManifest, …>`, so **TypeScript** fails the build when a
+   * field is added to the format and not answered for here. That is the part worth having: a runtime
+   * list has to be remembered, and the four fields a parameter used to have are what remembering
+   * looks like in practice.
+   *
+   * A field answers with the label of the control that edits it, or with why it has none.
+   */
+  const CONTROLS: Record<keyof GeneratorManifest, string | { readonly derived: string }> = {
+    id: 'Id',
+    name: 'Name',
+    backend: 'Backend',
+    graph: 'Graph file',
+    produces: 'Produces',
+    surfaces: 'Surfaces',
+    duration: 'Length',
+    durationFrom: 'Length from',
+    defaultVariants: 'Default variants',
+    requires: 'Requires node classes',
+    batch: 'Batch size input',
+    consumes: 'Role',
+    outputs: 'Format',
+    params: 'Type',
+    presets: 'Name',
+    exclusive: 'Group label',
+    // Not a preference but a fact about the graph: `draftManifestJson` sets `unbound` when the graph
+    // is missing or a pointer is empty, and omits it otherwise. A stored value carried through would
+    // let a manifest keep claiming to be unrunnable after its graph was connected.
+    status: { derived: 'computed from the graph and the pointers' },
+  };
+
+  /** A draft exercising every branch, so each section renders the rows its controls live in. */
+  const maximal = (): ManifestDraft => {
+    const promoted = promote(usable(), literals[1]!);
+    const withParam = editParam(promoted, promoted.params[0]!.id, { key: 'category', type: 'text' });
+    return {
+      ...withParam,
+      consumes: [{ type: 'image', role: 'first_frame', required: true }],
+      batch: { bind: '/3/inputs/steps', max: 4 },
+      exclusive: [{ members: ['category'], label: 'Voice', required: true }],
+      presets: [{ id: presetId('sfx'), name: 'SFX', pin: { category: 'SFX' } }],
+    };
+  };
+
+  it.each(Object.entries(CONTROLS))('%s', (_field, control) => {
+    if (typeof control !== 'string') {
+      // Nothing to render. The entry exists so the field is answered for rather than forgotten.
+      expect(control.derived.length).toBeGreaterThan(0);
+      return;
+    }
+    render(<ManifestInspector draft={maximal()} literals={literals} onChange={vi.fn()} />);
+    // `getAllBy`, because a label like "Name" legitimately appears on both the manifest and a preset.
+    expect(screen.getAllByLabelText(control).length).toBeGreaterThan(0);
   });
 });

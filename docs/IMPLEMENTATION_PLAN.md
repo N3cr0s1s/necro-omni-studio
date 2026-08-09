@@ -583,6 +583,47 @@ second value could never be entered. It holds the typed text and writes the draf
 re-seeding only when the stored list is not what the field spells. Only driving the control found this
 — the pure functions under it were all correct.
 
+### Manifest authoring rules (keep these)
+
+§5.9 says a new generative capability is a JSON file authored from inside the application, with no
+code. It now is. Every field of `GeneratorManifest` has a control, and the claim is checked rather
+than asserted: `ManifestInspector.test.tsx` holds a `Record<keyof GeneratorManifest, …>` mapping each
+field to the label of the control that edits it, so **TypeScript fails the build** when the format
+gains a field nobody answered for. A runtime list has to be remembered; a parameter having four of ten
+fields is what remembering looks like in practice.
+
+What had no control at all, and what each cost:
+
+- **`presets`** — the mechanism that makes one graph feel like several tools, and two shipped
+  manifests carry six between them. A generator authored here had none and no way to get any.
+- **`batch`** — how several variants go in one submit. Absent means sequential runs, so anything
+  authored here always took the slow path.
+- **`exclusive`** — parameters that are alternatives. Everything authored here kept every parameter
+  independent, which is what every manifest written before the field existed did.
+- **`outputs[].format` and `[].optional`** — three of five shipped manifests declare a format.
+- **`consumes[].required`**.
+
+**A preset asks for a role, not for two records.** The file stores `pin` and `set` and a parameter
+must never be in both; asking which of *free / fixed / pre-filled* makes that impossible to express
+and puts the distinction in front of the author. It matters because confusing the two is a bug this
+project has already had: every value became a lock, and a one-shot preset that pinned its length left
+no way to ask for a slightly longer one — the control was gone rather than pre-filled. The role
+options are named by what they do, because "pin" and "set" are the file's words and say nothing to the
+person choosing.
+
+**Preset rules live in `validateDraft`, not beside the panel.** A second list rendered next to the
+first would show an error beside an enabled Save button. Duplicate ids and empty names block; a preset
+naming a parameter that has since been renamed only warns — the file is still valid, the value is
+still there to be re-pointed, and refusing to save would trap someone mid-rename.
+
+**Under `exactOptionalPropertyTypes`, clearing a field means dropping the key.** Setting it to
+`undefined` is a different type and reaches the file as `null`, which the schema rejects on the way
+back in — so the inspector would write a manifest it could not reopen.
+
+**Label a preset row by the parameter's key, not its display label.** The key is what the preset
+stores, a label is free to be blank or to repeat, and the display label collides with the graph-input
+list beside it.
+
 ### Generator framework rules (keep these)
 
 - Parameters that are **alternatives** are declared, never inferred. §2.3's voice is an enum or a
