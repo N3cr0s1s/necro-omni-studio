@@ -795,7 +795,32 @@ function createWindow(): void {
     },
   });
 
-  window.once('ready-to-show', () => window.show());
+  /*
+   * Shown once painted. Off to one side and unfocused when something is driving it.
+   *
+   * The harnesses launch a real shell and talk to it over the debugging port; three per `smokecheck`
+   * run, several runs an hour, is a window repeatedly taking the screen from whoever is using the
+   * machine.
+   *
+   * Not hidden, though — that was the first attempt and it fails for a reason worth keeping: a window
+   * that is never mapped never lays out, so every element reads as invisible and the harness times out
+   * clicking things that are plainly there. The window has to be real for the checks to mean anything.
+   *
+   * So: `showInactive` rather than `show`, which never takes focus, and moved off the visible desktop
+   * so it covers nothing. The renderer paints and answers exactly as it does for a user — this is the
+   * same application with its frame somewhere else, not a different mode that could pass for reasons a
+   * user would never have.
+   */
+  window.once('ready-to-show', () => {
+    if (process.env['NOS_HEADLESS'] === '1') {
+      // Far enough that no plausible monitor arrangement reaches it. Set before showing, so the frame
+      // never appears at the origin first.
+      window.setPosition(-10_000, -10_000);
+      window.showInactive();
+      return;
+    }
+    window.show();
+  });
 
   /*
    * Closing with unsaved work asks first.

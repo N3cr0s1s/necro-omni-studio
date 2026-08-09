@@ -1314,6 +1314,21 @@ now; a loose name is a selector waiting to catch a label nobody has written yet.
 
 ### Verification harnesses (six of them now)
 
+**A harness window does not take the screen.** Three shells per `smokecheck` run, several runs an
+hour, is a window repeatedly stealing focus from whoever is using the machine — which is a real cost
+of checking the assembled application, and one worth paying down rather than living with.
+
+`NOS_HEADLESS=1` — which every harness sets, and `NOS_WATCH=1` overrides when a run has to be seen —
+shows the window with `showInactive` at `(-10000, -10000)`: painted, laid out, answering CDP, and
+nowhere near the desktop.
+
+**Not hidden**, and that was the first attempt: `show: false` fails because a window that is never
+mapped never lays out, so every element reads as invisible and the harness times out clicking things
+that are plainly there. The window has to be *real* for the checks to mean anything — this is the same
+application with its frame somewhere else, not a mode that could pass for reasons a user would never
+have.
+
+
 Two of them drive the whole application. `apps/desktop/exportcheck` launches the shell, lets it reopen
 a fixture project, exports, and reads the delivered mp4 back with ffmpeg — it exists because the export
 dropping every title was invisible to every unit test, each side being correct alone and only the seam

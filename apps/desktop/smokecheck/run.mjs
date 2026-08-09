@@ -81,10 +81,20 @@ writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: proj
 /** Starts a shell against a given `userData` and connects to it. */
 async function launch(dataDir) {
   const port = await freePort();
+  /*
+   * Hidden unless someone asks to watch. The harnesses drive a real shell over the debugging port
+   * and never need a mapped window; three per run, several runs an hour, is a window stealing focus
+   * from whoever is using the machine. `NOS_WATCH=1` shows them for when a run has to be seen.
+   */
   const child = spawn(
     'npx',
     ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${dataDir}`],
-    { cwd: desktop, stdio: 'ignore', detached: true },
+    {
+      cwd: desktop,
+      stdio: 'ignore',
+      detached: true,
+      env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
+    },
   );
   let connected;
   for (let attempt = 0; attempt < 60 && connected === undefined; attempt += 1) {

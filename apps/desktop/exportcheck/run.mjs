@@ -97,12 +97,22 @@ const synth = spawnSync('ffmpeg', [
 if (synth.status !== 0) fail('the fixture tone could not be synthesized — is ffmpeg installed?');
 
 const port = await freePort();
+/*
+ * Hidden unless someone asks to watch. The harnesses drive a real shell over the debugging port
+ * and never need a mapped window; three per run, several runs an hour, is a window stealing focus
+ * from whoever is using the machine. `NOS_WATCH=1` shows them for when a run has to be seen.
+ */
 const electron = spawn(
   'npx',
   ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${userData}`],
   // `ignore`, not `pipe`. Nothing here reads the shell's output, and an unread pipe keeps this
   // process alive after the child is killed — the harness printed every result and then hung.
-  { cwd: desktop, stdio: 'ignore', detached: true },
+  {
+    cwd: desktop,
+    stdio: 'ignore',
+    detached: true,
+    env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
+  },
 );
 
 let browser;
