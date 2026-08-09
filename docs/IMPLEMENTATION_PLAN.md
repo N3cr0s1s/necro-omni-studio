@@ -751,6 +751,14 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Project rules (keep these)
 
+- **Media can leave.** A project is a folder, so a clip's file can be renamed, moved or unplugged. The
+  document keeps the project-relative path; whether it still resolves is a question about the *folder*,
+  derived from the tree — never stored, because it is true of one machine at one moment.
+- A tree not yet read reports everything **present**. Announcing that every clip is offline for the
+  second before the first scan lands is a false alarm when the user can least judge it.
+- Missing media outranks every other notice: a proxy still shows the picture, a missing file shows
+  nothing. And it **names the file** — a count sends someone hunting.
+
 - §4's "zip the folder and you have moved the project" holds only while **nothing** writes a path
   outside it. `assetPath` refuses an absolute path at the brand constructor, which covers the document
   — a planted one stops the project opening at all — but the provenance sidecars, mask records, cache
