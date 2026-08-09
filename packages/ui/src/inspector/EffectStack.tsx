@@ -63,6 +63,15 @@ export interface EffectStackProps {
    * build without an editor simply does not offer one.
    */
   readonly onCreateEffect?: () => void;
+  /**
+   * Opens an existing effect's source, per issue #31.
+   *
+   * Given the *effect id*, not the instance: what is edited is the effect itself, and every clip using
+   * it changes. Offered only for effects the caller says are editable — a builtin has no file to open.
+   */
+  readonly onEditEffect?: (effect: string) => void;
+  /** Effect ids whose source this project owns, so a builtin is not offered an editor it has no file for. */
+  readonly editableEffects?: ReadonlySet<string>;
 }
 
 export function EffectStack({
@@ -75,6 +84,8 @@ export function EffectStack({
   onReorder,
   onAdd,
   onCreateEffect,
+  onEditEffect,
+  editableEffects,
 }: EffectStackProps): ReactNode {
   const [dragIndex, setDragIndex] = useState<number | undefined>(undefined);
   const [dropIndex, setDropIndex] = useState<number | undefined>(undefined);
@@ -159,6 +170,10 @@ export function EffectStack({
               selected={selected === entry.instance.id}
               dragging={dragIndex === index}
               dropTarget={dragIndex !== undefined && dropIndex === index && dragIndex !== index}
+              {...(onEditEffect !== undefined &&
+              editableEffects?.has(entry.instance.effect as string) === true
+                ? { onEdit: () => onEditEffect(entry.instance.effect as string) }
+                : {})}
               onPointerDownHandle={() => {
                 setDragIndex(index);
                 setDropIndex(index);
@@ -195,6 +210,7 @@ function EffectRow({
   dragging,
   dropTarget,
   onPointerDownHandle,
+  onEdit,
   onSelect,
   onToggleEnabled,
   onRemove,
@@ -207,6 +223,8 @@ function EffectRow({
   readonly dragging: boolean;
   readonly dropTarget: boolean;
   readonly onPointerDownHandle: () => void;
+  /** Opens this effect's source. Absent for a builtin, which has no file in the project. */
+  readonly onEdit?: () => void;
   readonly onSelect?: (instance: EffectInstanceId) => void;
   readonly onToggleEnabled?: (instance: EffectInstanceId, enabled: boolean) => void;
   readonly onRemove?: (instance: EffectInstanceId) => void;
@@ -296,6 +314,22 @@ function EffectRow({
           />
         </Button>
 
+        {onEdit !== undefined && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Edit ${entry.label}`}
+            title="Open this effect's shader"
+            onClick={(event) => {
+              // Stopped, or the click also selects the row — which is harmless but means the panel
+              // jumps under a user who asked to go somewhere else entirely.
+              event.stopPropagation();
+              onEdit();
+            }}
+          >
+            <FileCode2Icon />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-xs"

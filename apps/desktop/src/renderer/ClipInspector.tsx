@@ -77,6 +77,10 @@ export interface ClipInspectorProps {
   readonly onRename?: ((clip: ClipId, name: string) => void) | undefined;
   /** Opens the effect editor, per issue #28. Offered from the stack, where the gap is noticed. */
   readonly onCreateEffect?: (() => void) | undefined;
+  /** Opens an existing effect for editing, per issue #31. */
+  readonly onEditEffect?: ((id: string) => void) | undefined;
+  /** Effect ids whose source lives in this project, so a builtin is not offered an editor. */
+  readonly editableEffects?: ReadonlySet<string> | undefined;
   /**
    * Opens the name field without a double-click, for a rename asked for from the context menu.
    *
@@ -108,6 +112,8 @@ export function ClipInspector({
   renaming,
   effectProblems,
   onCreateEffect,
+  onEditEffect,
+  editableEffects,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -173,6 +179,8 @@ export function ClipInspector({
       <EffectStack
         entries={entries}
         {...(onCreateEffect !== undefined ? { onCreateEffect } : {})}
+        {...(onEditEffect !== undefined ? { onEditEffect } : {})}
+        {...(editableEffects !== undefined ? { editableEffects } : {})}
         {...(selected !== undefined ? { selected } : {})}
         onSelect={setSelected}
         onToggleEnabled={(instance, enabled) =>

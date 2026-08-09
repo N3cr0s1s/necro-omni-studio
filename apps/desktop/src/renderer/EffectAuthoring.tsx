@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
-import { FileCode2Icon, PlusIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { FileCode2Icon, PlusIcon, SaveIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import type { CompileCheck } from '@nos/compositor';
 import {
   type EffectDraft,
@@ -54,11 +54,24 @@ export interface EffectAuthoringProps {
   /** The effect to open for editing, by id. Absent starts a new one. */
   readonly editing?: string;
   readonly onClose: () => void;
+  /**
+   * Reports the name as it is typed, so the tab holding this follows it.
+   *
+   * The screen does not own its own title any more — issue #31 made it a tab, and a bar of three
+   * unsaved effects all called "New effect" is unusable.
+   */
+  readonly onTitle?: (title: string) => void;
   /** Reloads the library, so a saved effect is usable without a restart. */
   readonly onSaved: () => void;
 }
 
-export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectAuthoringProps): ReactNode {
+export function EffectAuthoring({
+  existing,
+  editing,
+  onClose,
+  onTitle,
+  onSaved,
+}: EffectAuthoringProps): ReactNode {
   const opened = useMemo(
     () => existing?.find((entry) => (entry.manifest.id as string) === editing),
     [existing, editing],
@@ -115,13 +128,12 @@ export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectA
   }, [draft, onClose, onSaved]);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <section
       aria-label="Effect editor"
-      // A full-window surface, like the manifest authoring screen: this is a place you work for an
-      // hour, not a form you dismiss.
-      className="bg-background fixed inset-0 z-20 flex flex-col"
+      // A panel filling its tab, not an overlay. It covered the window and the only way back to the
+      // timeline was to close it, which is the wrong shape for something written *while* looking at
+      // the clip it is for — issue #31.
+      className="bg-background flex min-h-0 flex-1 flex-col"
     >
       <header className="flex h-11 flex-none items-center gap-3 px-4">
         <FileCode2Icon className="text-muted-foreground size-3.5" />
@@ -142,11 +154,7 @@ export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectA
           </p>
         )}
 
-        <Button variant="ghost" size="sm" onClick={onClose} className="ml-auto">
-          <XIcon />
-          Close
-        </Button>
-        <Button size="sm" disabled={blocked || saving} onClick={() => void save()}>
+        <Button size="sm" disabled={blocked || saving} onClick={() => void save()} className="ml-auto">
           {saving ? <Spinner className="size-3.5" /> : <SaveIcon />}
           Save effect
         </Button>
@@ -175,7 +183,7 @@ export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectA
 
             <Separator />
 
-            <Identity draft={draft} onChange={setDraft} />
+            <Identity draft={draft} onChange={setDraft} {...(onTitle !== undefined ? { onTitle } : {})} />
 
             <Separator />
 
@@ -209,7 +217,7 @@ export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectA
           </div>
         </ScrollArea>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -217,9 +225,12 @@ export function EffectAuthoring({ existing, editing, onClose, onSaved }: EffectA
 function Identity({
   draft,
   onChange,
+  onTitle,
 }: {
   readonly draft: EffectDraft;
   readonly onChange: (update: (current: EffectDraft) => EffectDraft) => void;
+  /** Reported as the name is typed, so the tab holding this screen follows it. */
+  readonly onTitle?: (title: string) => void;
 }): ReactNode {
   const set = (patch: Partial<EffectDraft>): void => onChange((current) => ({ ...current, ...patch }));
 
@@ -243,7 +254,10 @@ function Identity({
             id={id}
             placeholder="Film grain"
             value={draft.name}
-            onChange={(event) => set({ name: event.target.value })}
+            onChange={(event) => {
+              set({ name: event.target.value });
+              onTitle?.(event.target.value);
+            }}
           />
         )}
       </Labelled>

@@ -71,6 +71,8 @@ import {
 import {
   FilmIcon,
   ExternalLinkIcon,
+  FileCode2Icon,
+  FileJsonIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   PauseIcon,
@@ -126,7 +128,19 @@ import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
+import { WorkspaceTabs } from '@nos/ui';
 import { EffectAuthoring } from './EffectAuthoring.js';
+import {
+  type Workspace,
+  type WorkspaceTabKind,
+  activeTab,
+  closeTab,
+  descriptorFor,
+  emptyWorkspace,
+  focusTab,
+  openTab,
+  retitleTab,
+} from './workspace.js';
 import { ModeToggle } from './ModeToggle.js';
 import { ThemePicker, useThemeAttribute } from './ThemePicker.js';
 import {
@@ -725,7 +739,15 @@ export function App(): ReactNode {
    * The effect editor, per issue #28. An object rather than a boolean so it can carry which effect is
    * being edited — `{}` is a new one, `{ editing: id }` is an existing one.
    */
-  const [writingEffect, setWritingEffect] = useState<{ readonly editing?: string } | undefined>(undefined);
+  /**
+   * What the window is showing, per issue #31.
+   *
+   * The editor is a tab rather than the whole window, so anything else — a shader, a file — opens
+   * *beside* the cut rather than over it. The effect editor used to cover everything, and the only
+   * way back to the timeline was to close it.
+   */
+  const [workspace, setWorkspace] = useState<Workspace>(() => emptyWorkspace());
+  const showing = activeTab(workspace);
 
   /*
    * The project's *own* effects, with the shader each one is.
@@ -1645,17 +1667,25 @@ export function App(): ReactNode {
 
   return (
     <div className="flex h-screen flex-col">
-      <TitleBar
-        project={project}
-        sidecar={sidecar}
-        dirty={store.getSnapshot().dirty}
-        onOpen={() => void openProject()}
-        onSave={() => void save()}
-        onExport={openExport}
-        autosaveStatus={autosave.status}
-        onShowShortcuts={() => setShortcutsOpen(true)}
-        themeId={appSettings.settings?.theme}
-        onChangeTheme={(theme) => appSettings.update({ theme })}
+      {/*
+        The tab bar is the topmost thing in the window, and everything below it belongs to the tab —
+        including the title bar, whose actions are the *editor's* actions. It used to sit under the
+        title bar, which made a tab govern a strip in the middle rather than the window.
+
+        The status bar stays outside, deliberately: issue #22 asked for a persistent bottom row that
+        shows what is running in the background, and a generation that vanishes because you opened a
+        shader is exactly what that bar exists to prevent.
+      */}
+      <WorkspaceTabs
+        tabs={workspace.tabs.map((tab) => ({
+          id: tab.id,
+          title: tab.title,
+          icon: <TabGlyph kind={tab.kind} />,
+          closable: descriptorFor(tab.kind).closable,
+        }))}
+        active={workspace.active}
+        onSelect={(id) => setWorkspace((current) => focusTab(current, id))}
+        onClose={(id) => setWorkspace((current) => closeTab(current, id))}
       />
 
       <ShortcutSheet groups={SHORTCUT_GROUPS} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
@@ -1732,13 +1762,15 @@ export function App(): ReactNode {
         />
       )}
 
-      {writingEffect !== undefined && (
+      {showing.kind === 'effect' && (
         <EffectAuthoring
           // The project's own effects, so saving cannot silently replace one — the id is two filenames
           // and two effects cannot share it.
           existing={projectEffects}
-          {...(writingEffect.editing !== undefined ? { editing: writingEffect.editing } : {})}
-          onClose={() => setWritingEffect(undefined)}
+          {...(showing.subject !== undefined ? { editing: showing.subject } : {})}
+          // The tab's title follows the effect as it is named, so a bar of unsaved effects is usable.
+          onTitle={(title) => setWorkspace((current) => retitleTab(current, showing.id, title))}
+          onClose={() => setWorkspace((current) => closeTab(current, showing.id))}
           onSaved={effects.reload}
         />
       )}
@@ -1783,285 +1815,312 @@ export function App(): ReactNode {
         finds. Where they are left is remembered — a panel a user drags every session is one that
         should have stayed where they put it.
       */}
-      <ResizablePanelGroup
-        orientation="horizontal"
-        {...(columns.layout !== undefined ? { defaultLayout: columns.layout } : {})}
-        onLayoutChange={columns.onLayoutChange}
-        className="min-h-0 flex-1"
-      >
-        <ResizablePanel
-          id="browser"
-          defaultSize="18%"
-          minSize="12%"
-          collapsible
-          collapsedSize={0}
-          className="min-w-0 border-r"
+      {/*
+        Hidden rather than unmounted when another tab is showing.
+        Unmounting would drop the preview's GL context and every scroll position in the window, and
+        rebuilding them on each tab switch is both slow and visible. `hidden` costs nothing.
+      */}
+      <div className={cn('flex min-h-0 flex-1 flex-col', showing.kind !== 'editor' && 'hidden')}>
+        <TitleBar
+          project={project}
+          sidecar={sidecar}
+          dirty={store.getSnapshot().dirty}
+          onOpen={() => void openProject()}
+          onSave={() => void save()}
+          onExport={openExport}
+          autosaveStatus={autosave.status}
+          onShowShortcuts={() => setShortcutsOpen(true)}
+          themeId={appSettings.settings?.theme}
+          onChangeTheme={(theme) => appSettings.update({ theme })}
+        />
+
+        <ResizablePanelGroup
+          orientation="horizontal"
+          {...(columns.layout !== undefined ? { defaultLayout: columns.layout } : {})}
+          onLayoutChange={columns.onLayoutChange}
+          className="min-h-0 flex-1"
         >
-          <MediaBrowser
-            tree={tree.tree ?? buildTree([])}
-            projectOpen={project !== undefined}
-            onImportFiles={(dropped) => {
-              /*
-               * A renderer cannot name a file on disk, so the paths come back through the preload —
-               * and anything that is not a real file answers with an empty string, which a drag
-               * carrying text does.
-               */
-              const api = bridge();
-              if (api === undefined) return;
-              const paths = dropped.map((file) => api.pathForFile(file)).filter((path) => path !== '');
-              void importInto(paths, 'media');
-            }}
-            watcher={tree.watcher}
-            onRescan={tree.refresh}
-            {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
-            onSelect={setBrowserSelection}
-            detail={
-              <BrowserDetail
-                asset={assetDetail}
-                cache={cache}
-                // Through the shell, so a link in a note opens in the system browser rather than
-                // navigating this window away from the editor.
-                onOpenLink={(href) => void bridge()?.openExternal(href)}
-                onRecall={recallGeneration}
-              />
-            }
-            menu={browserMenu}
-            {...(renamingPath !== undefined ? { renamingPath } : {})}
-            onRename={(path, name) => {
-              setRenamingPath(undefined);
-              void files.rename(path, name).then((done) => {
-                if (done) tree.refresh();
-              });
-            }}
-            onMove={(source, destination) => {
-              void files.move(source, destination).then((done) => {
-                if (done) tree.refresh();
-              });
-            }}
-            onActivate={(asset) => {
-              void mediaImport.run(asset, playhead).then((id) => {
-                // Selected on arrival, because the next thing a user does with a clip they just added is
-                // almost always to it.
-                if (id !== undefined) setSelected(new Set([id]));
-              });
-            }}
-          />
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-
-        <ResizablePanel id="stage" minSize="30%" className="min-w-0">
-          <ResizablePanelGroup
-            orientation="vertical"
-            {...(rows.layout !== undefined ? { defaultLayout: rows.layout } : {})}
-            onLayoutChange={rows.onLayoutChange}
-            className="min-h-0"
+          <ResizablePanel
+            id="browser"
+            defaultSize="18%"
+            minSize="12%"
+            collapsible
+            collapsedSize={0}
+            className="min-w-0 border-r"
           >
-            <ResizablePanel id="viewer" defaultSize="62%" minSize="20%" className="min-h-0">
-              <main className="flex h-full min-w-0 flex-col">
-                <Preview
-                  document={drag.document}
-                  frame={playhead}
-                  sidecar={sidecar}
-                  resolveAsset={proxies.resolve}
-                  masks={maskSource}
-                  effects={effects.registry}
-                  {...(segmenting && masks.session !== undefined
-                    ? {
-                        overlay: (picture: { readonly width: number; readonly height: number }) => (
-                          <MaskPointOverlay
-                            session={masks.session!}
-                            width={picture.width}
-                            height={picture.height}
-                            onAddPrompt={masks.addPrompt}
-                            onRemovePrompt={masks.removePrompt}
-                          />
-                        ),
-                      }
-                    : {})}
+            <MediaBrowser
+              tree={tree.tree ?? buildTree([])}
+              projectOpen={project !== undefined}
+              onImportFiles={(dropped) => {
+                /*
+                 * A renderer cannot name a file on disk, so the paths come back through the preload —
+                 * and anything that is not a real file answers with an empty string, which a drag
+                 * carrying text does.
+                 */
+                const api = bridge();
+                if (api === undefined) return;
+                const paths = dropped.map((file) => api.pathForFile(file)).filter((path) => path !== '');
+                void importInto(paths, 'media');
+              }}
+              watcher={tree.watcher}
+              onRescan={tree.refresh}
+              {...(browserSelection !== undefined ? { selected: browserSelection } : {})}
+              onSelect={setBrowserSelection}
+              detail={
+                <BrowserDetail
+                  asset={assetDetail}
+                  cache={cache}
+                  // Through the shell, so a link in a note opens in the system browser rather than
+                  // navigating this window away from the editor.
+                  onOpenLink={(href) => void bridge()?.openExternal(href)}
+                  onRecall={recallGeneration}
                 />
+              }
+              menu={browserMenu}
+              {...(renamingPath !== undefined ? { renamingPath } : {})}
+              onRename={(path, name) => {
+                setRenamingPath(undefined);
+                void files.rename(path, name).then((done) => {
+                  if (done) tree.refresh();
+                });
+              }}
+              onMove={(source, destination) => {
+                void files.move(source, destination).then((done) => {
+                  if (done) tree.refresh();
+                });
+              }}
+              onActivate={(asset) => {
+                void mediaImport.run(asset, playhead).then((id) => {
+                  // Selected on arrival, because the next thing a user does with a clip they just added is
+                  // almost always to it.
+                  if (id !== undefined) setSelected(new Set([id]));
+                });
+              }}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle />
 
-                {/* Under the picture it controls. In the title bar it sat among file and project actions,
+          <ResizablePanel id="stage" minSize="30%" className="min-w-0">
+            <ResizablePanelGroup
+              orientation="vertical"
+              {...(rows.layout !== undefined ? { defaultLayout: rows.layout } : {})}
+              onLayoutChange={rows.onLayoutChange}
+              className="min-h-0"
+            >
+              <ResizablePanel id="viewer" defaultSize="62%" minSize="20%" className="min-h-0">
+                <main className="flex h-full min-w-0 flex-col">
+                  <Preview
+                    document={drag.document}
+                    frame={playhead}
+                    sidecar={sidecar}
+                    resolveAsset={proxies.resolve}
+                    masks={maskSource}
+                    effects={effects.registry}
+                    {...(segmenting && masks.session !== undefined
+                      ? {
+                          overlay: (picture: { readonly width: number; readonly height: number }) => (
+                            <MaskPointOverlay
+                              session={masks.session!}
+                              width={picture.width}
+                              height={picture.height}
+                              onAddPrompt={masks.addPrompt}
+                              onRemovePrompt={masks.removePrompt}
+                            />
+                          ),
+                        }
+                      : {})}
+                  />
+
+                  {/* Under the picture it controls. In the title bar it sat among file and project actions,
               a hand's width from the frame a user is scrubbing and beside buttons that have nothing
               to do with playback. */}
-                <Transport
-                  transport={transport}
-                  frameRate={document.frameRate}
-                  duration={documentDuration(document)}
-                  meters={audio.meters}
-                  onClearClip={audio.clearClip}
-                />
-              </main>
-            </ResizablePanel>
-            <ResizableHandle withHandle />
+                  <Transport
+                    transport={transport}
+                    frameRate={document.frameRate}
+                    duration={documentDuration(document)}
+                    meters={audio.meters}
+                    onClearClip={audio.clearClip}
+                  />
+                </main>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
 
-            <ResizablePanel id="timeline" defaultSize="38%" minSize="12%" className="min-h-0">
-              <div ref={laneRef} className="h-full">
-                <Timeline
-                  document={drag.document}
-                  strips={strips.strips}
-                  missingAssets={missingAssets}
-                  onAddTrack={addTrackOfKind}
-                  onTrackRemove={removeTrackById}
-                  onTrackRename={(id, name) => {
-                    setRenamingTrack(undefined);
-                    store.commit('rename track', (current) => {
-                      const result = renameTrack(current, id, name);
-                      if (!result.ok) {
-                        setError(describeEditError(result.error));
-                        return current;
+              <ResizablePanel id="timeline" defaultSize="38%" minSize="12%" className="min-h-0">
+                <div ref={laneRef} className="h-full">
+                  <Timeline
+                    document={drag.document}
+                    strips={strips.strips}
+                    missingAssets={missingAssets}
+                    onAddTrack={addTrackOfKind}
+                    onTrackRemove={removeTrackById}
+                    onTrackRename={(id, name) => {
+                      setRenamingTrack(undefined);
+                      store.commit('rename track', (current) => {
+                        const result = renameTrack(current, id, name);
+                        if (!result.ok) {
+                          setError(describeEditError(result.error));
+                          return current;
+                        }
+                        return result.value;
+                      });
+                    }}
+                    onTrackResize={(id, height, phase) => {
+                      // One undo step for the whole drag, the rule every gesture here follows: the store's
+                      // gesture is opened on the first move and closed when the pointer comes up.
+                      if (!resizing.current) {
+                        store.beginGesture('resize track');
+                        resizing.current = true;
                       }
-                      return result.value;
-                    });
-                  }}
-                  onTrackResize={(id, height, phase) => {
-                    // One undo step for the whole drag, the rule every gesture here follows: the store's
-                    // gesture is opened on the first move and closed when the pointer comes up.
-                    if (!resizing.current) {
-                      store.beginGesture('resize track');
-                      resizing.current = true;
+                      store.commit('resize track', (current) => {
+                        const result = setTrackHeight(current, id, height);
+                        return result.ok ? result.value : current;
+                      });
+                      if (phase === 'end') {
+                        store.endGesture();
+                        resizing.current = false;
+                      }
+                    }}
+                    onTrackMute={(id) => toggleTrack(id, 'muted')}
+                    onTrackSolo={(id) => toggleTrack(id, 'solo')}
+                    onTrackLock={(id) => toggleTrack(id, 'locked')}
+                    onTrackCollapse={(id) => toggleTrack(id, 'collapsed')}
+                    onEditMarker={editMarker}
+                    onRemoveMarker={removeMarkerAt}
+                    onMarkIn={range.markIn}
+                    onMarkOut={range.markOut}
+                    onClearRange={range.clear}
+                    {...(clipEdits.hasRange ? { onRemoveRange: clipEdits.removeRange } : {})}
+                    viewport={viewport}
+                    playhead={playhead}
+                    selectedClips={selected}
+                    snapEnabled={snap}
+                    rippleEnabled={ripple}
+                    onScrub={scrubTo}
+                    scrubAudioEnabled={scrubAudio}
+                    onToggleScrubAudio={() => setScrubAudio((on) => !on)}
+                    onSelectClip={(clip, additive) =>
+                      setSelected((current) =>
+                        additive ? new Set([...current, clip]) : new Set([clip as string]),
+                      )
                     }
-                    store.commit('resize track', (current) => {
-                      const result = setTrackHeight(current, id, height);
-                      return result.ok ? result.value : current;
-                    });
-                    if (phase === 'end') {
-                      store.endGesture();
-                      resizing.current = false;
+                    // A marquee reports frames and tracks; which clips that touches is the document's
+                    // question, answered in the editing layer rather than in the component.
+                    // Dropped material lands where it was dropped — which is the only reason to drag
+                    // rather than double-click, and what the browser's draggable rows had been promising.
+                    {...(renamingTrack !== undefined ? { renamingTrack } : {})}
+                    onDropAsset={(asset, track, frame) => {
+                      void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
+                        if (id !== undefined) setSelected(new Set([id]));
+                      });
+                    }}
+                    menu={timelineMenu}
+                    onSelectRegion={(region, additive) =>
+                      setSelected((current) =>
+                        combineSelection(current, clipsInRegion(document, region), additive),
+                      )
                     }
-                  }}
-                  onTrackMute={(id) => toggleTrack(id, 'muted')}
-                  onTrackSolo={(id) => toggleTrack(id, 'solo')}
-                  onTrackLock={(id) => toggleTrack(id, 'locked')}
-                  onTrackCollapse={(id) => toggleTrack(id, 'collapsed')}
-                  onEditMarker={editMarker}
-                  onRemoveMarker={removeMarkerAt}
-                  onMarkIn={range.markIn}
-                  onMarkOut={range.markOut}
-                  onClearRange={range.clear}
-                  {...(clipEdits.hasRange ? { onRemoveRange: clipEdits.removeRange } : {})}
-                  viewport={viewport}
-                  playhead={playhead}
-                  selectedClips={selected}
-                  snapEnabled={snap}
-                  rippleEnabled={ripple}
-                  onScrub={scrubTo}
-                  scrubAudioEnabled={scrubAudio}
-                  onToggleScrubAudio={() => setScrubAudio((on) => !on)}
-                  onSelectClip={(clip, additive) =>
-                    setSelected((current) =>
-                      additive ? new Set([...current, clip]) : new Set([clip as string]),
-                    )
-                  }
-                  // A marquee reports frames and tracks; which clips that touches is the document's
-                  // question, answered in the editing layer rather than in the component.
-                  // Dropped material lands where it was dropped — which is the only reason to drag
-                  // rather than double-click, and what the browser's draggable rows had been promising.
-                  {...(renamingTrack !== undefined ? { renamingTrack } : {})}
-                  onDropAsset={(asset, track, frame) => {
-                    void mediaImport.run(asset as AssetPath, frame, track).then((id) => {
-                      if (id !== undefined) setSelected(new Set([id]));
-                    });
-                  }}
-                  menu={timelineMenu}
-                  onSelectRegion={(region, additive) =>
-                    setSelected((current) =>
-                      combineSelection(current, clipsInRegion(document, region), additive),
-                    )
-                  }
-                  // Alt turns a move into a slip. The clip stays put and its content slides inside it —
-                  // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
-                  onClipPointerDown={(clip, event) => drag.begin(event.altKey ? 'slip' : 'move', clip, event)}
-                  // Shift rolls the cut instead of trimming one side of it: the outgoing clip gains
-                  // exactly what the incoming one gives up, so nothing downstream moves. It is the edit
-                  // an editor reaches for constantly — the cut is a frame late, so you move the cut.
-                  onTrimStart={(clip, event) =>
-                    drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)
-                  }
-                  onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
-                  {...(expandedClip !== undefined ? { expandedClip } : {})}
-                  onToggleExpandClip={(clip) =>
-                    setExpandedClip((current) => (current === clip ? undefined : clip))
-                  }
-                  lanes={
-                    expandedClip === undefined ? undefined : (
-                      <KeyframeLanes
-                        document={drag.document}
-                        clip={expandedClip}
-                        effects={effectRegistry}
-                        viewport={viewport}
-                        playhead={playhead}
-                        onChange={commitDocument}
-                      />
-                    )
-                  }
-                  {...(drag.snappedTo !== undefined
-                    ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
-                    : {})}
-                  onToggleSnap={() => setSnap((value) => !value)}
-                  onToggleRipple={() => setRipple((value) => !value)}
-                  onZoom={view.zoomAt}
-                  onScrollBy={view.scrollBy}
-                  onFit={view.fit}
-                />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
+                    // Alt turns a move into a slip. The clip stays put and its content slides inside it —
+                    // the spec's csúsztatás, and the one edit whose result the clip's outline cannot show.
+                    onClipPointerDown={(clip, event) =>
+                      drag.begin(event.altKey ? 'slip' : 'move', clip, event)
+                    }
+                    // Shift rolls the cut instead of trimming one side of it: the outgoing clip gains
+                    // exactly what the incoming one gives up, so nothing downstream moves. It is the edit
+                    // an editor reaches for constantly — the cut is a frame late, so you move the cut.
+                    onTrimStart={(clip, event) =>
+                      drag.begin(event.shiftKey ? 'roll' : 'trim-start', clip, event)
+                    }
+                    onTrimEnd={(clip, event) => drag.begin(event.shiftKey ? 'roll' : 'trim-end', clip, event)}
+                    {...(expandedClip !== undefined ? { expandedClip } : {})}
+                    onToggleExpandClip={(clip) =>
+                      setExpandedClip((current) => (current === clip ? undefined : clip))
+                    }
+                    lanes={
+                      expandedClip === undefined ? undefined : (
+                        <KeyframeLanes
+                          document={drag.document}
+                          clip={expandedClip}
+                          effects={effectRegistry}
+                          viewport={viewport}
+                          playhead={playhead}
+                          onChange={commitDocument}
+                        />
+                      )
+                    }
+                    {...(drag.snappedTo !== undefined
+                      ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
+                      : {})}
+                    onToggleSnap={() => setSnap((value) => !value)}
+                    onToggleRipple={() => setRipple((value) => !value)}
+                    onZoom={view.zoomAt}
+                    onScrollBy={view.scrollBy}
+                    onFit={view.fit}
+                  />
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
 
-        <ResizablePanel
-          id="inspector"
-          defaultSize="22%"
-          minSize="14%"
-          collapsible
-          collapsedSize={0}
-          className="min-w-0 border-l"
-        >
-          <RightPanel
-            projectTree={tree.tree}
-            masks={masks}
-            maskChoices={maskChoices}
-            tab={rightTab}
-            onTabChange={setRightTab}
-            takesWaiting={takesWaiting}
-            onCreateEffect={() => setWritingEffect({})}
-            recalled={recalled}
-            effectProblems={effects.problems}
-            onRenameClip={renameClip}
-            renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
-            document={document}
-            effects={effectRegistry}
-            onChangeDocument={commitDocument}
-            registry={library.registry}
-            {...(appSettings.settings !== undefined ? { appSettings: appSettings.settings } : {})}
-            onChangeAppSettings={appSettings.update}
-            libraryProblems={library.problems}
-            libraryPath={library.libraryPath}
-            runtime={runtime}
-            playhead={playhead}
-            sidecar={sidecar}
-            selectedClip={[...selected][0]}
-            canUndo={store.getSnapshot().canUndo}
-            canRedo={store.getSnapshot().canRedo}
-            onSplit={clipEdits.split}
-            onSplitAllTracks={clipEdits.splitAllTracks}
-            onRemoveClip={clipEdits.remove}
-            onToggleClipEnabled={clipEdits.toggleEnabled}
-            onCopyAttributes={clipEdits.copyAttributes}
-            onPasteAttributes={clipEdits.pasteAttributes}
-            attributeSummary={clipEdits.attributeSummary}
-            removeLabel={ripple ? 'Ripple delete' : 'Delete'}
-            removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
-            onNudge={nudge}
-            onAuthorManifest={() => setAuthoring(true)}
-            onAcceptVariant={acceptVariant}
-            onUndo={() => store.undo()}
-            onRedo={() => store.redo()}
-            onAddText={addText}
-            onReject={setError}
-          />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <ResizablePanel
+            id="inspector"
+            defaultSize="22%"
+            minSize="14%"
+            collapsible
+            collapsedSize={0}
+            className="min-w-0 border-l"
+          >
+            <RightPanel
+              projectTree={tree.tree}
+              masks={masks}
+              maskChoices={maskChoices}
+              tab={rightTab}
+              onTabChange={setRightTab}
+              takesWaiting={takesWaiting}
+              onCreateEffect={() => setWorkspace((current) => openTab(current, { kind: 'effect' }))}
+              onEditEffect={(id) =>
+                setWorkspace((current) => openTab(current, { kind: 'effect', subject: id }))
+              }
+              // Only the project's own effects: a builtin ships in the binary and has no file to open.
+              editableEffects={new Set(projectEffects.map((entry) => entry.manifest.id as string))}
+              recalled={recalled}
+              effectProblems={effects.problems}
+              onRenameClip={renameClip}
+              renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
+              document={document}
+              effects={effectRegistry}
+              onChangeDocument={commitDocument}
+              registry={library.registry}
+              {...(appSettings.settings !== undefined ? { appSettings: appSettings.settings } : {})}
+              onChangeAppSettings={appSettings.update}
+              libraryProblems={library.problems}
+              libraryPath={library.libraryPath}
+              runtime={runtime}
+              playhead={playhead}
+              sidecar={sidecar}
+              selectedClip={[...selected][0]}
+              canUndo={store.getSnapshot().canUndo}
+              canRedo={store.getSnapshot().canRedo}
+              onSplit={clipEdits.split}
+              onSplitAllTracks={clipEdits.splitAllTracks}
+              onRemoveClip={clipEdits.remove}
+              onToggleClipEnabled={clipEdits.toggleEnabled}
+              onCopyAttributes={clipEdits.copyAttributes}
+              onPasteAttributes={clipEdits.pasteAttributes}
+              attributeSummary={clipEdits.attributeSummary}
+              removeLabel={ripple ? 'Ripple delete' : 'Delete'}
+              removeHint={`${describeRippleMode(ripple)} (Delete; hold shift for the other)`}
+              onNudge={nudge}
+              onAuthorManifest={() => setAuthoring(true)}
+              onAcceptVariant={acceptVariant}
+              onUndo={() => store.undo()}
+              onRedo={() => store.redo()}
+              onAddText={addText}
+              onReject={setError}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
 
       <StatusBar activities={activities} notices={notices}>
         {exportRun.timing !== undefined && (
@@ -2307,6 +2366,24 @@ function AutosaveChip({ status }: { readonly status: AutosaveStatus }): ReactNod
 }
 
 export { trimClipEnd, trimClipStart };
+
+/**
+ * The icon for a tab's kind.
+ *
+ * Here rather than in the bar, which is deliberately ignorant of what a kind means — that is what
+ * makes a new kind an entry in `WORKSPACE_TAB_KINDS` plus a line here, rather than an edit to the tab
+ * bar itself.
+ */
+function TabGlyph({ kind }: { readonly kind: WorkspaceTabKind }): ReactNode {
+  switch (kind) {
+    case 'effect':
+      return <FileCode2Icon className="size-3.5" />;
+    case 'text':
+      return <FileJsonIcon className="size-3.5" />;
+    default:
+      return <FilmIcon className="size-3.5" />;
+  }
+}
 
 /**
  * A project that could not be opened, and what to do about it.

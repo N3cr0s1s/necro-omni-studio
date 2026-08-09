@@ -37,3 +37,4 @@ export * from './theme/themes.js';
 export * from './theme/theme-audit.js';
 export * from './theme/oklch.js';
 export * from './theme/theme-css.js';
+export * from './workspace/WorkspaceTabs.js';

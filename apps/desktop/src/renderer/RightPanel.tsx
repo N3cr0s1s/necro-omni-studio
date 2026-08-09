@@ -114,6 +114,16 @@ export interface RightPanelProps {
   readonly onAuthorManifest: () => void;
   /** Opens the effect editor, per issue #28. */
   readonly onCreateEffect: () => void;
+  /**
+   * Opens an existing project effect for editing, per issue #31.
+   *
+   * The editor could already reopen one — `EffectAuthoring` takes an `editing` id — and nothing ever
+   * passed it, so the capability shipped unreachable. Tabs are what made the way in obvious: an effect
+   * opens in its own tab beside the cut.
+   */
+  readonly onEditEffect: (id: string) => void;
+  /** Effect ids whose source lives in this project. A builtin has no file to open. */
+  readonly editableEffects: ReadonlySet<string>;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
   readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
   readonly libraryProblems: readonly LibraryProblem[];
@@ -243,6 +253,8 @@ function InspectorTab({
   renamingClip,
   effectProblems,
   onCreateEffect,
+  onEditEffect,
+  editableEffects,
 }: RightPanelProps): ReactNode {
   return (
     <div className="flex flex-col">
@@ -257,6 +269,8 @@ function InspectorTab({
       <ClipInspector
         document={document}
         onCreateEffect={onCreateEffect}
+        onEditEffect={onEditEffect}
+        editableEffects={editableEffects}
         {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
         effects={effects}
         playhead={playhead}

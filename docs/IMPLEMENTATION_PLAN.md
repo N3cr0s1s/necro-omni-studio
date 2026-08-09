@@ -583,6 +583,39 @@ second value could never be entered. It holds the typed text and writes the draf
 re-seeding only when the stored list is not what the field spells. Only driving the control found this
 — the pure functions under it were all correct.
 
+### Workspace tab rules (keep these)
+
+Issue #31 asked for tabs at the framework level; #30 for line tabs spanning the full width. Both are
+the same bar, and it is the **topmost** thing in the window: everything below it belongs to the active
+tab, including the title bar, whose actions are the *editor's* actions. A first attempt put the bar
+under the title bar, which made a tab govern a strip in the middle rather than the window — and the
+user said so.
+
+**The status bar stays outside the tabs.** #22 asked for a persistent bottom row showing what is
+running in the background, and a generation that vanishes because you opened a shader is exactly what
+that bar exists to prevent.
+
+**Kinds are data.** A kind decides a tab's title, its icon and what it renders; adding one is an entry
+in `WORKSPACE_TAB_KINDS` plus a line in `TabGlyph`. The bar itself never learns what a kind means — it
+takes an id, a title and whether it closes.
+
+**The editor tab cannot be closed.** It is the application. A window with no tabs needs an empty state
+that is really a fourth layout nobody asked for, and "close the last tab" has no good answer.
+
+**Identity is kind plus subject**, so opening the same effect twice focuses rather than duplicates —
+two tabs editing one effect lets a user make two sets of changes and lose one on save, silently. A tab
+with *no* subject is always new, because two unnamed effects are two effects.
+
+**Closing focuses the tab to the left**, which is where the eye already is.
+
+**The editor content is hidden, not unmounted.** Unmounting drops the preview's GL context and every
+scroll position in the window, and rebuilding them per tab switch is both slow and visible.
+
+**And the gap tabs closed:** `EffectAuthoring` could already reopen an existing effect — it takes an
+`editing` id — and *nothing ever passed it*, so the capability shipped unreachable the day it was
+written. This is the sweep's own pattern, found in a feature one round old. Effect rows now offer an
+edit control, and only for effects the project owns: a builtin has no file to open.
+
 ### Effect editor rules (keep these)
 
 Issue #28. §6.3 has always defined an effect as a GLSL fragment shader plus a manifest and §4 has

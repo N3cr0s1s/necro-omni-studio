@@ -303,7 +303,9 @@ try {
     await writeEffect.click();
     await page.waitForTimeout(1200);
 
-    const editor = page.getByRole('dialog', { name: 'Effect editor' });
+    // A region, not a dialog: issue #31 made this a tab, so it is a panel filling the window rather
+    // than an overlay covering it.
+    const editor = page.getByRole('region', { name: 'Effect editor' });
     const canvas = page.locator('canvas[aria-label="Shader preview"]');
 
     // Scoped to the editor and exact: Playwright matches an accessible name by substring, so a loose
@@ -366,8 +368,9 @@ try {
       } else {
         fail('an effect written by the editor did not appear in the library');
       }
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(500);
+      // Back to the editor tab, so the checks after this see the window they expect.
+      await page.getByRole('tab', { name: 'Editor' }).click();
+      await page.waitForTimeout(800);
     }
   }
 
