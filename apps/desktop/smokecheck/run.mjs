@@ -22,7 +22,7 @@
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -233,6 +233,53 @@ try {
   await page.waitForTimeout(600);
   if ((await currentTime()) === atStart) pass('Home comes back to the start');
   else fail('Home did not return the playhead to the start');
+
+  /*
+   * Bringing a file in, and the two refusals that matter more than the success.
+   *
+   * The dialog half is Electron's and cannot be driven from here, so this exercises the half that
+   * touches the filesystem: the copy, an overwrite, and a destination that tries to leave the project.
+   * A renderer that can put bytes anywhere on the machine is a different security posture from one
+   * that can fill a project folder.
+   */
+  const outside = join(work, 'outside.txt');
+  writeFileSync(outside, 'imported');
+
+  const landed = await page.evaluate(
+    async (from) => globalThis.nos.copyIntoProject([{ from, to: 'media/outside.txt' }]),
+    outside,
+  );
+  if (landed.length === 1 && existsSync(join(project, 'media', 'outside.txt'))) {
+    pass('a chosen file is copied into the project');
+  } else {
+    fail('the import did not copy the file into the project');
+  }
+
+  const again = await page.evaluate(
+    async (from) => globalThis.nos.copyIntoProject([{ from, to: 'media/outside.txt' }]),
+    outside,
+  );
+  if (again.length === 0) pass('an import never overwrites what is already there');
+  else fail('the import overwrote an existing file');
+
+  /*
+   * A destination outside the project **throws**, where an unreadable source is merely skipped, and the
+   * difference is deliberate: a file that will not read is an ordinary thing to survive, while a
+   * placement pointing out of the folder is a programming error and should be loud.
+   */
+  const escaped = await page.evaluate(
+    async (from) =>
+      globalThis.nos
+        .copyIntoProject([{ from, to: '../escaped.txt' }])
+        .then(() => 'allowed')
+        .catch((error) => String(error)),
+    outside,
+  );
+  if (/outside the project/.test(escaped) && !existsSync(join(work, 'escaped.txt'))) {
+    pass('an import cannot write outside the project');
+  } else {
+    fail(`the import did not refuse a path outside the project — ${escaped}`);
+  }
 
   if (errors.length > 0) {
     fail(`the renderer raised ${errors.length}: ${errors[0]}`);
