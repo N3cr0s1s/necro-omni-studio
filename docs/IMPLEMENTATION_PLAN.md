@@ -676,6 +676,19 @@ drifted the moment one learned about answered groups: the sentence fell silent w
 saying three. Driving the real loop is what showed it — the unit tests were green throughout, because
 each derivation was correct on its own. The shell computes it; the panel takes it as a prop.
 
+**A run submits the values the panel is showing, not what the user happened to type.** `onRun` took
+no argument, so the caller reassembled the parameters from its own state — which holds only what was
+*typed*, while the panel renders and validates `defaults + derived + typed`. The two diverged and the
+consequence was invisible from both ends: the submit still reached the backend correctly, because the
+manifest's defaults are applied downstream, but the **group recorded the un-defaulted set**. A
+declared-length manifest sizes its placeholder from the group, so Stable Audio generated its default
+fifty seconds and the clip landed **two** seconds long — the `discovered` fallback — with forty-eight
+seconds of the take unreachable. The panel hands its effective values over now.
+
+Found by driving the whole loop and comparing what was on disk with what was on the timeline: a
+49.97-second FLAC beside a 60-frame clip. Neither number is wrong on its own, which is why nothing had
+caught it.
+
 **A finished run has to announce itself.** Found by driving a real generation against the live ComfyUI
 and reading every word: three takes landed in twelve seconds and the application said *nothing*. The
 generate panel was unchanged — same "ready", same "Generate 3 variants" — the tab holding them read

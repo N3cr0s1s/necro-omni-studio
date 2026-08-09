@@ -502,6 +502,36 @@ describe('parameter changes', () => {
     await user.click(screen.getByRole('button', { name: /Generate/ }));
     expect(onRun).toHaveBeenCalled();
   });
+
+  it('runs with the values it is showing, not with what the user happened to type', async () => {
+    /*
+     * The divergence this parameter exists to remove, and it was invisible from both sides. The caller
+     * held only what the user typed; the panel rendered and validated defaults + derived + typed. The
+     * submit still reached the backend correctly, because the manifest's defaults are applied
+     * downstream — but the *group* recorded the un-defaulted set, and a declared-length manifest sizes
+     * its placeholder from the group. Stable Audio generated its default fifty seconds and the clip
+     * landed two seconds long, with forty-eight seconds of the take unreachable.
+     */
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    renderPanel({ onRun, params: {} });
+
+    await user.click(screen.getByRole('button', { name: /Generate/ }));
+
+    const [values] = onRun.mock.calls.at(-1) ?? [];
+    // A parameter nobody touched still arrives, at the manifest's own default.
+    expect(values).toMatchObject({ duration_s: 50 });
+  });
+
+  it('lets what the user typed beat the default', async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    renderPanel({ onRun, params: { duration_s: 5 } });
+
+    await user.click(screen.getByRole('button', { name: /Generate/ }));
+
+    expect(onRun.mock.calls.at(-1)?.[0]).toMatchObject({ duration_s: 5 });
+  });
 });
 
 describe('parameters that are alternatives', () => {

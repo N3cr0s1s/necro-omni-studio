@@ -640,7 +640,7 @@ function GenerateTab({
               current === undefined ? Math.floor(Math.random() * 2 ** 31) : undefined,
             )
           }
-          onRun={() => {
+          onRun={(values) => {
             /*
              * Bindings are resolved again here, not reused from when they were chosen. A note edited
              * between picking it and pressing Generate must be the version that gets voiced — reading
@@ -652,14 +652,17 @@ function GenerateTab({
                * says one of the two must be given; sending neither leaves the graph to decide, which
                * is the ambiguity the group exists to remove.
                */
-              const missing = unansweredGroups(exclusiveGroupsOf(record.manifest), params);
+              const missing = unansweredGroups(exclusiveGroupsOf(record.manifest), values);
               const first = missing[0];
               if (first !== undefined) {
                 onReject(`choose one of ${first.members.join(' or ')} before generating`);
                 return;
               }
 
-              const resolved: Record<string, string | number | boolean> = { ...params };
+              // The panel's *effective* values — defaults, derived defaults and what the user typed —
+              // not this component's raw state. The group records what is submitted, and a placeholder
+              // is sized from the group.
+              const resolved: Record<string, string | number | boolean> = { ...values };
               for (const [key, choice] of Object.entries(boundText)) {
                 if (choice === undefined) continue;
                 const text = await resolveTextChoice(choice, document, (path) => readProjectText(path));

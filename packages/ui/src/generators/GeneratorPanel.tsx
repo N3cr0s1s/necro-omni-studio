@@ -116,7 +116,18 @@ export interface GeneratorPanelProps {
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
   readonly onChangeVariantCount?: (count: number) => void;
   readonly onToggleSeedLock?: () => void;
-  readonly onRun?: () => void;
+  /**
+   * Runs the generator with the values the panel is actually showing.
+   *
+   * The values are handed over rather than left for the caller to reassemble, and that is the whole
+   * point of the parameter: the caller holds only what the *user typed*, while the panel renders and
+   * validates `defaults + derived + typed`. The two diverged, and the consequence was invisible —
+   * the submit reached the backend with the manifest's defaults applied downstream, so the run was
+   * right, but the group recorded the un-defaulted set. A declared-length manifest then sized its
+   * placeholder from a length nobody had set: Stable Audio generated its default fifty seconds and
+   * the clip landed two seconds long, with forty-eight seconds of the take unreachable.
+   */
+  readonly onRun?: (values: Readonly<Record<string, string | number | boolean>>) => void;
 }
 
 /**
@@ -300,7 +311,7 @@ export function GeneratorPanel({
           button that is merely grey teaches nothing, and this one used to be lit while the graph it
           would submit had an empty image slot. */}
       <Button
-        onClick={onRun}
+        onClick={() => onRun?.(values)}
         disabled={reason !== undefined}
         {...(reason !== undefined ? { title: `Cannot run: ${reason}` } : {})}
       >
