@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assetPath, clipId, frameCount, frameIndex, frameSpan, trackId } from '@nos/core';
 import type { AudioClip, TextClip, TimelineDocument, VideoClip } from '@nos/core';
 import { type FileEntry, buildTree } from './folder-tree.js';
-import { availabilityOf, describeAvailability, requiredAssets } from './availability.js';
+import { availabilityOf, describeAvailability, filesOnDisk, requiredAssets } from './availability.js';
 
 /**
  * Which of a cut's material is actually on disk.
@@ -68,9 +68,24 @@ describe('what a cut needs', () => {
   });
 });
 
+describe('the folder as a set of paths', () => {
+  it('is nothing when the folder has not been read', () => {
+    // Memoized apart from the document because the two change at completely different rates — the
+    // folder when the watcher says so, the document on every pointer move of a drag.
+    expect(filesOnDisk(undefined)).toBeUndefined();
+  });
+
+  it('holds every file, so a lookup costs nothing per clip', () => {
+    const paths = filesOnDisk(buildTree([file('media/a.mp4'), file('notes/b.md')]));
+    expect(paths?.has('media/a.mp4')).toBe(true);
+    expect(paths?.has('notes/b.md')).toBe(true);
+    expect(paths?.has('media/missing.mp4')).toBe(false);
+  });
+});
+
 describe('against what the folder holds', () => {
   const cut = document([video('a', 'media/here.mp4'), video('b', 'media/gone.mp4'), title('t')]);
-  const folder = buildTree([file('media/here.mp4')]);
+  const folder = filesOnDisk(buildTree([file('media/here.mp4')]));
 
   it('names the file that is not there', () => {
     expect(availabilityOf(cut, folder).missing).toEqual(['media/gone.mp4']);
@@ -85,7 +100,7 @@ describe('against what the folder holds', () => {
 
   it('marks every clip reading a missing file, not just the first', () => {
     const many = document([video('a', 'media/gone.mp4'), video('b', 'media/gone.mp4')]);
-    expect(availabilityOf(many, buildTree([])).offlineClips).toEqual(['a', 'b']);
+    expect(availabilityOf(many, filesOnDisk(buildTree([]))).offlineClips).toEqual(['a', 'b']);
   });
 
   it('reports nothing missing when everything resolves', () => {
@@ -104,19 +119,19 @@ describe('against what the folder holds', () => {
 
 describe('saying so', () => {
   it('says nothing when nothing is missing', () => {
-    expect(describeAvailability(availabilityOf(document([]), buildTree([])))).toBeUndefined();
+    expect(describeAvailability(availabilityOf(document([]), filesOnDisk(buildTree([]))))).toBeUndefined();
   });
 
   it('names the file rather than counting clips', () => {
     // "3 clips are offline" sends the user hunting; the path tells them what to look for.
-    const one = availabilityOf(document([video('a', 'media/gone.mp4')]), buildTree([]));
+    const one = availabilityOf(document([video('a', 'media/gone.mp4')]), filesOnDisk(buildTree([])));
     expect(describeAvailability(one)).toBe('media/gone.mp4 is missing — its clips cannot be drawn');
   });
 
   it('names the first and counts the rest', () => {
     const two = availabilityOf(
       document([video('a', 'media/gone.mp4'), video('b', 'media/also.wav')]),
-      buildTree([]),
+      filesOnDisk(buildTree([])),
     );
     expect(describeAvailability(two)).toBe(
       'media/gone.mp4 and 1 more are missing — their clips cannot be drawn',

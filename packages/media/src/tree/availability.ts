@@ -49,20 +49,31 @@ export function requiredAssets(document: TimelineDocument): readonly AssetPath[]
 }
 
 /**
+ * Every path the folder holds, as a set to test against.
+ *
+ * Separate from `availabilityOf` because the two change at completely different rates: the folder is
+ * re-read when the watcher says so, while the document changes on every edit — and during a drag, on
+ * every pointer move. Right on principle; measured, it did not move the timeline's budget, so do not
+ * cite it as an optimisation.
+ */
+export function filesOnDisk(tree: DirectoryNode | undefined): ReadonlySet<string> | undefined {
+  return tree === undefined ? undefined : new Set(allFiles(tree).map((file) => file.path));
+}
+
+/**
  * What the cut needs against what the folder holds.
  *
- * `tree` of `undefined` means the folder has not been read yet — while a project is opening, or with
+ * `onDisk` of `undefined` means the folder has not been read yet — while a project is opening, or with
  * none open at all — and everything is reported **present**. Announcing that every clip is offline for
  * the second before the first scan lands would be a false alarm at exactly the moment the user is
  * least able to judge it.
  */
 export function availabilityOf(
   document: TimelineDocument,
-  tree: DirectoryNode | undefined,
+  onDisk: ReadonlySet<string> | undefined,
 ): MediaAvailability {
-  if (tree === undefined) return present();
+  if (onDisk === undefined) return present();
 
-  const onDisk = new Set<string>(allFiles(tree).map((file) => file.path));
   const missing = requiredAssets(document).filter((asset) => !onDisk.has(asset));
   if (missing.length === 0) return present();
 
@@ -84,14 +95,25 @@ export function availabilityOf(
   };
 }
 
-/** The answer when nothing is missing, shared so the common case allocates one empty shape. */
+/**
+ * The answer when nothing is missing.
+ *
+ * One shared value, not one per call: callers memoize on this object's identity, so a fresh shape for
+ * every recompute makes the *common* case — a project whose media is all present — invalidate
+ * everything downstream on every edit, which during a drag is every pointer move. Correct on
+ * principle; it did not itself move the measured budget.
+ *
+ * Frozen because it is shared: a caller that mutated it would corrupt every other caller's answer.
+ */
+const ALL_PRESENT: MediaAvailability = Object.freeze({
+  missing: Object.freeze([]) as readonly AssetPath[],
+  offlineClips: Object.freeze([]) as readonly ClipId[],
+  isOffline: () => false,
+  isMissing: () => false,
+});
+
 function present(): MediaAvailability {
-  return {
-    missing: [],
-    offlineClips: [],
-    isOffline: () => false,
-    isMissing: () => false,
-  };
+  return ALL_PRESENT;
 }
 
 /**

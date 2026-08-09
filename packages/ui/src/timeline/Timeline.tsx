@@ -11,6 +11,7 @@ import {
   type TrackId,
   type TrackKind,
   clipCount,
+  clipSource,
   documentEnd,
   endExclusive,
   frameIndex,
@@ -102,12 +103,14 @@ export interface TimelineProps {
   /** Filmstrips and waveforms by clip id, supplied as derivations complete. */
   readonly strips?: ReadonlyMap<string, ClipStrip>;
   /**
-   * Clips whose file is not in the project folder.
+   * Assets the project folder does not have.
    *
-   * A set rather than a predicate so the timeline stays a rendering of values: the question "is this
-   * clip's media there" is about the folder, and answering it belongs to whoever read the folder.
+   * The *files*, not a precomputed list of clips. Two reasons, and the second is the load-bearing one:
+   * the question is about the folder, so the folder's answer is what should travel; and this set is
+   * tiny and changes only when the folder does, where a set of clip ids changes whenever any clip does
+   * — which during a drag is every pointer move, and re-renders all two hundred rows for nothing.
    */
-  readonly offlineClips?: ReadonlySet<string>;
+  readonly missingAssets?: ReadonlySet<string>;
 
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
@@ -413,7 +416,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                     {...(dropTarget?.track === track.id ? { dropAt: dropTarget.frame } : {})}
                     selectedClips={props.selectedClips}
                     {...(props.strips !== undefined ? { strips: props.strips } : {})}
-                    {...(props.offlineClips !== undefined ? { offlineClips: props.offlineClips } : {})}
+                    {...(props.missingAssets !== undefined ? { missingAssets: props.missingAssets } : {})}
                     {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
                     {...(props.onToggleExpandClip !== undefined
                       ? { onToggleExpandClip: props.onToggleExpandClip }
@@ -1312,7 +1315,7 @@ function TrackLane({
   viewport,
   selectedClips,
   strips,
-  offlineClips,
+  missingAssets,
   expandedClip,
   onToggleExpandClip,
   onClipPointerDown,
@@ -1328,7 +1331,7 @@ function TrackLane({
   readonly dropAt?: FrameIndex;
   readonly selectedClips: ReadonlySet<string>;
   readonly strips?: ReadonlyMap<string, ClipStrip>;
-  readonly offlineClips?: ReadonlySet<string>;
+  readonly missingAssets?: ReadonlySet<string>;
   readonly expandedClip?: ClipId;
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -1374,7 +1377,7 @@ function TrackLane({
             heightPx={laneHeight(track)}
             selected={selectedClips.has(clip.id)}
             {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
-            {...(offlineClips?.has(clip.id) === true ? { offline: true } : {})}
+            {...(isOffline(clip, missingAssets) ? { offline: true } : {})}
             expanded={expandedClip === clip.id}
             {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
             onPointerDown={(clipId, event) => {
@@ -1493,3 +1496,15 @@ export function timelineExtent(document: TimelineDocument): FrameIndex {
 }
 
 export type { Clip };
+
+/**
+ * Whether a clip's file is one the folder does not have.
+ *
+ * Asked per clip against a small set, rather than looked up in a large one built per render. A title
+ * reads no file and is never offline.
+ */
+function isOffline(clip: Clip, missingAssets: ReadonlySet<string> | undefined): boolean {
+  if (missingAssets === undefined || missingAssets.size === 0) return false;
+  const source = clipSource(clip);
+  return source !== undefined && missingAssets.has(source.asset);
+}

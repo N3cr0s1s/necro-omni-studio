@@ -135,7 +135,7 @@ import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js'
 import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
-import { allFiles, availabilityOf, describeAvailability } from '@nos/media';
+import { allFiles, availabilityOf, describeAvailability, filesOnDisk } from '@nos/media';
 import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
@@ -1039,7 +1039,20 @@ export function App(): ReactNode {
    * file that has left the folder shows nothing, and nothing said so — a black frame with no
    * explanation reads as a bug in the editor rather than as a file the user moved.
    */
-  const availability = useMemo(() => availabilityOf(document, tree.tree), [document, tree.tree]);
+  /*
+   * The folder's paths and the cut's needs are memoized apart, because they change at completely
+   * different rates: the tree when the watcher says so, the document on every edit — and during a drag,
+   * on every pointer move.
+   */
+  const onDisk = useMemo(() => filesOnDisk(tree.tree), [tree.tree]);
+  const availability = useMemo(() => availabilityOf(document, onDisk), [document, onDisk]);
+  /*
+   * The set, built once per availability rather than per render.
+   *
+   * Built once per availability rather than per render: a fresh set in the timeline's props changes
+   * identity every render, and during a drag that is every pointer move.
+   */
+  const missingAssets = useMemo(() => new Set(availability.missing), [availability]);
 
   /** The missing path behind the clip being relinked, and the files there are to choose from. */
   const relinkingAsset = useMemo(() => {
@@ -1630,7 +1643,7 @@ export function App(): ReactNode {
                 <Timeline
                   document={drag.document}
                   strips={strips.strips}
-                  offlineClips={new Set(availability.offlineClips)}
+                  missingAssets={missingAssets}
                   onAddTrack={addTrackOfKind}
                   onTrackRemove={removeTrackById}
                   onTrackRename={(id, name) => {
