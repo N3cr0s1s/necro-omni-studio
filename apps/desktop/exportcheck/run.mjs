@@ -20,7 +20,17 @@
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,6 +173,45 @@ try {
   else console.log('✓ a second export in the same session delivers too');
 
   if (errors.length > 0) fail(`the renderer raised ${errors.length}: ${errors[0]}`);
+
+  /*
+   * §4's promise: zipping the folder moves the whole project.
+   *
+   * That holds only while nothing the application writes records a path outside the folder.
+   * `assetPath` enforces it for the document by refusing an absolute path at the brand constructor,
+   * but the provenance sidecars, the mask records, the cache metadata and the rendered mixdown are
+   * written by other code that never passes through it. This reads what a *finished* project actually
+   * contains, which is the only place all of those meet.
+   *
+   * Graph pointers like `/52:3/inputs/seed` are JSON-Pointers into a workflow, not filesystem paths,
+   * and the manifests are full of them.
+   */
+  const wrote = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.json')) wrote.push(full);
+    }
+  };
+  walk(project);
+
+  const escapes = [];
+  for (const file of wrote) {
+    const text = readFileSync(file, 'utf8');
+    for (const [, value] of text.matchAll(/"((?:\/|[A-Za-z]:\\\\)[^"]{3,})"/g)) {
+      // A JSON-Pointer's first segment is a node id — digits, or digits with a colon. A filesystem
+      // path's is a directory name, so the two are told apart without guessing.
+      if (/^\/\d+(?::\d+)?\//.test(value)) continue;
+      escapes.push(`${file.slice(project.length + 1)}: ${value}`);
+    }
+  }
+
+  if (escapes.length > 0) {
+    fail(`the project records ${escapes.length} path(s) outside itself — ${escapes[0]}`);
+  } else {
+    console.log(`✓ the project is self-contained (${wrote.length} files record no outside paths)`);
+  }
   if (!existsSync(delivered)) {
     fail('no file was delivered');
   } else {
