@@ -1647,7 +1647,19 @@ function HairlineGaps({
   readonly viewport: TimelineViewport;
   readonly height: number;
 }): ReactNode {
-  const gaps = trackGaps(track).filter((gap) => {
+  /*
+   * Memoized on the track object.
+   *
+   * `trackGaps` sorts the track's clips, and this renders once per track on every render — which
+   * during a drag is every pointer move, inside a 16 ms budget. The editing layer rebuilds only the
+   * root-to-leaf path of a change and keeps untouched tracks **by reference**, which is exactly what
+   * makes the track itself the right key: the tracks a drag does not touch never re-sort.
+   */
+  const all = useMemo(() => trackGaps(track), [track]);
+
+  // The filter stays outside the memo on purpose: it depends on the zoom, and the list it walks is a
+  // handful of gaps rather than a track's worth of clips.
+  const gaps = all.filter((gap) => {
     if (!isSpanVisible(viewport, spanFromBounds(frameIndex(gap.start), frameIndex(gap.start + gap.frames)))) {
       return false;
     }
