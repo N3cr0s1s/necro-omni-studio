@@ -756,6 +756,14 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   derived from the tree — never stored, because it is true of one machine at one moment.
 - A tree not yet read reports everything **present**. Announcing that every clip is offline for the
   second before the first scan lands is a false alarm when the user can least judge it.
+- A **relink is by asset, not by clip**: the file moved once and the cut did not change, so every clip
+  reading it follows, in one undo step. Per-clip would mean fixing a bed used nine times nine times.
+- It changes **only where the file is**. Someone who moved a file into a subfolder has not asked for
+  their trims back.
+- Candidates match on **file name** and rank by how little of the path changed — but a guess is offered,
+  never applied, and the dialog says how many clips will follow before anything is chosen.
+- Any picker over project files offers only what the application could **type**. `project.json` as a
+  replacement for a clip, or as a script, is offering a mistake.
 - Missing media outranks every other notice: a proxy still shows the picture, a missing file shows
   nothing. And it **names the file** — a count sends someone hunting.
 
