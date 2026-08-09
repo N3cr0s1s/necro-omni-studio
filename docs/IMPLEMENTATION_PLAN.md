@@ -751,6 +751,11 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Project rules (keep these)
 
+- A renderer **cannot name a file on disk**. Electron removed `File.path` so that naming one is a
+  privilege the preload grants; `webUtils.getPathForFile` is synchronous and not a channel, because it
+  reads nothing the renderer did not already hand over.
+- Two routes to the same effect share one routine. The chooser and the drag differ only in how the
+  paths were picked, and separate copiers would eventually name files by different rules.
 - The **main process may import types from the workspace packages, never values**. It is loaded as
   source rather than bundled, so a value import fails to resolve and the application does not start at
   all. Put the rule in the renderer and leave the privileged parts — dialogs, filesystem — to main.
