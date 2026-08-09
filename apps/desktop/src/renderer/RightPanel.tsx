@@ -13,7 +13,6 @@ import {
   type TextChoice,
   acceptSelection,
   currentSelection,
-  waitingTakes,
   exclusiveGroupsOf,
   previewOf,
   selectMember,
@@ -103,6 +102,14 @@ export interface RightPanelProps {
    */
   readonly tab: PanelTab;
   readonly onTabChange: (tab: PanelTab) => void;
+  /**
+   * Takes awaiting a decision, for the count on the Variants tab.
+   *
+   * Passed in rather than derived here, because the shell says the same number in a sentence when a
+   * run finishes. Two derivations of one number drift, and this pair did: when the count learned that
+   * a group already kept from should stop counting, the sentence fell silent and the badge did not.
+   */
+  readonly takesWaiting: number;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
   readonly onAuthorManifest: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
@@ -157,21 +164,13 @@ export function RightPanel(props: RightPanelProps): ReactNode {
   const { tab, onTabChange } = props;
 
   /*
-   * How many takes are waiting on a decision.
+   * How many takes are waiting on a decision, computed by the shell and handed down.
    *
-   * Driving a real generation is what showed this was needed: three takes landed in twelve seconds,
-   * and the generate panel looked exactly as it had before — same "ready", same "Generate 3 variants"
-   * — with nothing on screen saying anything had been produced. The takes were one tab away behind a
-   * label that read `Variants` whether it held three or none, so the obvious next action was to press
-   * Generate again. That is how a folder ends up with sixty takes of which the cut uses two.
-   *
-   * A count on the tab rather than switching to it: yanking the panel out from under someone who is
-   * mid-edit is worse than the silence it would fix.
+   * It was derived here as well as there, and the two drifted the moment one of them learned that a
+   * group the user had already kept from should stop counting: the sentence fell silent and the badge
+   * went on saying three. Driving the real loop is what showed it. One derivation, one caller.
    */
-  const waiting = useMemo(
-    () => waitingTakes(props.runtime.snapshot, props.registry),
-    [props.runtime.snapshot, props.registry],
-  );
+  const waiting = props.takesWaiting;
 
   return (
     <aside aria-label="Inspector" className="flex h-full min-h-0 min-w-0 flex-col">

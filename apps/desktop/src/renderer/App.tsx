@@ -630,6 +630,10 @@ export function App(): ReactNode {
     (outcome: SelectionOutcome, manifest: GeneratorManifest) => {
       if (outcome.kind !== 'accept') return;
 
+      // The group has been answered whichever way the take is used, so the tab stops advertising it.
+      // The picker is untouched: keeping a second take from the same batch still works.
+      runtime.answerGroup(outcome.group);
+
       // A media-browser target means the output belongs in the project folder, not on the timeline —
       // it is already written to `generated/`, and the browser shows it. Inserting anyway would drop a
       // clip the user never asked to place, at whatever position happened to be under the playhead.
@@ -643,7 +647,7 @@ export function App(): ReactNode {
 
       landVariant({ ...outcome, target: outcome.target }, manifest, 'staged');
     },
-    [confirmation, landVariant, tree],
+    [confirmation, landVariant, runtime, tree],
   );
 
   /**
@@ -1077,8 +1081,8 @@ export function App(): ReactNode {
    * A sentence and not a tab switch: moving the panel under someone mid-edit is worse than the silence.
    */
   const takesWaiting = useMemo(
-    () => waitingTakes(runtime.snapshot, library.registry),
-    [runtime.snapshot, library.registry],
+    () => waitingTakes(runtime.snapshot, library.registry, runtime.answeredGroups),
+    [runtime.snapshot, library.registry, runtime.answeredGroups],
   );
   const announcedTakes = useRef(0);
   useEffect(() => {
@@ -1985,6 +1989,7 @@ export function App(): ReactNode {
             maskChoices={maskChoices}
             tab={rightTab}
             onTabChange={setRightTab}
+            takesWaiting={takesWaiting}
             recalled={recalled}
             effectProblems={effects.problems}
             onRenameClip={renameClip}

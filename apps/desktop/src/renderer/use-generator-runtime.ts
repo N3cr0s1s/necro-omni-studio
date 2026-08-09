@@ -57,6 +57,15 @@ export interface GeneratorRuntime {
   cancelGroup(group: JobGroupId): void;
   /** Forgets a group, so discarding a finished one actually removes it from the picker. */
   dismissGroup(group: JobGroupId): void;
+  /**
+   * Groups the user has already kept something from.
+   *
+   * Not in the queue, which is about jobs: whether a person has made up their mind is not a fact about
+   * a job. It lives here because the badge on the Variants tab needs it — a count that keeps saying
+   * three after a take has been kept is truthful and useless, since three really are still available.
+   */
+  readonly answeredGroups: ReadonlySet<string>;
+  answerGroup(group: JobGroupId): void;
 }
 
 const EMPTY_SNAPSHOT: QueueSnapshot = { groups: [], runs: [], activeCount: 0 };
@@ -343,7 +352,37 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   );
 
   const cancelGroup = useCallback((group: JobGroupId) => queue.cancelGroup(group), [queue]);
-  const dismissGroup = useCallback((group: JobGroupId) => queue.dismissGroup(group), [queue]);
 
-  return { mode, detail, error, capabilities, snapshot, gpu, run, cancelGroup, dismissGroup };
+  const [answeredGroups, setAnsweredGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const answerGroup = useCallback((group: JobGroupId) => {
+    setAnsweredGroups((current) => new Set(current).add(group as string));
+  }, []);
+
+  const dismissGroup = useCallback(
+    (group: JobGroupId) => {
+      queue.dismissGroup(group);
+      // Forgotten here too, or the set grows for the life of the session with ids nothing can name.
+      setAnsweredGroups((current) => {
+        if (!current.has(group as string)) return current;
+        const next = new Set(current);
+        next.delete(group as string);
+        return next;
+      });
+    },
+    [queue],
+  );
+
+  return {
+    mode,
+    detail,
+    error,
+    capabilities,
+    snapshot,
+    gpu,
+    run,
+    cancelGroup,
+    dismissGroup,
+    answeredGroups,
+    answerGroup,
+  };
 }

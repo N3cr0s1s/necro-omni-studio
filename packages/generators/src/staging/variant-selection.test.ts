@@ -617,6 +617,28 @@ describe('how many takes are waiting', () => {
     expect(waitingTakes(snapshot([], []), registry)).toBe(0);
   });
 
+  it('falls silent once a take has been kept from the group', () => {
+    /*
+     * Truthful and useless otherwise: three takes really are still available after one is kept, so the
+     * count never falls and the tab nags until the group is dismissed. A badge exists to say there is
+     * something here you have not dealt with.
+     */
+    const runs = [done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')];
+    expect(waitingTakes(snapshot(runs), registry, new Set([group.id as string]))).toBe(0);
+  });
+
+  it('is unmoved by some other group having been answered', () => {
+    const runs = [done('r1', 1, 'a.flac')];
+    expect(waitingTakes(snapshot(runs), registry, new Set(['a different group']))).toBe(1);
+  });
+
+  it('counts again when a new run starts, because that is a new question', () => {
+    // Answering group one must not silence group two: the set is keyed by group for exactly this.
+    const later: JobGroup = { ...group, id: jobGroupId('g2') };
+    const runs = [done('r1', 1, 'a.flac')].map((entry) => ({ ...entry, group: later.id }));
+    expect(waitingTakes(snapshot(runs, [group, later]), registry, new Set([group.id as string]))).toBe(1);
+  });
+
   it('agrees with the selection the panel draws', () => {
     // The two must not disagree: a badge saying three beside a panel showing two is worse than no
     // badge at all, which is the whole reason this is one derivation.

@@ -125,16 +125,24 @@ describe('availability', () => {
     expect(screen.getByRole('button', { name: 'Keep' }).getAttribute('title')).toContain('ready');
   });
 
-  it('keeps discard available throughout, so a slow job is never a trap', () => {
+  it('keeps the way out available throughout, so a slow job is never a trap', () => {
     renderPicker({ selection: selectionOf([run('r1')]) });
-    expect(screen.getByRole('button', { name: 'Discard' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Dismiss all' }).hasAttribute('disabled')).toBe(false);
   });
 
-  it('says discarding keeps the files', () => {
-    // The spec leaves unaccepted variants in `generated/`; a user who thinks Discard deletes them will not
+  it('says the files stay', () => {
+    // The spec leaves unaccepted variants in `generated/`; a user who thinks this deletes them will not
     // press it.
     renderPicker();
-    expect(screen.getByRole('button', { name: 'Discard' }).getAttribute('title')).toContain('kept');
+    expect(screen.getByRole('button', { name: 'Dismiss all' }).getAttribute('title')).toContain('stay');
+  });
+
+  it('says it acts on the whole group, not on the selected take', () => {
+    // "Discard" beside a per-variant "Keep" reads as *discard this variant*, and it is not — someone
+    // rejecting take 2 to compare 1 against 3 pressed it and lost the picker.
+    renderPicker();
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Dismiss all' })).toBeDefined();
   });
 
   it('disables stepping when only one variant is ready', () => {
@@ -262,7 +270,7 @@ describe('interaction', () => {
     renderPicker({ onAccept, onDiscard });
 
     await user.click(screen.getByRole('button', { name: 'Keep' }));
-    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    await user.click(screen.getByRole('button', { name: 'Dismiss all' }));
     expect(onAccept).toHaveBeenCalledTimes(1);
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });

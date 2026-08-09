@@ -656,6 +656,26 @@ list beside it.
 
 ### Generator framework rules (keep these)
 
+**A badge has to track the user's state, not just the data.** After keeping a take, three really are
+still available — so the count kept saying three and the tab nagged until the group was dismissed. A
+badge exists to say *there is something here you have not dealt with*, and a kept take has been dealt
+with. `waitingTakes` takes the groups already answered; the picker is untouched, so keeping a second
+take from the same batch still works.
+
+Whether a person has made up their mind is not a fact about a job, so the answered set lives in the
+runtime hook rather than in the queue — and `dismissGroup` forgets it, or the set grows for the life
+of the session with ids nothing can name.
+
+**"Discard" beside a per-variant "Keep" reads as *discard this variant*, and it was not** — it
+dismissed the whole group. Someone rejecting take 2 to compare 1 against 3 pressed it and lost the
+picker. It says **"Dismiss all"** now, and the tooltip says what survives: everything, since the files
+stay in `generated/`.
+
+**One number, one derivation.** The count was computed in the panel *and* in the shell, and they
+drifted the moment one learned about answered groups: the sentence fell silent while the badge went on
+saying three. Driving the real loop is what showed it — the unit tests were green throughout, because
+each derivation was correct on its own. The shell computes it; the panel takes it as a prop.
+
 **A finished run has to announce itself.** Found by driving a real generation against the live ComfyUI
 and reading every word: three takes landed in twelve seconds and the application said *nothing*. The
 generate panel was unchanged — same "ready", same "Generate 3 variants" — the tab holding them read

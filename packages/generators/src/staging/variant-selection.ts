@@ -185,12 +185,21 @@ export function currentSelection(
  *
  * Zero when there is nothing to judge — including while a run is still going, because a take that has
  * not landed is not one the user can do anything about yet.
+ *
+ * `answered` is the groups the user has already kept something from. Without it the badge is truthful
+ * and useless: three takes really are still available after you keep one, so the count never falls and
+ * the tab nags until the group is dismissed. A badge exists to say *there is something here you have
+ * not dealt with*, and once a take has been kept, that has been dealt with. The picker still shows all
+ * three, so keeping a second is unaffected — only the nagging stops.
  */
 export function waitingTakes(
   snapshot: QueueSnapshot,
   registry: { manifestFor(id: GeneratorId): GeneratorManifest | undefined } | undefined,
+  answered: ReadonlySet<string> = new Set(),
 ): number {
-  return currentSelection(snapshot, registry)?.readyCount ?? 0;
+  const selection = currentSelection(snapshot, registry);
+  if (selection === undefined || answered.has(selection.group as string)) return 0;
+  return selection.readyCount;
 }
 
 export function candidateKey(run: JobRunId, index: number): string {

@@ -225,13 +225,19 @@ export function VariantPicker({
           >
             Keep
           </Button>
+          {/*
+            "Discard" beside a per-variant "Keep" reads as *discard this variant*, and it is not: it
+            dismisses the whole group. Someone rejecting take 2 to compare 1 against 3 pressed it and
+            lost the picker. The word says the scope now, and the tooltip says what survives — which is
+            everything, since the files stay in `generated/`.
+          */}
           <Button
             variant="ghost"
             size="sm"
             onClick={onDiscard}
-            title="Remove the placeholder; generated files are kept (Esc)"
+            title="Stop showing these takes; the generated files stay in the project (Esc)"
           >
-            Discard
+            Dismiss all
           </Button>
         </div>
       </CardContent>
