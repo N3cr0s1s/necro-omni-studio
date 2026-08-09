@@ -107,6 +107,38 @@ export function beatAt(beats: readonly StoryBeat[], frame: number): StoryBeat | 
 }
 
 /**
+ * Where a beat added at a frame should actually start.
+ *
+ * The frame asked for, unless a beat already starts exactly there — in which case the end of the last
+ * beat covering it, so the new one lands *after* what is already planned.
+ *
+ * This exists because of what pressing "add" twice looks like without it. Beats are added at the
+ * playhead, the playhead does not move on its own, and two beats starting on the same frame are drawn
+ * stacked — so a user pressing the button three times gets three beats they cannot tell apart, on a
+ * board that appears to have grown taller for no reason. Overlap stays *possible*, because two ideas
+ * about one moment is a real thing to want; it just stops being what happens by accident.
+ *
+ * Bounded by the number of beats: each pass resolves at least one clash, so a chain of beats each
+ * starting where the last ends terminates rather than spinning.
+ */
+export function nextBeatStart(beats: readonly StoryBeat[], at: number): number {
+  let candidate = at;
+
+  for (let pass = 0; pass <= beats.length; pass += 1) {
+    const clash = beats.some((beat) => (beat.span.start as number) === candidate);
+    if (!clash) return candidate;
+
+    candidate = beats.reduce((furthest, beat) => {
+      const start = beat.span.start as number;
+      const end = start + (beat.span.duration as number);
+      return start <= candidate && candidate < end ? Math.max(furthest, end) : furthest;
+    }, candidate + 1);
+  }
+
+  return candidate;
+}
+
+/**
  * Every asset any beat references, once each, in first-use order.
  *
  * Named apart from the document's own `referencedAssets`, which answers what the *cut* reads. A beat's

@@ -69,6 +69,7 @@ import {
   waitingTakes,
 } from '@nos/generators';
 import {
+  ClapperboardIcon,
   FilmIcon,
   ExternalLinkIcon,
   FileCode2Icon,
@@ -131,6 +132,7 @@ import { describeAutosave, useAutosave } from './use-autosave.js';
 import { WorkspaceTabs } from '@nos/ui';
 import { EffectAuthoring } from './EffectAuthoring.js';
 import { TextEditorTab } from './TextEditorTab.js';
+import { StoryTab } from './StoryTab.js';
 import { actionFor, effectForShader } from './file-open.js';
 import {
   type Workspace,
@@ -1775,6 +1777,19 @@ export function App(): ReactNode {
         />
       )}
 
+      {showing.kind === 'story' && (
+        <StoryTab
+          document={document}
+          playhead={playhead}
+          onChangeDocument={commitDocument}
+          onSeek={transport.seek}
+          // What the media browser has selected: attaching a reference is one gesture after looking at
+          // the file, rather than a second file tree that would have to be kept in step with the first.
+          {...(browserSelection !== undefined ? { attachable: browserSelection as AssetPath } : {})}
+          onOpenAsset={(asset) => setBrowserSelection(asset)}
+        />
+      )}
+
       {showing.kind === 'effect' && (
         <EffectAuthoring
           // The project's own effects, so saving cannot silently replace one — the id is two filenames
@@ -1845,6 +1860,7 @@ export function App(): ReactNode {
           onShowShortcuts={() => setShortcutsOpen(true)}
           themeId={appSettings.settings?.theme}
           onChangeTheme={(theme) => appSettings.update({ theme })}
+          onOpenStory={() => setWorkspace((current) => openTab(current, { kind: 'story' }))}
         />
 
         <ResizablePanelGroup
@@ -2251,6 +2267,7 @@ function TitleBar({
   onShowShortcuts,
   themeId,
   onChangeTheme,
+  onOpenStory,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -2262,6 +2279,7 @@ function TitleBar({
   readonly onShowShortcuts: () => void;
   readonly themeId: string | undefined;
   readonly onChangeTheme: (theme: string) => void;
+  readonly onOpenStory: () => void;
 }): ReactNode {
   return (
     <header className="flex h-11 flex-none items-center gap-3 border-b px-4">
@@ -2300,6 +2318,12 @@ function TitleBar({
       <ThemePicker themeId={themeId} onChange={onChangeTheme} />
       <ModeToggle />
       <Separator orientation="vertical" className="h-4" />
+      {/* A button, not only a menu item. Issue #32 was somebody unable to find the effect editor at
+          all, and a board nothing points at is a board nobody opens. */}
+      <Button variant="ghost" size="sm" onClick={onOpenStory} disabled={project === undefined}>
+        <ClapperboardIcon />
+        Story
+      </Button>
       <Button variant="ghost" size="sm" onClick={onOpen}>
         <FolderOpenIcon />
         Open project
@@ -2437,6 +2461,8 @@ function TabGlyph({ kind }: { readonly kind: WorkspaceTabKind }): ReactNode {
       return <FileCode2Icon className="size-3.5" />;
     case 'text':
       return <FileJsonIcon className="size-3.5" />;
+    case 'story':
+      return <ClapperboardIcon className="size-3.5" />;
     default:
       return <FilmIcon className="size-3.5" />;
   }

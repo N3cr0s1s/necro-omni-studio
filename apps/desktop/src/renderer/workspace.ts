@@ -19,7 +19,7 @@
  * instead, which is also why it is always first.
  */
 
-export type WorkspaceTabKind = 'editor' | 'effect' | 'text';
+export type WorkspaceTabKind = 'editor' | 'effect' | 'text' | 'story';
 
 /** What a kind is, so the bar can draw a tab without knowing what is inside it. */
 export interface WorkspaceTabDescriptor {
@@ -34,6 +34,7 @@ export const WORKSPACE_TAB_KINDS: readonly WorkspaceTabDescriptor[] = [
   { kind: 'editor', fallbackTitle: 'Editor', closable: false },
   { kind: 'effect', fallbackTitle: 'New effect', closable: true },
   { kind: 'text', fallbackTitle: 'File', closable: true },
+  { kind: 'story', fallbackTitle: 'Story', closable: true },
 ];
 
 export function descriptorFor(kind: WorkspaceTabKind): WorkspaceTabDescriptor {

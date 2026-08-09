@@ -78,6 +78,24 @@ const userData = join(work, 'user-data');
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: project }, null, 2));
 
+/*
+ * Build before driving anything.
+ *
+ * `electron .` loads whatever is in `dist/`, so without this the harness happily tests the *last*
+ * build and reports a clean run against code that is not the code in the working tree. That is worse
+ * than no harness: it is a green result that means nothing, and it hid a whole feature's absence
+ * exactly once before this line existed. `NOS_SKIP_BUILD=1` is there for re-running the checks
+ * against a build that was just made.
+ */
+if (process.env.NOS_SKIP_BUILD !== '1') {
+  const built = spawnSync('npm', ['run', 'build'], { cwd: desktop, stdio: 'inherit' });
+  if (built.status !== 0) {
+    fail('the application does not build — nothing below this line would have meant anything');
+    process.exit(1);
+  }
+  pass('the application builds');
+}
+
 /** Starts a shell against a given `userData` and connects to it. */
 async function launch(dataDir) {
   const port = await freePort();
@@ -477,6 +495,70 @@ try {
       .catch(() => undefined);
     await page.getByRole('tab', { name: 'Effects' }).click();
     await page.waitForTimeout(900);
+  }
+
+  /*
+   * The story board, per issue #33.
+   *
+   * Driven the whole way rather than merely opened: add a beat, write it, colour it, and read the
+   * block back. Everything the board does goes through the document, so a beat that is added but not
+   * drawn — or drawn but not committed — is the failure mode worth catching, and neither shows up in a
+   * unit test that renders the tab on its own.
+   */
+  await page.getByRole('button', { name: 'Story' }).first().click();
+  await page.waitForTimeout(1200);
+
+  if ((await page.getByRole('tab', { name: 'Story' }).count()) === 0) {
+    fail('the Story button did not open a story tab');
+  } else {
+    pass('the story board opens in its own tab');
+
+    await page.getByRole('button', { name: 'Add beat' }).click();
+    await page.waitForTimeout(600);
+
+    // Exact: `getByLabel` matches substrings, and "Untitled beat" contains "title".
+    const title = page.getByLabel('Title', { exact: true });
+    if ((await title.count()) === 0) {
+      fail('adding a beat did not select it for writing');
+    } else {
+      pass('a new beat is selected, ready to be written');
+
+      await title.fill('Wide shot of the dunes');
+      await page.getByLabel('Notes', { exact: true }).fill('# Late light\n\nSlow push in.');
+      await page.waitForTimeout(500);
+
+      // On the *block*, not just in the field: the board and the editor read one document, and a
+      // title that only exists in the input is one the plan does not have.
+      if ((await page.getByLabel('Wide shot of the dunes').count()) > 0) {
+        pass('and what is typed appears on the block');
+      } else {
+        fail('a beat’s title never reached the board');
+      }
+
+      await page.getByLabel('Accent 3').click();
+      await page.waitForTimeout(400);
+      if ((await page.locator('[aria-label="Accent 3"][aria-pressed="true"]').count()) > 0) {
+        pass('an accent can be chosen');
+      } else {
+        fail('choosing an accent did not take');
+      }
+
+      /*
+       * The round trip. A plan that is not in the file it travels with is a plan that is lost the
+       * next time the project is opened — which is the whole argument for putting beats in the
+       * document rather than beside it, and it is worth checking rather than asserting.
+       */
+      await page.keyboard.press('Control+s');
+      await page.waitForTimeout(2500);
+
+      const saved = readFileSync(join(project, 'project.json'), 'utf8');
+      if (saved.includes('Wide shot of the dunes')) pass('and the beat is saved into the project');
+      else fail('a written beat never reached project.json');
+    }
+
+    // Put the window back the way the checks after this one expect to find it.
+    await page.getByRole('tab', { name: 'Editor' }).click();
+    await page.waitForTimeout(800);
   }
 
   // The dialogs, each of which is a tree that never mounts until it is asked for.
