@@ -270,6 +270,7 @@ export function App(): ReactNode {
     graphs: graphsRef,
     projectRoot: project?.root,
     variantMaximum: appSettings.settings?.variantMaximum,
+    backendUrl: appSettings.settings?.backendUrl,
   });
   const library = useGeneratorLibrary(project?.root, {
     ...(runtime.capabilities !== undefined ? { installedNodeClasses: runtime.capabilities.nodeClasses } : {}),

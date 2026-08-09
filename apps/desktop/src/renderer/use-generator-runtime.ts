@@ -91,6 +91,14 @@ export interface RuntimeOptions {
    * user may have changed would refuse work they had asked to be allowed.
    */
   readonly variantMaximum?: number | undefined;
+  /**
+   * The stored backend address, so a change is noticed.
+   *
+   * Not used as the endpoint directly: the main process resolves it against the environment and the
+   * built-in default, and a renderer that decided for itself would disagree with the process actually
+   * making the calls.
+   */
+  readonly backendUrl?: string | undefined;
 }
 
 export const DEFAULT_COMFYUI_ENDPOINT = 'http://127.0.0.1:8188';
@@ -149,12 +157,17 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const projectRoot = options.projectRoot;
   const variantMaximum = options.variantMaximum;
 
-  // The endpoint is a main-process setting, so it is asked for rather than assumed.
+  /*
+   * The endpoint is a main-process setting, so it is asked for rather than assumed — and asked again
+   * whenever the stored address changes, so pointing the editor at another machine takes effect
+   * without a restart. Re-probing follows on its own, because the endpoint is what the probe depends
+   * on.
+   */
   useEffect(() => {
     const api = bridge();
     if (api === undefined) return;
     void api.backendConfig().then((config) => setConfigured(config.baseUrl));
-  }, []);
+  }, [options.backendUrl]);
 
   const proxyFetch = useMemo(() => {
     const api = bridge();

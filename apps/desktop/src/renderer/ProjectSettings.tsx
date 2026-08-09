@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@nos/ui/components/ui/alert
 import { Button } from '@nos/ui/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Input } from '@nos/ui/components/ui/input';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { NumberField } from '@nos/ui';
 import { type AppSettings, VARIANT_MAXIMUM_RANGE } from '../main/app-settings.js';
@@ -236,6 +237,26 @@ export function ProjectSettings({
           </Field>
           <p className="font-mono text-xs text-muted-foreground">
             a ceiling for every project on this machine — a manifest still decides how many it wants
+          </p>
+
+          <Field orientation="horizontal">
+            <FieldLabel className="text-xs" htmlFor="backend-url">
+              Backend
+            </FieldLabel>
+            <Input
+              id="backend-url"
+              aria-label="Backend address"
+              placeholder="http://127.0.0.1:8188"
+              defaultValue={appSettings.backendUrl}
+              // On blur rather than per keystroke: `http://1` is a valid address and would be stored,
+              // and every later character would be a new one — pointing the backend at a different
+              // machine on the way to typing the right one.
+              onBlur={(event) => onChangeAppSettings?.({ backendUrl: event.target.value })}
+              className="ml-auto w-52 font-mono text-xs"
+            />
+          </Field>
+          <p className="font-mono text-xs text-muted-foreground">
+            where ComfyUI is — leave it empty for the local default
           </p>
         </>
       )}

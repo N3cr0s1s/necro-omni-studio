@@ -49,7 +49,7 @@ describe('reading what was on disk', () => {
 });
 
 describe('applying a change', () => {
-  const current = { variantMaximum: 5 };
+  const current = { variantMaximum: 5, backendUrl: 'http://127.0.0.1:9000' };
 
   it('changes what was named', () => {
     expect(mergeSettings(current, { variantMaximum: 2 }).variantMaximum).toBe(2);
@@ -69,5 +69,47 @@ describe('applying a change', () => {
 
   it('ignores a patch that is not an object at all', () => {
     expect(mergeSettings(current, undefined)).toEqual(current);
+  });
+});
+
+describe('where the backend is', () => {
+  it('is empty by default, which means wherever the default is', () => {
+    // Not the address itself: storing a copy would freeze today's default into every settings file
+    // ever written.
+    expect(DEFAULT_SETTINGS.backendUrl).toBe('');
+  });
+
+  it('keeps an http or https address', () => {
+    expect(parseSettings({ backendUrl: 'http://10.0.0.4:8188' }).backendUrl).toBe('http://10.0.0.4:8188');
+    expect(parseSettings({ backendUrl: 'https://comfy.example' }).backendUrl).toBe('https://comfy.example');
+  });
+
+  it('drops a trailing slash, so one path is not joined twice', () => {
+    expect(parseSettings({ backendUrl: 'http://10.0.0.4:8188/' }).backendUrl).toBe('http://10.0.0.4:8188');
+  });
+
+  it('refuses a scheme that is not http, which the renderer would hand to fetch', () => {
+    // A settings file is exactly the kind of thing that gets pasted into.
+    expect(parseSettings({ backendUrl: 'file:///etc/passwd' }).backendUrl).toBe('');
+    expect(parseSettings({ backendUrl: 'javascript:alert(1)' }).backendUrl).toBe('');
+  });
+
+  it('refuses something that is not an address at all', () => {
+    expect(parseSettings({ backendUrl: 'not a url' }).backendUrl).toBe('');
+    expect(parseSettings({ backendUrl: 42 }).backendUrl).toBe('');
+  });
+
+  it('lets the field be cleared, which is how it says "use the default"', () => {
+    expect(
+      mergeSettings({ variantMaximum: 3, backendUrl: 'http://x.test' }, { backendUrl: '' }).backendUrl,
+    ).toBe('');
+  });
+
+  it('keeps the current address when a change is refused', () => {
+    const kept = mergeSettings(
+      { variantMaximum: 3, backendUrl: 'http://x.test' },
+      { backendUrl: 'file:///x' },
+    );
+    expect(kept.backendUrl).toBe('http://x.test');
   });
 });

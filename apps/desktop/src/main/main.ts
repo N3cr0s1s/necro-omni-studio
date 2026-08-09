@@ -497,7 +497,9 @@ function registerHandlers(): void {
 
   ipcMain.handle(IPC.sidecarInfo, (): SidecarInfo => session.info);
 
-  ipcMain.handle(IPC.backendConfig, (): BackendConfig => backendConfig());
+  ipcMain.handle(IPC.backendConfig, async (): Promise<BackendConfig> =>
+    backendConfig(await readAppSettings()),
+  );
 
   ipcMain.handle(
     IPC.exportFrames,
@@ -531,7 +533,7 @@ function registerHandlers(): void {
     IPC.backendDownload,
     async (_event, path: unknown, destination: unknown): Promise<BackendResponse> => {
       const target = resolveInProject(requireProject(), requireString(destination));
-      const { baseUrl } = backendConfig();
+      const { baseUrl } = backendConfig(await readAppSettings());
 
       try {
         const response = await fetch(`${baseUrl}${requireBackendPath(path)}`, {
@@ -702,8 +704,21 @@ function describeFileError(error: unknown, path: string): string {
   }
 }
 
-function backendConfig(): BackendConfig {
-  const baseUrl = (process.env['NOS_COMFYUI_URL'] ?? 'http://127.0.0.1:8188').replace(/\/+$/, '');
+/**
+ * Where the backend is.
+ *
+ * The stored setting first, then the environment, then the local default. §3 says the endpoints are
+ * configurable, and until the setting existed that meant "configurable by whoever launches the
+ * process" — not by the person using it.
+ *
+ * The environment still wins over the built-in default, so a scripted or containerised launch that
+ * sets `NOS_COMFYUI_URL` keeps working; the user's own choice wins over both, because it is the more
+ * deliberate of the two.
+ */
+function backendConfig(stored: AppSettings): BackendConfig {
+  const baseUrl = (
+    stored.backendUrl !== '' ? stored.backendUrl : (process.env['NOS_COMFYUI_URL'] ?? 'http://127.0.0.1:8188')
+  ).replace(/\/+$/, '');
   return { baseUrl, authenticated: process.env['NOS_COMFYUI_USER'] !== undefined };
 }
 
@@ -722,7 +737,9 @@ function backendAuthHeaders(): Record<string, string> {
  * Proxying also keeps basic-auth credentials out of the page.
  */
 async function callBackend(path: string, init: RequestInit): Promise<BackendResponse> {
-  const { baseUrl } = backendConfig();
+  // Read per call rather than cached: the address can change while the application is running, and a
+  // cached one would keep every later request pointed at the machine the user just moved away from.
+  const { baseUrl } = backendConfig(await readAppSettings());
   try {
     const response = await fetch(`${baseUrl}${path}`, init);
     return { ok: response.ok, status: response.status, body: await response.text() };

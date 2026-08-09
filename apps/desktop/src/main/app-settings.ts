@@ -20,6 +20,14 @@
 
 export interface AppSettings {
   /**
+   * Where ComfyUI is, per §3's "a backend endpointok konfigurálhatók".
+   *
+   * It was read from the environment and nowhere else, which makes it configurable only by whoever
+   * launches the process — not by the person using it. An empty string means "wherever the default
+   * is", so clearing the field returns to it rather than pointing at nothing.
+   */
+  readonly backendUrl: string;
+  /**
    * The most variants any single run may produce, whatever a manifest asks for.
    *
    * A ceiling rather than a count: the manifest still decides how many a generator *wants*, and a run
@@ -34,6 +42,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Eight, which is above every manifest default in the spec (audio 3, video 1) and far enough above
   // them to be a safety rail rather than a limit anyone meets by accident.
   variantMaximum: 8,
+  // Empty rather than the address itself: the default belongs to whoever resolves it, and storing a
+  // copy here would freeze today's default into every settings file ever written.
+  backendUrl: '',
 };
 
 /** The narrowest and widest a cap can usefully be. One means "never batch"; the ceiling is a rail. */
@@ -56,6 +67,7 @@ export function parseSettings(value: unknown): AppSettings {
       VARIANT_MAXIMUM_RANGE.max,
       DEFAULT_SETTINGS.variantMaximum,
     ),
+    backendUrl: httpUrl(raw['backendUrl'], DEFAULT_SETTINGS.backendUrl),
   };
 }
 
@@ -80,7 +92,29 @@ export function mergeSettings(current: AppSettings, patch: unknown): AppSettings
             VARIANT_MAXIMUM_RANGE.max,
             current.variantMaximum,
           ),
+    backendUrl:
+      raw['backendUrl'] === undefined ? current.backendUrl : httpUrl(raw['backendUrl'], current.backendUrl),
   };
+}
+
+/**
+ * An `http` or `https` address, trailing slashes removed, or the fallback.
+ *
+ * The scheme is checked rather than assumed: a stored `file:` or `javascript:` would be handed to
+ * `fetch` by the renderer, and a settings file is exactly the kind of thing that gets pasted into.
+ * Empty is allowed and meaningful — it is how the field says "use the default".
+ */
+function httpUrl(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim().replace(/\/+$/, '');
+  if (trimmed === '') return '';
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? trimmed : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /**
