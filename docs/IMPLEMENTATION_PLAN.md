@@ -3861,3 +3861,34 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   that can confirm nothing but the refusal. The harness slips the clip six frames in first, through the
   control a user would use, and then drives the edit: offered 12 frames, made a 12-frame overlap, both
   sides ramped.
+
+- 2026-08-10: A dead end the drop gesture created, and a check that failed while passing.
+
+  **Turning a dropped dissolve into a wipe was impossible.** Dropping one clip onto another leaves the
+  pair *overlapping* rather than meeting at a cut, so the transition panel found no neighbour and
+  `addTransition` refused as "not adjacent" — the user had to undo the drop and go back through the
+  dialog, which is the dead end the drop gesture was added to remove. Closing it needed one rule first:
+
+  **A transition governs the blend inside its own span.** Both mechanisms mix two pictures, and a clip
+  can now carry a ramp *and* sit under a transition. Applying both blends twice — the incoming picture
+  arriving at half opacity into a shader already mixing it in, which reads as a dip rather than a cut.
+  The plan ignores the ramp there rather than the document dropping it: the same fade still governs the
+  clip's other edge, and a transition removed later must leave it doing what it always did. **A rule
+  the plan applies is reversible; a document edit is not.**
+
+  An existing overlap then becomes the transition's span with neither edge moving. The geometry is the
+  user's, already placed, and asking for a different length is asking to move a clip — which is not
+  what naming an effect means.
+
+  **And `exportcheck` reported red with every assertion green.** The shell is sent SIGTERM a line above
+  the cleanup, and its renderers were still writing to `user-data` while the remove walked the tree, so
+  it threw `ENOTEMPTY`. `smokecheck` already retried there. The fix existing in one harness and not its
+  neighbour is the same shape as every other gap here — which is why the comment now names both.
+
+  A check that falls over in its own teardown reports a green result as red. That is worse than not
+  cleaning up, and it is worth saying out loud rather than letting the red line stand as evidence of
+  something it was not.
+
+  Also: **Fit frames the selection first**, then the marked range, then everything — three ways of
+  saying "this bit", ordered rather than combined, because a union of them would frame a stretch the
+  user never indicated.
