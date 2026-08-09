@@ -31,3 +31,4 @@ export * from './trim-group.js';
 export * from './fade-ops.js';
 export * from './move-crossfade.js';
 export * from './close-gap.js';
+export * from './crossfade-at-cut.js';

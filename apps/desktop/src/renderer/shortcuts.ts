@@ -50,6 +50,12 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
         command: 'close-gap',
         note: 'the one frame of black you cannot see',
       },
+      {
+        keys: ['Shift', 'F'],
+        action: 'Crossfade at the cut',
+        command: 'crossfade-at-cut',
+        note: 'grows both clips into their handles, so the cut keeps its timing',
+      },
       { keys: ['Escape'], action: 'Clear the selection' },
     ],
   },

@@ -52,6 +52,9 @@ import {
   toggleTrackFlag,
   closeAllGaps,
   closeGapBefore,
+  crossfadeAtCut,
+  defaultCrossfadeFrames,
+  maxCrossfadeAtCut,
   eligibleTracksFor,
   moveWithCrossfades,
   withLinkedClips,
@@ -1540,6 +1543,20 @@ export function App(): ReactNode {
           setRightTab('clip');
           setRenamingClip(target.clip);
           break;
+        case 'crossfade-at-cut':
+          if (target.clip !== undefined) {
+            const current = store.getDocument();
+            // The length the menu offered, recomputed from the same function the row used so the two
+            // cannot disagree about what this cut can carry.
+            const frames = Math.min(
+              defaultCrossfadeFrames(current.frameRate),
+              maxCrossfadeAtCut(current, target.clip),
+            );
+            const made = crossfadeAtCut({ document: current, clip: target.clip, frames });
+            if (made.ok) commitDocument('crossfade at the cut', made.value);
+            else setError(describeEditError(made.error));
+          }
+          break;
         case 'close-gap':
           if (target.clip !== undefined) {
             const closed = closeGapBefore(store.getDocument(), target.clip);
@@ -1601,6 +1618,16 @@ export function App(): ReactNode {
           hasAttributes: clipEdits.attributeSummary !== undefined,
           offline: target.clip !== undefined && availability.isOffline(target.clip),
           canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
+          // Computed from the same function the action calls, so the row cannot promise a fade the
+          // edit then refuses. Zero means the cut cannot carry one at all, and the row says so by
+          // being offered without a length rather than vanishing.
+          ...(target.clip !== undefined
+            ? (() => {
+                const room = maxCrossfadeAtCut(document, target.clip);
+                const frames = Math.min(defaultCrossfadeFrames(document.frameRate), room);
+                return frames >= 2 ? { crossfadeFrames: frames } : {};
+              })()
+            : {}),
           ...(target.track !== undefined
             ? {
                 canMoveTrackUp: canMoveTrack(document, target.track, -1),

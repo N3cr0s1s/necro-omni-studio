@@ -342,3 +342,29 @@ describe('closing a gap', () => {
     expect(item(offLane, 'close-track-gaps')?.disabled).toBe(true);
   });
 });
+
+/**
+ * A crossfade at the cut.
+ *
+ * The half of #38 that keeps the sequence's length. The row states the length it would make, because
+ * a cut with little material to spare should offer a short fade rather than a refusal.
+ */
+describe('crossfading at a cut', () => {
+  it('states the length it would make', () => {
+    const items = clipMenuItems(state({ crossfadeFrames: 15 }));
+    expect(item(items, 'crossfade-at-cut')?.label).toBe('Crossfade at the cut (15 f)');
+    expect(item(items, 'crossfade-at-cut')?.disabled).toBe(false);
+  });
+
+  it('is offered disabled where the cut cannot carry one, rather than vanishing', () => {
+    // A row that disappears is one the user cannot learn exists; a disabled one says the gesture is
+    // real and this cut is not ready for it.
+    const items = clipMenuItems(state());
+    expect(item(items, 'crossfade-at-cut')?.disabled).toBe(true);
+    expect(item(items, 'crossfade-at-cut')?.label).toBe('Crossfade at the cut');
+  });
+
+  it('carries its shortcut, since this is a keyboard gesture first', () => {
+    expect(item(clipMenuItems(state({ crossfadeFrames: 15 })), 'crossfade-at-cut')?.shortcut).toBeDefined();
+  });
+});

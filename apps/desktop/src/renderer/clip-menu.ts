@@ -12,6 +12,7 @@ import {
   PaletteIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  BlendIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronsLeftIcon,
@@ -58,6 +59,14 @@ export interface ClipMenuState {
   /** True when removing closes the gap, so the label can say which removal this is. */
   readonly ripple: boolean;
   /**
+   * The crossfade the clicked cut would get, in frames, or absent when it cannot have one.
+   *
+   * Decided by the caller because it depends on how much material lies beyond each edge, which is
+   * probe metadata rather than document state — the same reason `SourceBoundsResolver` is injected
+   * into every trim.
+   */
+  readonly crossfadeFrames?: number | undefined;
+  /**
    * Whether the clicked lane has a neighbour of its own kind to swap with.
    *
    * Decided by the caller, from the document, so the row and the action cannot disagree about
@@ -97,6 +106,7 @@ export const CLIP_MENU_ACTIONS = [
   'paste-attributes',
   'close-gap',
   'close-track-gaps',
+  'crossfade-at-cut',
   'remove',
 ] as const;
 
@@ -109,6 +119,13 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
   const enabled = located?.clip.enabled ?? true;
   const nothing = state.selectionSize === 0 && target === undefined;
   const gap = target === undefined ? undefined : gapBefore(state.document, target);
+  /*
+   * How long a crossfade this cut could carry, or `undefined` for none at all.
+   *
+   * Decided by the caller, which knows how long the sources are — the document does not, and a menu
+   * that offered a fade the material cannot supply would be a row that refuses when pressed.
+   */
+  const crossfade = state.crossfadeFrames;
   const track = state.track;
   // The last of its kind cannot go: a sequence with no video track has nowhere to drop a video, and
   // the user's next action after deleting it would be to create one.
@@ -272,6 +289,25 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
      * what it found. Offered only when there is one, from the same function the action calls, so a row
      * that is enabled cannot then do nothing.
      */
+    /*
+     * A crossfade at the cut, per issue #38 — the half that keeps the sequence's length.
+     *
+     * Dropping a clip onto its neighbour is the other half and makes the cut shorter by the overlap.
+     * Both are wanted, and which one a person means is decided by whether the cut is already timed.
+     *
+     * The row states the length it would make, so a cut with little material to spare offers a short
+     * fade rather than a refusal — "there is not enough" is true and unhelpful next to "six frames is
+     * all this cut has".
+     */
+    {
+      id: 'crossfade-at-cut',
+      label: crossfade === undefined ? 'Crossfade at the cut' : `Crossfade at the cut (${crossfade} f)`,
+      icon: BlendIcon,
+      shortcut: shortcutLabel('crossfade-at-cut'),
+      disabled: crossfade === undefined,
+      separated: true,
+    },
+
     {
       id: 'close-gap',
       label: gap === undefined ? 'Close the gap' : `Close the gap (${gap.frames} f)`,

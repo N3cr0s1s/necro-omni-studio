@@ -16,6 +16,9 @@ import {
   allClips,
   clearWorkRange,
   closeGapBefore,
+  crossfadeAtCut,
+  defaultCrossfadeFrames,
+  maxCrossfadeAtCut,
   copyAttributes,
   copyClips,
   describeAttributes,
@@ -66,6 +69,14 @@ export interface ClipEdits {
    * between a fix and a chore.
    */
   closeGap(): void;
+  /**
+   * Crossfades the cut after the selected clip, growing both clips into their handles.
+   *
+   * The half of the crossfade that keeps the sequence's timing — dropping a clip onto its neighbour
+   * is the other half and shortens it. Which one a person means is decided by whether the cut is
+   * already where they want it, so both are offered rather than one being chosen for them.
+   */
+  crossfadeAtCut(): void;
   /**
    * Removes the marked in/out range from every unlocked track and closes the gaps.
    *
@@ -216,6 +227,27 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
             return current;
           }
           return closed.value;
+        });
+      },
+
+      crossfadeAtCut() {
+        const { store, selected, onReject } = latest.current;
+        const target = [...selected][0] as ClipId | undefined;
+        if (target === undefined) return;
+
+        store.commit('crossfade at the cut', (current) => {
+          // The length is recomputed here rather than passed in, so the keyboard and the menu row
+          // cannot disagree about what this cut can carry.
+          const frames = Math.min(
+            defaultCrossfadeFrames(current.frameRate),
+            maxCrossfadeAtCut(current, target),
+          );
+          const made = crossfadeAtCut({ document: current, clip: target, frames });
+          if (!made.ok) {
+            onReject(describeEditError(made.error));
+            return current;
+          }
+          return made.value;
         });
       },
 
@@ -465,6 +497,13 @@ function useEditKeys(actions: EditActions): void {
         case 'g':
         case 'G':
           current.closeGap();
+          break;
+        case 'f':
+        case 'F':
+          // Shift only: bare `F` fits the sequence to the window, which is one of the bindings a
+          // person uses most, and taking it for a rarer edit would be a poor trade.
+          if (!event.shiftKey) return;
+          current.crossfadeAtCut();
           break;
         default:
           return;
