@@ -58,6 +58,24 @@ const checks = {
   // square fixture hides.
   'the mask is not transposed':
     near(r?.decodedMask?.top?.[0] ?? -1, 0) && near(r?.decodedMask?.bottom?.[0] ?? -1, 0),
+
+  /*
+   * The dissolve an overlap makes, read as pixels.
+   *
+   * Every layer under this is unit-tested and none of them can say what the frame looks like: two
+   * clips at the right opacities composited in the wrong order is a plausible plan and a wrong
+   * picture. Outside the overlap each shot is whole; halfway through it the frame is half of each.
+   */
+  'before the overlap the outgoing shot is whole':
+    near(r?.dissolve?.before?.[0] ?? -1, 255) && near(r?.dissolve?.before?.[2] ?? -1, 0),
+  'after it the incoming shot is whole':
+    near(r?.dissolve?.after?.[2] ?? -1, 255) && near(r?.dissolve?.after?.[0] ?? -1, 0),
+  'halfway through, the frame is half of each':
+    near(r?.dissolve?.middle?.[0] ?? -1, 128) && near(r?.dissolve?.middle?.[2] ?? -1, 128),
+  // A dissolve that let the empty frame show through would read darker than either shot. The two
+  // channels summing to a whole one is what says the picture never went dark in the middle.
+  'the dissolve never goes dark': (r?.dissolve?.middle?.[0] ?? 0) + (r?.dissolve?.middle?.[2] ?? 0) > 235,
+  'the dissolve raises no GL error': r?.dissolve?.glError === 0,
 };
 const failed = Object.entries(checks)
   .filter(([, ok]) => !ok)

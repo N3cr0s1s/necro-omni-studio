@@ -21,7 +21,24 @@ import {
   createRenderTargetPool,
   describeShaderError,
 } from '../src/index.js';
-import { clipId, effectId, effectInstanceId, frameIndex, maskId } from '@nos/core';
+import {
+  type TimelineDocument,
+  type VideoTrack,
+  FRAME_RATES,
+  assetPath,
+  clipId,
+  createDocument,
+  effectId,
+  effectInstanceId,
+  frameIndex,
+  projectId,
+  sequenceId,
+  spanFromBounds,
+  staticNumber,
+  trackId,
+  maskId,
+} from '@nos/core';
+import { buildRenderPlan } from '../src/index.js';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { encodeRle, toRgba } from '@nos/masks';
 
@@ -214,6 +231,53 @@ function readAt(x: number, y: number): number[] {
   return [...pixels];
 }
 
+/**
+ * Two clips overlapping by twenty frames, the incoming one ramping in across the overlap.
+ *
+ * Exactly what dropping a clip onto its neighbour produces: the outgoing clip untouched, the incoming
+ * one carrying `fade.inFrames` equal to the overlap.
+ */
+function buildDissolveDocument(): TimelineDocument {
+  const base = createDocument({
+    id: projectId('glcheck'),
+    sequenceId: sequenceId('s'),
+    name: 'glcheck',
+    frameRate: FRAME_RATES.WEB_30,
+    resolution: RESOLUTION,
+    trackIds: { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') },
+  });
+
+  const transform = {
+    x: staticNumber(0),
+    y: staticNumber(0),
+    scale: staticNumber(1),
+    rotation: staticNumber(0),
+    opacity: staticNumber(1),
+  };
+  const shot = (id: string, asset: string, from: number, to: number, fadeIn = 0) => ({
+    kind: 'video' as const,
+    id: clipId(id),
+    span: spanFromBounds(frameIndex(from), frameIndex(to)),
+    label: id,
+    enabled: true,
+    effects: [],
+    source: { asset: assetPath(asset), sourceIn: frameIndex(0), sourceRate: FRAME_RATES.WEB_30 },
+    transform,
+    speed: { factor: 1, preservePitch: true },
+    ...(fadeIn === 0 ? {} : { fade: { inFrames: fadeIn, outFrames: 0 } }),
+  });
+
+  const video: VideoTrack = {
+    ...(base.sequence.tracks[0] as VideoTrack),
+    clips: [
+      shot('outgoing', 'media/red.mp4', 0, 60),
+      shot('incoming', 'media/blue.mp4', 40, 100, 20),
+    ] as VideoTrack['clips'],
+  };
+
+  return { ...base, sequence: { ...base.sequence, tracks: [video, ...base.sequence.tracks.slice(1)] } };
+}
+
 const results: Record<string, unknown> = {};
 
 // 1. A bare layer must reproduce its source exactly.
@@ -360,8 +424,58 @@ results.builtinLibrary = builtinResults;
     area: counts.filter((_run, index) => index % 2 === 1).reduce((sum, run) => sum + run, 0),
     glError: gl.getError(),
   };
-  maskCompositor.dispose();
+  /*
+   * The mask compositor is **not** disposed, and that is not an oversight.
+   *
+   * It was built from the same `programs`, `builtins` and `pool` as the main one, so disposing it
+   * disposes those — and every scenario written after this point then renders through a program that
+   * no longer exists. The failure is silent: uniforms stop being set and the draw comes out
+   * unblended, which reads as a compositing bug in whatever was added last. It cost an hour, on a
+   * dissolve check that was correct the whole time and whose *control* was equally wrong.
+   *
+   * The mask store is its own and is released. The rest belongs to the page, which is about to end.
+   */
   store.dispose();
+}
+
+/*
+ * The dissolve an overlap makes, from the document all the way to the pixel.
+ *
+ * Issue #38's headline: dropping one clip onto its neighbour writes a ramp, and the ramp is supposed
+ * to produce a *dissolve*. Every layer under that is unit-tested — the fade model, the plan, the
+ * ordering — and none of them can say what the frame looks like. Two clips at the right opacities
+ * composited in the wrong order, or with the wrong blend factor, is a plausible-looking plan and a
+ * wrong picture, which is exactly the class of bug this harness exists for.
+ *
+ * Built from a real `TimelineDocument` through `buildRenderPlan` rather than from hand-written render
+ * items, because the ordering rule being checked — the later-starting clip composites last — lives in
+ * the plan builder, and hand-writing the items would assert the order this file chose rather than the
+ * one the application produces.
+ *
+ * Red under blue: the outgoing clip is whole and the incoming ramps up over it, so halfway through
+ * the overlap the frame is half of each. A dissolve that faded *both* would let the empty frame show
+ * through and read darker than either.
+ */
+{
+  const dissolveDocument = buildDissolveDocument();
+  const at = (frame: number) =>
+    renderAndRead(
+      buildRenderPlan({
+        document: dissolveDocument,
+        frame: frameIndex(frame),
+        effects,
+      }) as unknown as RenderPlan,
+    );
+
+  results.dissolve = {
+    // Before the overlap: the outgoing clip alone.
+    before: at(10).pixel,
+    // Halfway through a twenty-frame overlap that starts at 40.
+    middle: at(50).pixel,
+    // After it: the incoming clip alone.
+    after: at(90).pixel,
+    glError: gl.getError(),
+  };
 }
 
 (window as unknown as { __glcheck: unknown }).__glcheck = results;
