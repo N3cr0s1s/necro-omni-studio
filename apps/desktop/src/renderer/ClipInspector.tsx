@@ -45,6 +45,7 @@ import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
 import { ClipTiming } from './ClipTiming.js';
+import { ClipSpeedSection } from './ClipSpeedSection.js';
 import type { LibraryProblem } from './use-generator-library.js';
 import { TransformInspector } from './TransformInspector.js';
 
@@ -202,6 +203,17 @@ export function ClipInspector({
           both come before what is done to it afterwards. */}
       {shows('timing') && (
         <ClipTiming
+          document={document}
+          clip={located.clip}
+          onChange={onChange}
+          {...(onReject !== undefined ? { onReject } : {})}
+        />
+      )}
+
+      {/* Directly after timing, because speed *is* timing: it decides what plays in the slot the
+          fields above describe. */}
+      {shows('timing') && (
+        <ClipSpeedSection
           document={document}
           clip={located.clip}
           onChange={onChange}

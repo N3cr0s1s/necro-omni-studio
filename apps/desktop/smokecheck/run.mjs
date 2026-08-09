@@ -315,6 +315,36 @@ try {
     .first()
     .click({ force: true })
     .catch(() => undefined);
+
+  /*
+   * Retiming, which the document has carried since M4 with nothing able to set it.
+   *
+   * Driven here because the value has to survive the whole round trip — control to document to the
+   * field reading it back — and because the linked-audio rule this operation exists to honour is
+   * invisible to a component test that renders the section on its own.
+   */
+  await page.getByRole('tab', { name: 'Clip' }).click();
+  await page.waitForTimeout(700);
+
+  const speedField = page.getByLabel('Speed factor');
+  if ((await speedField.count()) === 0) {
+    fail('a clip offers no way to change its speed');
+  } else {
+    pass('a clip can be retimed');
+
+    await page.getByRole('button', { name: '2×' }).click();
+    await page.waitForTimeout(700);
+
+    // Read back from the field, not from what was clicked: a preset that highlights itself without
+    // reaching the document is the exact failure this is looking for.
+    const factor = await speedField.inputValue();
+    if (factor.startsWith('2')) pass('and the new speed reaches the document');
+    else fail(`the speed field reads ${factor} after asking for 2x`);
+
+    await page.getByRole('button', { name: '1×' }).click();
+    await page.waitForTimeout(600);
+  }
+
   await page.getByRole('tab', { name: 'Effects' }).click();
   await page.waitForTimeout(700);
 
