@@ -19,6 +19,7 @@ import {
   SplitIcon,
   Trash2Icon,
   TypeIcon,
+  UnplugIcon,
 } from 'lucide-react';
 import { shortcutLabel } from './shortcuts.js';
 import { type ClipId, type TimelineDocument, type TrackId, linkedPartner, locateClip } from '@nos/core';
@@ -45,6 +46,13 @@ export interface ClipMenuState {
   readonly selectionSize: number;
   readonly canPaste: boolean;
   readonly hasAttributes: boolean;
+  /**
+   * Whether the clicked clip's file is not in the project folder.
+   *
+   * Decided by the caller, which read the folder — the document cannot know. Offered only then, so
+   * the menu never holds out a repair for something that is not broken.
+   */
+  readonly offline?: boolean;
   /** True when removing closes the gap, so the label can say which removal this is. */
   readonly ripple: boolean;
   /**
@@ -74,6 +82,7 @@ export const CLIP_MENU_ACTIONS = [
   'move-track-down',
   'remove-track',
   'rename-clip',
+  'relink',
   'cut',
   'copy',
   'paste',
@@ -164,6 +173,23 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       disabled: nothing,
       separated: true,
     },
+
+    /*
+     * Only when the clip is actually offline. A relink offered on healthy media is an invitation to
+     * repoint a clip by accident, and the action is a whole-project rewrite: every clip reading that
+     * file follows it.
+     */
+    ...(state.offline === true
+      ? [
+          {
+            id: 'relink' as const,
+            label: 'Relink media…',
+            icon: UnplugIcon,
+            disabled: nothing,
+            separated: true,
+          },
+        ]
+      : []),
 
     { id: 'cut', label: 'Cut', icon: ScissorsIcon, shortcut: shortcutLabel('cut'), disabled: nothing },
     { id: 'copy', label: 'Copy', icon: CopyIcon, shortcut: shortcutLabel('copy'), disabled: nothing },

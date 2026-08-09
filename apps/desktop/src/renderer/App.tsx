@@ -24,6 +24,7 @@ import {
   saveDocument,
   sequenceId,
   trackId,
+  clipSource,
 } from '@nos/core';
 import { buildTree, formatBytes } from '@nos/media';
 import {
@@ -53,6 +54,8 @@ import {
   unlinkClips,
   updateMarker,
   type TrackFlag,
+  clipsUsing,
+  relinkAsset,
 } from '@nos/editing';
 import {
   type GeneratorManifest,
@@ -132,7 +135,8 @@ import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js'
 import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
-import { availabilityOf, describeAvailability } from '@nos/media';
+import { allFiles, availabilityOf, describeAvailability } from '@nos/media';
+import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
@@ -552,6 +556,8 @@ export function App(): ReactNode {
    * clip makes the offer expire the moment the selection moves, with nothing to clear.
    */
   const [renamingClip, setRenamingClip] = useState<ClipId | undefined>(undefined);
+  /** The clip whose media the user is repointing, and therefore which dialog is open. */
+  const [relinking, setRelinking] = useState<ClipId | undefined>(undefined);
 
   /**
    * Renames a clip.
@@ -975,6 +981,25 @@ export function App(): ReactNode {
    */
   const availability = useMemo(() => availabilityOf(document, tree.tree), [document, tree.tree]);
 
+  /** The missing path behind the clip being relinked, and the files there are to choose from. */
+  const relinkingAsset = useMemo(() => {
+    if (relinking === undefined) return undefined;
+    const located = locateClip(document, relinking);
+    return located === undefined ? undefined : clipSource(located.clip)?.asset;
+  }, [relinking, document]);
+  const projectFiles = useMemo(
+    () =>
+      tree.tree === undefined
+        ? []
+        : allFiles(tree.tree)
+            // Only files the application could actually type. Offering `project.json` as a
+            // replacement for a missing clip is offering a mistake — the same rule the notes picker
+            // follows.
+            .filter((file) => file.assetType !== undefined)
+            .map((file) => file.path),
+    [tree.tree],
+  );
+
   const notice =
     describeAvailability(availability) ??
     range.notice ??
@@ -1171,6 +1196,12 @@ export function App(): ReactNode {
         case 'remove':
           clipEdits.remove();
           break;
+        case 'relink':
+          // Opens the chooser rather than repointing immediately: the candidates are a guess from the
+          // file name, and a relink rewrites every clip reading that file. Confirmation belongs to the
+          // user, not to a name match.
+          setRelinking(target.clip);
+          break;
         default: {
           const unreachable: never = action;
           throw new Error(`Unhandled menu action ${String(unreachable)}`);
@@ -1196,6 +1227,7 @@ export function App(): ReactNode {
           selectionSize: selected.size,
           canPaste: clipEdits.canPaste,
           hasAttributes: clipEdits.attributeSummary !== undefined,
+          offline: target.clip !== undefined && availability.isOffline(target.clip),
           canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
           ...(target.track !== undefined
             ? {
@@ -1408,6 +1440,20 @@ export function App(): ReactNode {
           onReveal={() => void bridge()?.revealInFolder(exportSettings.outputPath)}
         />
       )}
+
+      <RelinkDialog
+        {...(relinkingAsset !== undefined ? { missing: relinkingAsset } : { missing: undefined })}
+        present={projectFiles}
+        affected={relinkingAsset === undefined ? 0 : clipsUsing(document, relinkingAsset).length}
+        onRelink={(to) => {
+          if (relinkingAsset === undefined) return;
+          // One undo step for the whole rewrite: the file moved once, so putting it back should cost
+          // one press rather than one per clip that followed it.
+          store.commit('relink media', (current) => relinkAsset(current, relinkingAsset, to));
+          setRelinking(undefined);
+        }}
+        onClose={() => setRelinking(undefined)}
+      />
 
       {/*
         Three columns and, inside the middle one, two rows — every boundary draggable, and the two side
