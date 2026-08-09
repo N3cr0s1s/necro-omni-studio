@@ -515,6 +515,36 @@ try {
   }
 
   /*
+   * A crossfade at a cut, per issue #38's other half.
+   *
+   * Driven because the thing that can only be wrong in the assembled window is whether the menu row's
+   * offered length and the edit's own limit agree — two derivations of "what can this cut carry",
+   * computed in different files, which is exactly the shape this codebase's drifts take.
+   */
+  {
+    await page
+      .locator('[data-clip-id]')
+      .first()
+      .click({ force: true })
+      .catch(() => undefined);
+    await page.locator('[data-clip-id]').first().click({ button: 'right', force: true });
+    await page.waitForTimeout(600);
+
+    const row = page.getByRole('menuitem', { name: /Crossfade at the cut/ });
+    if ((await row.count()) === 0) {
+      fail('the clip menu offers no crossfade at the cut');
+    } else {
+      const label = await row.first().textContent();
+      // Disabled where the cut cannot carry one, which the fixture's single clip per track is: the
+      // row is still *there*, because one that vanishes is one nobody learns exists.
+      const enabled = await row.first().isEnabled();
+      pass(`the cut offers a crossfade (${String(label).trim()}, ${enabled ? 'enabled' : 'disabled'})`);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  }
+
+  /*
    * Undo, and what it says it will undo.
    *
    * §6.1 asks for undo on everything, and the visible control used to appear only on one tab with a

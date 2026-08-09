@@ -3811,3 +3811,25 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   buried whatever came before it under an entry per move. Its `onCommit` seam existed and neither caller
   used it — the same shape as every other gap here, found this time in code three hours old. `onCommit`
   is required now and `onChange` optional, which makes the cheap wiring the correct one.
+
+- 2026-08-10: The other half of the crossfade.
+
+  Dropping a clip onto its neighbour makes the sequence **shorter** by the overlap. That is right when
+  you are closing up a cut and wrong when the cut is already timed, and every editor offers both. The
+  second one grows each clip into the material already beyond its edge, so the timing downstream is
+  untouched.
+
+  It is `addTransition`'s mechanic, and why that is not simply reused is the point: **transitions live
+  on video tracks**. A pair of sounds meeting at a cut had no way at all to be crossfaded except by
+  dragging one over the other and shortening the sequence — which is #38's complaint, stated about
+  audio.
+
+  **Handles are the whole difficulty**, and the refusal is whole rather than one-sided: a crossfade
+  with one side extended is a clip that has silently grown, and the user asked for a dissolve rather
+  than for more material. `maxCrossfadeAtCut` exists so a caller can offer a *shorter* fade instead of
+  only a refusal — "there is not enough material" is true and unhelpful next to "six frames is all this
+  cut has". The menu row and the keyboard both recompute it from that one function, because two
+  derivations of "what can this cut carry" in different files is exactly the shape this codebase's
+  drifts take.
+
+  `Shift+F`, not `F`: bare `F` fits the sequence to the window and is a binding people use constantly.
