@@ -181,9 +181,10 @@ function ActivityList({ activities }: { readonly activities: readonly Activity[]
       <PopoverTrigger
         render={
           <Button variant="ghost" size="xs" title="Show every task" className="font-mono">
-            {running.length > 0
-              ? `${running.length} running`
-              : `${activities.length} ${activities.length === 1 ? 'task' : 'tasks'}`}
+            {/* "Idle · 1 task" reads as a contradiction: the headline says nothing is happening and
+                the count says something is. When nothing runs, what is left is history, so it is
+                named as history. */}
+            {running.length > 0 ? `${running.length} running` : `${activities.length} done`}
           </Button>
         }
       />

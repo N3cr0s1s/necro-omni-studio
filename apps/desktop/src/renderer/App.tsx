@@ -66,6 +66,7 @@ import {
   placeholderLength,
   provenancePath,
   recallRun,
+  waitingTakes,
 } from '@nos/generators';
 import {
   FilmIcon,
@@ -1060,6 +1061,35 @@ export function App(): ReactNode {
   // Owned here, not mirrored: the shell switches it — a clip rename opens the inspector, a recall
   // opens the generate panel — and a copy it could only read made both of those silently do nothing.
   const [rightTab, setRightTab] = useState<PanelTab>('inspector');
+
+  /*
+   * Saying once that takes have landed.
+   *
+   * Found by running a real generation and reading every word: three takes arrived in twelve seconds
+   * and the application said nothing at all. The generate panel was unchanged — same "ready", same
+   * "Generate 3 variants" — the tab holding them read `Variants` either way, and the status bar said
+   * "Idle". The obvious next action was to press Generate again.
+   *
+   * The tab now carries a count, which is the standing signal; this is the moment one. It fires on the
+   * *transition* to having takes rather than on every render that has some, so it says it once and
+   * does not nag while the user is deciding.
+   *
+   * A sentence and not a tab switch: moving the panel under someone mid-edit is worse than the silence.
+   */
+  const takesWaiting = useMemo(
+    () => waitingTakes(runtime.snapshot, library.registry),
+    [runtime.snapshot, library.registry],
+  );
+  const announcedTakes = useRef(0);
+  useEffect(() => {
+    const previous = announcedTakes.current;
+    announcedTakes.current = takesWaiting;
+    if (takesWaiting > previous && previous === 0) {
+      confirmationRef.current?.(
+        `${takesWaiting} take${takesWaiting === 1 ? '' : 's'} ready — pick one in Variants`,
+      );
+    }
+  }, [takesWaiting]);
   const selectedClip = [...selected][0];
   const masks = useMaskWorkspace(document, selectedClip, playhead, sidecar, runtime.gpu);
   // The overlay only while the segmentation panel is open. A preview that was click-to-place at all

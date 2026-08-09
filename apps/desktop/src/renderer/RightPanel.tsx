@@ -12,7 +12,8 @@ import type {
 import {
   type TextChoice,
   acceptSelection,
-  buildSelection,
+  currentSelection,
+  waitingTakes,
   exclusiveGroupsOf,
   previewOf,
   selectMember,
@@ -42,6 +43,7 @@ import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
 import type { RecalledRun } from '@nos/generators';
 import type { ClipId } from '@nos/core';
 import type { MaskChoice } from './ClipInspector.js';
+import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
@@ -154,6 +156,23 @@ export interface RightPanelProps {
 export function RightPanel(props: RightPanelProps): ReactNode {
   const { tab, onTabChange } = props;
 
+  /*
+   * How many takes are waiting on a decision.
+   *
+   * Driving a real generation is what showed this was needed: three takes landed in twelve seconds,
+   * and the generate panel looked exactly as it had before — same "ready", same "Generate 3 variants"
+   * — with nothing on screen saying anything had been produced. The takes were one tab away behind a
+   * label that read `Variants` whether it held three or none, so the obvious next action was to press
+   * Generate again. That is how a folder ends up with sixty takes of which the cut uses two.
+   *
+   * A count on the tab rather than switching to it: yanking the panel out from under someone who is
+   * mid-edit is worse than the silence it would fix.
+   */
+  const waiting = useMemo(
+    () => waitingTakes(props.runtime.snapshot, props.registry),
+    [props.runtime.snapshot, props.registry],
+  );
+
   return (
     <aside aria-label="Inspector" className="flex h-full min-h-0 min-w-0 flex-col">
       <Tabs
@@ -166,6 +185,11 @@ export function RightPanel(props: RightPanelProps): ReactNode {
             {(['inspector', 'generate', 'variants', 'segment'] as const).map((entry) => (
               <TabsTrigger key={entry} value={entry} className="capitalize">
                 {entry}
+                {entry === 'variants' && waiting > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 font-mono">
+                    {waiting}
+                  </Badge>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -677,20 +701,16 @@ function VariantsTab({ runtime, registry, onAcceptVariant, sidecar }: RightPanel
   const [current, setCurrent] = useState<string | undefined>(undefined);
   const audition = useAudition(sidecar);
 
+  // Still needed for `onAccept`, which records which generator made the take.
   const group = runtime.snapshot.groups[runtime.snapshot.groups.length - 1];
   const manifest = group === undefined ? undefined : registry?.manifestFor(group.generator);
 
-  const selection = useMemo(() => {
-    if (group === undefined || manifest === undefined) return undefined;
-    return buildSelection({
-      group,
-      runs: runtime.snapshot.runs.filter((run) => run.group === group.id),
-      manifest,
-      // No cast: both sides are a candidate key. The `as never` that used to sit here was hiding the
-      // fact that a run id was being passed where a key was required.
-      ...(current !== undefined ? { current } : {}),
-    });
-  }, [group, manifest, runtime.snapshot.runs, current]);
+  // The same derivation the tab's count uses, so the badge and the panel cannot disagree about how
+  // many takes there are.
+  const selection = useMemo(
+    () => currentSelection(runtime.snapshot, registry, current),
+    [runtime.snapshot, registry, current],
+  );
 
   if (selection === undefined) {
     return (

@@ -656,6 +656,30 @@ list beside it.
 
 ### Generator framework rules (keep these)
 
+**A finished run has to announce itself.** Found by driving a real generation against the live ComfyUI
+and reading every word: three takes landed in twelve seconds and the application said *nothing*. The
+generate panel was unchanged — same "ready", same "Generate 3 variants" — the tab holding them read
+`Variants` whether it held three or none, and the status bar said "Idle". The obvious next action was
+to press Generate again, which is how `generated/` ends up with sixty takes of which the cut uses two.
+
+Three changes, in order of how long they last: the **tab carries a count** (`Variants 3`), which is the
+standing signal; a **sentence once on the transition** to having takes — "3 takes ready — pick one in
+Variants" — which says what to do next without nagging while the user decides; and the status bar says
+**"1 done"** rather than "1 task" when nothing is running, because "Idle · 1 task" reads as a
+contradiction.
+
+Not a tab switch. Moving the panel out from under someone mid-edit is worse than the silence it fixes.
+
+**The count and the picker are one derivation.** `currentSelection` and `waitingTakes` live in
+`@nos/generators`, and the panel uses the first while the tab uses the second. A badge saying three
+beside a panel showing two is worse than no badge, so a test asserts the two agree — and a batched
+submit counts as the takes it carried, not as one run.
+
+Verified against the running application and the real ComfyUI: `Variants 3`, the sentence, `Idle · 1
+done`, three FLACs with provenance sidecars, no page errors.
+
+
+
 - Parameters that are **alternatives** are declared, never inferred. §2.3's voice is an enum or a
   sample, one of the two; guessing the pairing from types or roles would silently group parameters
   nobody meant to group, and a manifest that declares nothing must behave exactly as it did.

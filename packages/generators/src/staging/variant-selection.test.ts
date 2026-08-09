@@ -15,6 +15,8 @@ import { placeholderLength } from './placeholder.js';
 import {
   acceptSelection,
   buildSelection,
+  currentSelection,
+  waitingTakes,
   candidateKey,
   describeSelection,
   discardSelection,
@@ -539,5 +541,88 @@ describe('placeholder length', () => {
       fallback: frameCount(45),
     });
     expect(length.frames).toBe(45);
+  });
+});
+
+describe('what the panel is currently asking about', () => {
+  /**
+   * Lifted out of the panel so the count on the tab and the picker inside it come from one
+   * derivation. Driving a real generation is what showed the count was needed: three takes landed in
+   * twelve seconds and nothing on screen said so — the generate panel was unchanged, the tab holding
+   * them read `Variants` either way, and the status bar said "Idle".
+   */
+  const registry = { manifestFor: () => manifest };
+  const snapshot = (runs: readonly JobRun[], groups: readonly JobGroup[] = [group]) => ({
+    groups,
+    runs,
+    activeCount: 0,
+  });
+
+  it('is the latest group, because that is the run just finished', () => {
+    // An older group would be answering a question nobody asked.
+    const older: JobGroup = { ...group, id: jobGroupId('g0'), label: 'An earlier run' };
+    const selection = currentSelection(snapshot([done('r1', 1, 'a.flac')], [older, group]), registry);
+    expect(selection?.group).toBe(group.id);
+  });
+
+  it('is nothing when nothing has been generated', () => {
+    expect(currentSelection(snapshot([], []), registry)).toBeUndefined();
+  });
+
+  it('is nothing when the generator that made it is no longer installed', () => {
+    // A manifest deleted between the run and the picker: the group is still in the snapshot and there
+    // is nothing to draw it from.
+    expect(
+      currentSelection(snapshot([done('r1', 1, 'a.flac')]), { manifestFor: () => undefined }),
+    ).toBeUndefined();
+  });
+
+  it('is nothing without a registry at all', () => {
+    expect(currentSelection(snapshot([done('r1', 1, 'a.flac')]), undefined)).toBeUndefined();
+  });
+
+  it('honours the candidate the user picked', () => {
+    const runs = [done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')];
+    const second = currentSelection(snapshot(runs), registry)?.candidates[1]?.key;
+    expect(currentSelection(snapshot(runs), registry, second)?.current?.key).toBe(second);
+  });
+});
+
+describe('how many takes are waiting', () => {
+  const registry = { manifestFor: () => manifest };
+  const snapshot = (runs: readonly JobRun[], groups: readonly JobGroup[] = [group]) => ({
+    groups,
+    runs,
+    activeCount: 0,
+  });
+
+  it('counts the ones that have landed', () => {
+    expect(waitingTakes(snapshot([done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')]), registry)).toBe(2);
+  });
+
+  it('counts a batched submit as the takes it carried, not as one run', () => {
+    // The badge has to say what the picker will show, and a batched run is several variants.
+    expect(waitingTakes(snapshot([batched('r1', [1, 2, 3], ['a.flac', 'b.flac', 'c.flac'])]), registry)).toBe(
+      3,
+    );
+  });
+
+  it('is zero while the run is still going', () => {
+    // A take that has not landed is not one the user can do anything about yet, so it must not badge
+    // the tab or trigger the sentence that says takes are ready.
+    expect(waitingTakes(snapshot([run('r1'), run('r2')]), registry)).toBe(0);
+  });
+
+  it('is zero when nothing has been generated', () => {
+    expect(waitingTakes(snapshot([], []), registry)).toBe(0);
+  });
+
+  it('agrees with the selection the panel draws', () => {
+    // The two must not disagree: a badge saying three beside a panel showing two is worse than no
+    // badge at all, which is the whole reason this is one derivation.
+    const runs = [done('r1', 1, 'a.flac'), done('r2', 2, 'b.flac')];
+    expect(waitingTakes(snapshot(runs), registry)).toBe(
+      currentSelection(snapshot(runs), registry)?.readyCount,
+    );
   });
 });

@@ -1,7 +1,7 @@
-import type { JobGroupId, JobRunId } from '@nos/core';
+import type { GeneratorId, JobGroupId, JobRunId } from '@nos/core';
 import type { BackendOutput } from '../contracts/backend.js';
 import type { GeneratorManifest, OutputDescriptor } from '../contracts/manifest.js';
-import type { JobGroup, JobRun, JobTarget, RunStatus } from '../queue/job-queue.js';
+import type { JobGroup, JobRun, JobTarget, QueueSnapshot, RunStatus } from '../queue/job-queue.js';
 
 /**
  * In-place variant selection.
@@ -149,6 +149,50 @@ function isPending(status: RunStatus): boolean {
  * rebuilt from the same runs produces the same keys — a selection has to survive the rebuild that
  * every progress tick causes.
  */
+/**
+ * The takes the user is currently being asked about, from the queue's own snapshot.
+ *
+ * The latest group, because that is the run just finished — a picker showing an older one would be
+ * answering a question nobody asked.
+ *
+ * Lifted out of the panel so the *count* and the *picker* come from one derivation. They have to
+ * agree: the count badges the tab that holds the picker, and a badge that says three while the panel
+ * shows two is worse than no badge. Driving a real run showed why the badge was needed at all — three
+ * takes landed, the generate panel looked exactly as it had before, and nothing on screen said they
+ * were waiting one tab away.
+ */
+export function currentSelection(
+  snapshot: QueueSnapshot,
+  registry: { manifestFor(id: GeneratorId): GeneratorManifest | undefined } | undefined,
+  current?: string,
+): VariantSelection | undefined {
+  const group = snapshot.groups[snapshot.groups.length - 1];
+  if (group === undefined) return undefined;
+
+  const manifest = registry?.manifestFor(group.generator);
+  if (manifest === undefined) return undefined;
+
+  return buildSelection({
+    group,
+    runs: snapshot.runs.filter((run) => run.group === group.id),
+    manifest,
+    ...(current !== undefined ? { current } : {}),
+  });
+}
+
+/**
+ * How many takes are waiting on a decision, for a caller that only wants the number.
+ *
+ * Zero when there is nothing to judge — including while a run is still going, because a take that has
+ * not landed is not one the user can do anything about yet.
+ */
+export function waitingTakes(
+  snapshot: QueueSnapshot,
+  registry: { manifestFor(id: GeneratorId): GeneratorManifest | undefined } | undefined,
+): number {
+  return currentSelection(snapshot, registry)?.readyCount ?? 0;
+}
+
 export function candidateKey(run: JobRunId, index: number): string {
   return `${run}#${index}`;
 }
