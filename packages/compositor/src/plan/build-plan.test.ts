@@ -625,6 +625,50 @@ describe('transitions', () => {
   });
 });
 
+/**
+ * A transition governs the blend inside its own span.
+ *
+ * Both mechanisms mix two pictures, and a clip can carry a ramp *and* sit under a transition — a
+ * dissolve made by dropping a clip writes one, and turning that overlap into a wipe adds the other.
+ * Applying both blends twice: the incoming picture arriving at half opacity into a shader already
+ * mixing it in, which reads as a dip rather than a cut.
+ */
+describe('a fade inside a transition', () => {
+  const pair = (fadeIn: number) => ({
+    v1: [
+      video('a', 0, 120),
+      video('b', 100, 220, { fade: { inFrames: fadeIn, outFrames: 0 } } as Partial<Clip>),
+    ],
+    transitions: [
+      {
+        id: effectInstanceId('t1'),
+        effect: effectId('crosswarp'),
+        span: spanFromBounds(frameIndex(100), frameIndex(120)),
+        from: clipId('a'),
+        to: clipId('b'),
+        params: {},
+      },
+    ] as VideoTrack['transitions'],
+  });
+
+  it('is ignored, so the shader is the only thing mixing', () => {
+    const items = plan(makeDocument(pair(20)), 110).items;
+    expect(items).toHaveLength(1);
+    const group = items[0]!.kind === 'transition' ? items[0]!.group : undefined;
+    expect(group?.to.transform.opacity).toBe(1);
+    expect(group?.from.transform.opacity).toBe(1);
+  });
+
+  it('still governs the same clip outside the transition', () => {
+    // The ramp is not removed from the clip, only ignored where the shader takes over — so a fade
+    // that reaches past the overlap keeps working there, and removing the transition leaves it doing
+    // what it always did.
+    const items = plan(makeDocument(pair(40)), 130).items;
+    const layer = items.find((item) => item.kind === 'layer' && item.layer.clip === 'b');
+    expect(layer?.kind === 'layer' && layer.layer.transform.opacity).toBeCloseTo(0.75, 6);
+  });
+});
+
 describe('plan metadata', () => {
   it('reports the time in seconds for u_time', () => {
     const document = makeDocument({ v1: [video('a', 0, 100)] });

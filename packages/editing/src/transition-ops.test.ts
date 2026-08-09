@@ -3,6 +3,7 @@ import {
   type TimelineDocument,
   type Track,
   type VideoClip,
+  type VideoTrack,
   FRAME_RATES,
   assetPath,
   clipId,
@@ -417,5 +418,66 @@ describe('lookup and wording', () => {
     );
     expect(describeTransitionError({ kind: 'no-handles', clip: clipId('b'), needed: 6 })).toContain('6 more');
     expect(describeTransitionError({ kind: 'too-long', maximum: 19 })).toContain('19');
+  });
+});
+
+/**
+ * A transition across an overlap that is already there.
+ *
+ * Dropping one clip onto another is how a dissolve is made now, and it leaves the pair overlapping
+ * rather than meeting at a cut. This used to refuse, so a dissolve made that way could not be turned
+ * into a wipe without undoing the drop — the dead end the drop gesture existed to remove.
+ */
+describe('adding one across an existing overlap', () => {
+  const withFade = (clip: VideoClip, inFrames: number): VideoClip =>
+    ({ ...clip, fade: { inFrames, outFrames: 0 } }) as VideoClip;
+
+  const overlapping = () => documentWith([videoClip('a', 0, 120), withFade(videoClip('b', 100, 220), 20)]);
+
+  const spanOf = (document: TimelineDocument, id: string): readonly [number, number] => {
+    const track = document.sequence.tracks[0] as VideoTrack;
+    const clip = track.clips.find((entry) => entry.id === id)!;
+    return [clip.span.start, endExclusive(clip.span)];
+  };
+
+  const add = (document: TimelineDocument, durationFrames: number) =>
+    addTransition(document, {
+      from: clipId('a'),
+      to: clipId('b'),
+      effect: effectId('crosswarp'),
+      durationFrames,
+      id: effectInstanceId('t1'),
+    });
+
+  it('takes the overlap as its span and moves neither edge', () => {
+    const result = add(overlapping(), 6);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const track = result.value.sequence.tracks[0] as VideoTrack;
+    // The geometry is the user's, already placed: naming an effect is not a request to move a clip,
+    // so the requested six frames governs only the handle-consuming case.
+    expect(track.transitions[0]?.span).toEqual(spanFromBounds(frameIndex(100), frameIndex(120)));
+    expect(spanOf(result.value, 'a')).toEqual([0, 120]);
+    expect(spanOf(result.value, 'b')).toEqual([100, 220]);
+  });
+
+  it('leaves the clip’s ramp alone, because the plan is what ignores it', () => {
+    // A rule the plan applies is reversible; a document edit is not. Removing the transition later
+    // has to leave the fade doing what it always did.
+    const result = add(overlapping(), 6);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const track = result.value.sequence.tracks[0] as VideoTrack;
+    expect(track.clips.find((entry) => entry.id === 'b')?.fade?.inFrames).toBe(20);
+  });
+
+  it('still consumes handles when the clips only meet at a cut', () => {
+    const result = add(documentWith([videoClip('a', 0, 100), videoClip('b', 100, 200)]), 20);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(spanOf(result.value, 'a')).toEqual([0, 110]);
+    expect(spanOf(result.value, 'b')).toEqual([90, 200]);
   });
 });

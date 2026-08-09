@@ -155,8 +155,16 @@ function buildTransitionGroup(
   const progress = span.duration === 0 ? 1 : clamp01(elapsed / span.duration);
 
   return {
-    from: buildLayer(from, frame, rate, effects, options),
-    to: buildLayer(to, frame, rate, effects, options),
+    // Built **without** their edge ramps: inside a transition the shader is the blend, and a fade
+    // applied as well would blend twice — the incoming picture arriving at half opacity into a
+    // dissolve that is already mixing it in, which reads as a dip rather than a cut.
+    //
+    // Ignored here rather than removed from the clips, because the ramp is still the truth outside
+    // this span: the same clip's fade governs its other edge, and a transition removed later leaves
+    // the fade doing what it always did. A rule the plan applies is reversible; a document edit is
+    // not.
+    from: buildLayer(withoutFade(from), frame, rate, effects, options),
+    to: buildLayer(withoutFade(to), frame, rate, effects, options),
     transition: {
       instance: transition.id,
       effect: transition.effect,
@@ -164,6 +172,18 @@ function buildTransitionGroup(
       uniforms: resolveUniforms(transition.params, frameIndex(elapsed), source.uniforms),
     },
   };
+}
+
+/**
+ * The clip as it is outside its edge ramps.
+ *
+ * Dropping the field rather than zeroing it, so `clipFade` answers its own "no ramp" constant and
+ * every reader takes the same path it takes for a clip that never had one.
+ */
+function withoutFade(clip: Clip): Clip {
+  if (clip.fade === undefined) return clip;
+  const { fade: _ignored, ...rest } = clip;
+  return rest as Clip;
 }
 
 function buildLayer(

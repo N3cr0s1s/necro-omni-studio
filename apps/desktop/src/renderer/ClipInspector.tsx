@@ -511,9 +511,26 @@ function adjacentClips(document: TimelineDocument, id: string): { before?: ClipI
   if (located === undefined) return {};
 
   const span = located.clip.span;
-  const clips = located.track.clips as readonly Clip[];
-  const before = clips.find((entry) => entry.span.start + entry.span.duration === span.start);
-  const after = clips.find((entry) => entry.span.start === span.start + span.duration);
+  const end = span.start + span.duration;
+  const clips = (located.track.clips as readonly Clip[]).filter((entry) => entry.id !== located.clip.id);
+
+  /*
+   * A neighbour is one that meets this clip at a cut **or already overlaps it**.
+   *
+   * Only exact adjacency counted before, which meant a dissolve made by dropping one clip onto
+   * another — the gesture the timeline now has — left this panel with nothing to offer: the pair
+   * overlapped, so neither side matched, and turning that dissolve into a wipe was impossible without
+   * undoing the drop first. `addTransition` takes an existing overlap now, so the panel may offer it.
+   */
+  const touches = (entry: Clip, side: 'before' | 'after'): boolean => {
+    const entryEnd = entry.span.start + entry.span.duration;
+    return side === 'before'
+      ? entryEnd === span.start || (entry.span.start < span.start && entryEnd > span.start)
+      : entry.span.start === end || (entry.span.start > span.start && entry.span.start < end);
+  };
+
+  const before = clips.find((entry) => touches(entry, 'before'));
+  const after = clips.find((entry) => touches(entry, 'after'));
 
   return {
     ...(before !== undefined ? { before: before.id } : {}),

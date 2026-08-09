@@ -12,6 +12,7 @@ import {
   endExclusive,
   err,
   frameIndex,
+  intersection,
   ok,
   spanFromBounds,
 } from '@nos/core';
@@ -79,6 +80,37 @@ export function addTransition(
   const { track, from, to } = found.value;
   void document;
   if (track.locked) return err({ kind: 'track-locked', track: track.id });
+
+  /*
+   * Clips that **already** overlap keep the overlap they have.
+   *
+   * Dropping one clip onto another is how a dissolve is made now, and it leaves the pair overlapping
+   * rather than meeting at a cut — so this refused, and there was no way to turn a dissolve made that
+   * way into a wipe. The user had to undo the drop and start again through this dialog, which is the
+   * dead end the drop gesture was added to remove.
+   *
+   * The existing overlap becomes the transition's span, and neither edge moves: the geometry is the
+   * user's, already placed, and a request for a *different* length is a request to move a clip, which
+   * is not what naming an effect means. The requested duration therefore governs only the handle-
+   * consuming case below, where there is no overlap yet to respect.
+   */
+  const already = intersection(from.span, to.span);
+  if (already !== undefined && already.duration >= MIN_TRANSITION_FRAMES) {
+    const transition: Transition = {
+      id: request.id,
+      effect: request.effect,
+      span: already,
+      from: request.from,
+      to: request.to,
+      params: request.params ?? {},
+    };
+    return ok(
+      replaceTrack(base, {
+        ...track,
+        transitions: [...track.transitions.filter((entry) => !overlapsSpan(entry, already)), transition],
+      }),
+    );
+  }
 
   if (endExclusive(from.span) !== to.span.start) {
     return err({ kind: 'not-adjacent', from: request.from, to: request.to });
