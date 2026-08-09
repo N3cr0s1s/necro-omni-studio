@@ -1425,6 +1425,7 @@ export function App(): ReactNode {
         >
           <MediaBrowser
             tree={tree.tree ?? buildTree([])}
+            projectOpen={project !== undefined}
             watcher={tree.watcher}
             onRescan={tree.refresh}
             {...(browserSelection !== undefined ? { selected: browserSelection } : {})}

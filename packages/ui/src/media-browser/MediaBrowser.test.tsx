@@ -83,6 +83,14 @@ describe('tree rendering', () => {
     expect(cache?.textContent).toContain('derived');
   });
 
+  it('says there is no project when none is open, rather than that its folder is empty', () => {
+    // An empty project and no project both arrive as a directory with no children, so the tree cannot
+    // tell them apart. Saying "this project folder is empty" to someone who has opened nothing tells
+    // them the folder they do not have is empty.
+    render(<MediaBrowser tree={buildTree([])} watcher={watching} projectOpen={false} />);
+    expect(screen.getByText(/no project open/i)).toBeDefined();
+  });
+
   it('renders an explanation rather than a blank panel when the project is empty', () => {
     render(<MediaBrowser tree={buildTree([])} watcher={watching} />);
     expect(screen.getByText(/empty/i)).toBeDefined();

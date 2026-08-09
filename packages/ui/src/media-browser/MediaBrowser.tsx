@@ -66,6 +66,17 @@ export interface BrowserMenuTarget {
 
 export interface MediaBrowserProps {
   readonly tree: DirectoryNode;
+  /**
+   * Whether a project is open at all.
+   *
+   * The tree cannot carry this: an empty project and no project both arrive as a directory with no
+   * children, and the browser said "this project folder is empty" for both — telling a user who has
+   * not opened anything that the folder they do not have is empty.
+   *
+   * Optional and defaulting to open, so a caller that always has a project — every test, the harnesses
+   * — does not have to say so.
+   */
+  readonly projectOpen?: boolean;
   readonly watcher: WatcherStatus;
   /** Currently selected asset, if any. */
   readonly selected?: AssetPath;
@@ -120,6 +131,7 @@ const DEFAULT_EXPANDED: readonly string[] = ['media', 'generated', 'notes'];
 
 export function MediaBrowser({
   tree,
+  projectOpen,
   watcher,
   selected,
   onSelect,
@@ -221,7 +233,7 @@ export function MediaBrowser({
           <div role="tree" aria-label="Project folder" className="flex flex-col gap-px py-1">
             {rows.length === 0 ? (
               <p className="p-4 font-mono text-xs text-muted-foreground">
-                {narrowed ? 'nothing here matches' : 'This project folder is empty'}
+                {emptyMessage(projectOpen !== false, narrowed)}
               </p>
             ) : (
               rows.map((row) => (
@@ -729,4 +741,19 @@ function DerivedState({
       {label}
     </span>
   );
+}
+
+/**
+ * What to say when there are no rows.
+ *
+ * Three different facts, and they were two: an empty project and no project at all both produced "this
+ * project folder is empty", which tells someone who has opened nothing that the folder they do not
+ * have is empty. The filter's own emptiness is a fourth thing again and already said so.
+ *
+ * Kept beside the component rather than passed in, so the wording has one home; the *fact* comes from
+ * the shell, which is the only part that knows whether a project is open.
+ */
+function emptyMessage(projectOpen: boolean, narrowed: boolean): string {
+  if (!projectOpen) return 'no project open — open one to see its files';
+  return narrowed ? 'nothing here matches' : 'this project folder is empty';
 }

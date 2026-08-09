@@ -78,24 +78,40 @@ const userData = join(work, 'user-data');
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: project }, null, 2));
 
-const port = await freePort();
-const electron = spawn(
-  'npx',
-  ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${userData}`],
-  { cwd: desktop, stdio: 'ignore', detached: true },
-);
-
-let browser;
-try {
-  for (let attempt = 0; attempt < 60 && browser === undefined; attempt += 1) {
+/** Starts a shell against a given `userData` and connects to it. */
+async function launch(dataDir) {
+  const port = await freePort();
+  const child = spawn(
+    'npx',
+    ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${dataDir}`],
+    { cwd: desktop, stdio: 'ignore', detached: true },
+  );
+  let connected;
+  for (let attempt = 0; attempt < 60 && connected === undefined; attempt += 1) {
     try {
-      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+      connected = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
   }
-  if (browser === undefined) throw new Error('the shell never exposed a debugging port');
+  if (connected === undefined) throw new Error('the shell never exposed a debugging port');
+  return { child, browser: connected };
+}
 
+/** The group, not the process: Electron spawns renderers and a sidecar. */
+function stop(child) {
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    child.kill('SIGTERM');
+  }
+}
+
+const started = await launch(userData);
+const electron = started.child;
+
+const browser = started.browser;
+try {
   const page = browser.contexts()[0].pages().at(-1);
 
   /*
@@ -184,16 +200,64 @@ try {
     pass('nothing was raised while every panel was visited');
   }
 } finally {
-  await browser?.close().catch(() => undefined);
+  await browser.close().catch(() => undefined);
   // The group, not the process: Electron spawns renderers and a sidecar, and killing only the parent
   // leaves them holding the port for the next run.
-  try {
-    process.kill(-electron.pid, 'SIGTERM');
-  } catch {
-    electron.kill('SIGTERM');
+  stop(electron);
+  if (failures > 0) console.error(`  the run is left in ${work}`);
+}
+
+/*
+ * The state a new user actually meets first.
+ *
+ * Nothing covered it: every harness writes a session file and opens a project, so the path where there
+ * is no project had been exercised by nobody. Its own shell, because the application has no way to
+ * close a project — and inventing one just to be testable would be the tail wagging the dog.
+ *
+ * What matters is that it says so, offers the way in, and does not hold out actions that cannot work:
+ * a Save that does nothing teaches a user to distrust the ones that do.
+ */
+const freshData = join(work, 'fresh-user-data');
+mkdirSync(freshData, { recursive: true });
+
+let fresh;
+try {
+  fresh = await launch(freshData);
+  const page = fresh.browser.contexts()[0].pages().at(-1);
+  const raised = [];
+  page.on('pageerror', (error) => raised.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') raised.push(message.text().slice(0, 200));
+  });
+
+  await page.waitForTimeout(9000);
+  const body = await page.locator('body').innerText();
+
+  if (/no project open/i.test(body)) pass('a fresh start says there is no project');
+  else fail('a fresh start does not say that no project is open');
+
+  if ((await page.getByRole('button', { name: 'Open project' }).count()) > 0) {
+    pass('a fresh start offers the way in');
+  } else {
+    fail('a fresh start offers no way to open a project');
   }
+
+  for (const name of ['Save', 'Export']) {
+    const disabled = await page
+      .getByRole('button', { name, exact: true })
+      .first()
+      .isDisabled()
+      .catch(() => false);
+    if (disabled) pass(`${name} is not offered without a project`);
+    else fail(`${name} is live with no project open`);
+  }
+
+  if (raised.length === 0) pass('a fresh start raises nothing');
+  else fail(`a fresh start raised ${raised.length}: ${raised[0]}`);
+} finally {
+  await fresh?.browser.close().catch(() => undefined);
+  if (fresh !== undefined) stop(fresh.child);
   if (failures === 0) rmSync(work, { recursive: true, force: true });
-  else console.error(`  the run is left in ${work}`);
 }
 
 if (failures === 0) console.log('smokecheck passed');
