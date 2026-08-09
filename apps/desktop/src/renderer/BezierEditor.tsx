@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useRef } from 'react';
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from 'react';
 import { type BezierEase, bezierEase, evaluateBezier } from '@nos/core';
 
 /**
@@ -30,9 +30,25 @@ import { type BezierEase, bezierEase, evaluateBezier } from '@nos/core';
 
 export interface BezierEditorProps {
   readonly points: BezierEase;
-  readonly onChange: (points: BezierEase) => void;
-  /** Live while dragging, committed once at the end, so a drag is one history entry. */
-  readonly onCommit?: (points: BezierEase) => void;
+  /**
+   * The curve the user settled on, once per gesture.
+   *
+   * **One drag is one history entry**, which is the rule every other gesture in this editor follows
+   * and the one this component quietly broke on the way in: both callers were wired to the live
+   * channel below, so dragging a handle across the box wrote a commit per pointer move and buried
+   * whatever came before it under forty entries of "set fade curve".
+   *
+   * The handle stays responsive because the drag is held here as a draft and drawn from it — the same
+   * shape the clip drag uses, where the preview follows the pointer and the store hears about it once.
+   */
+  readonly onCommit: (points: BezierEase) => void;
+  /**
+   * Every intermediate position, for a caller that can show one without recording it.
+   *
+   * Optional, and deliberately not what a caller reaches for first: anything wired here that writes to
+   * the document is writing a history entry per pointer move.
+   */
+  readonly onChange?: (points: BezierEase) => void;
 }
 
 /** Drawing box, in its own coordinates. The SVG scales; these decide the proportions. */
@@ -42,6 +58,14 @@ const MARGIN = 30;
 
 export function BezierEditor({ points, onChange, onCommit }: BezierEditorProps): ReactNode {
   const surface = useRef<SVGSVGElement | null>(null);
+  /**
+   * The curve while a handle is held.
+   *
+   * Cleared on release, so the committed document becomes the source of truth again the moment the
+   * gesture ends — a draft that outlived its drag would show a curve the project does not have.
+   */
+  const [draft, setDraft] = useState<BezierEase | undefined>(undefined);
+  const shown = draft ?? points;
 
   /** Screen position to curve coordinates. y is inverted: SVG grows downwards, a value grows up. */
   const toCurve = (event: PointerEvent | ReactPointerEvent): { x: number; y: number } | undefined => {
@@ -67,14 +91,16 @@ export function BezierEditor({ points, onChange, onCommit }: BezierEditorProps):
         handle === 1
           ? bezierEase({ ...points, x1: at.x, y1: at.y })
           : bezierEase({ ...points, x2: at.x, y2: at.y });
-      onChange(latest);
+      setDraft(latest);
+      onChange?.(latest);
     };
 
     const up = (): void => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      // One history entry for the gesture. Every move before this was a preview.
-      onCommit?.(latest);
+      setDraft(undefined);
+      // One history entry for the gesture. Every move before this was a draft held here.
+      onCommit(latest);
     };
 
     window.addEventListener('pointermove', move);
@@ -107,34 +133,34 @@ export function BezierEditor({ points, onChange, onCommit }: BezierEditorProps):
       <line
         x1={0}
         y1={BOX}
-        x2={points.x1 * BOX}
-        y2={(1 - points.y1) * BOX}
+        x2={shown.x1 * BOX}
+        y2={(1 - shown.y1) * BOX}
         className="stroke-muted-foreground"
         strokeWidth={0.75}
       />
       <line
         x1={BOX}
         y1={0}
-        x2={points.x2 * BOX}
-        y2={(1 - points.y2) * BOX}
+        x2={shown.x2 * BOX}
+        y2={(1 - shown.y2) * BOX}
         className="stroke-muted-foreground"
         strokeWidth={0.75}
       />
 
-      <path d={curvePath(points)} className="fill-none stroke-primary" strokeWidth={1.75} />
+      <path d={curvePath(shown)} className="fill-none stroke-primary" strokeWidth={1.75} />
 
       <Handle
         index={1}
-        x={points.x1 * BOX}
-        y={(1 - points.y1) * BOX}
-        label={`control point 1 at ${round(points.x1)}, ${round(points.y1)}`}
+        x={shown.x1 * BOX}
+        y={(1 - shown.y1) * BOX}
+        label={`control point 1 at ${round(shown.x1)}, ${round(shown.y1)}`}
         onPointerDown={drag(1)}
       />
       <Handle
         index={2}
-        x={points.x2 * BOX}
-        y={(1 - points.y2) * BOX}
-        label={`control point 2 at ${round(points.x2)}, ${round(points.y2)}`}
+        x={shown.x2 * BOX}
+        y={(1 - shown.y2) * BOX}
+        label={`control point 2 at ${round(shown.x2)}, ${round(shown.y2)}`}
         onPointerDown={drag(2)}
       />
     </svg>

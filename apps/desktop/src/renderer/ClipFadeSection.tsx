@@ -148,7 +148,9 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
           {fade.shape === 'bezier' && (
             <BezierEditor
               points={fade.shapeBezier ?? DEFAULT_BEZIER}
-              onChange={(points) =>
+              // `onCommit`, not `onChange`: a drag across the box is one edit, and the live channel
+              // would bury whatever came before it under an entry per pointer move.
+              onCommit={(points) =>
                 commit('set fade curve', setGroupFade(document, clip.id, { shapeBezier: points }))
               }
             />

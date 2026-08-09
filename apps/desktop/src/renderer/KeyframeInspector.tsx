@@ -161,7 +161,9 @@ export function KeyframeInspector({
         {!selected.last && keyframe.ease === 'bezier' && (
           <BezierEditor
             points={keyframe.bezier ?? DEFAULT_BEZIER}
-            onChange={(points) => onEdit({ bezier: points })}
+            // `onCommit`, not `onChange`: a drag across the box is one edit, and the live channel
+            // would write a history entry per pointer move.
+            onCommit={(points) => onEdit({ bezier: points })}
           />
         )}
       </div>
