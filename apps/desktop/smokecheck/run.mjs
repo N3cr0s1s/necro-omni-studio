@@ -193,6 +193,47 @@ try {
   }
   await page.waitForTimeout(500);
 
+  /*
+   * The transport keys, which are the part of a keyboard-driven editor that is easiest to add and
+   * hardest to notice missing: a binding that does nothing looks exactly like one that is not there.
+   *
+   * The playhead's own readout is the observable — it names the current time in its accessible label,
+   * so a key that moved it is distinguishable from one that was swallowed.
+   */
+  const currentTime = async () => {
+    const label = await page
+      .locator('[aria-label^="Current time"]')
+      .first()
+      .getAttribute('aria-label')
+      .catch(() => null);
+    return label === null ? undefined : label.replace('Current time ', '');
+  };
+
+  await page
+    .locator('body')
+    .click({ position: { x: 4, y: 4 } })
+    .catch(() => undefined);
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(600);
+  const atStart = await currentTime();
+
+  await page.keyboard.press('End');
+  await page.waitForTimeout(800);
+  const atEnd = await currentTime();
+
+  if (atStart === undefined || atEnd === undefined) {
+    fail('the playhead has no readable current time, so the transport keys cannot be checked');
+  } else if (atStart === atEnd) {
+    fail(`End did not move the playhead — it stayed at ${atStart}`);
+  } else {
+    pass(`End goes to the end of the sequence (${atStart} → ${atEnd})`);
+  }
+
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(600);
+  if ((await currentTime()) === atStart) pass('Home comes back to the start');
+  else fail('Home did not return the playhead to the start');
+
   if (errors.length > 0) {
     fail(`the renderer raised ${errors.length}: ${errors[0]}`);
     for (const extra of errors.slice(1, 4)) console.error(`  also: ${extra}`);
