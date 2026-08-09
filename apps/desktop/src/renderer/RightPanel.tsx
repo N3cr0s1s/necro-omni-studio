@@ -30,13 +30,11 @@ import {
   EyeIcon,
   FileJsonIcon,
   PaletteIcon,
-  RedoIcon,
   ScissorsIcon,
   SplitIcon,
   Trash2Icon,
   TriangleAlertIcon,
   TypeIcon,
-  UndoIcon,
 } from 'lucide-react';
 import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
 import type { RecalledRun } from '@nos/generators';
@@ -135,8 +133,6 @@ export interface RightPanelProps {
   /** Where the sidecar serves project files, so a generated variant can be auditioned. */
   readonly sidecar: SidecarInfo | undefined;
   readonly selectedClip: string | undefined;
-  readonly canUndo: boolean;
-  readonly canRedo: boolean;
   readonly onSplit: () => void;
   readonly onSplitAllTracks: () => void;
   /** Removes the selection. The Ripple toggle decides whether the gap closes. */
@@ -150,8 +146,6 @@ export interface RightPanelProps {
   readonly removeLabel: string;
   readonly removeHint: string;
   readonly onNudge: (delta: number) => void;
-  readonly onUndo: () => void;
-  readonly onRedo: () => void;
   readonly onAddText: () => void;
   /** Reports an edit the document layer refused, so the shell can show its reason. */
   readonly onReject: (reason: string) => void;
@@ -295,8 +289,6 @@ function ClipTab({
   playhead,
   selectedClip,
   maskChoices,
-  canUndo,
-  canRedo,
   onSplit,
   onSplitAllTracks,
   onRemoveClip,
@@ -307,8 +299,6 @@ function ClipTab({
   removeLabel,
   removeHint,
   onNudge,
-  onUndo,
-  onRedo,
   onAddText,
   onReject,
   onRenameClip,
@@ -475,16 +465,6 @@ function ClipTab({
             <TypeIcon />
             Add title
           </Button>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo} className="flex-1">
-              <UndoIcon />
-              Undo
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onRedo} disabled={!canRedo} className="flex-1">
-              <RedoIcon />
-              Redo
-            </Button>
-          </div>
         </div>
       )}
     </div>

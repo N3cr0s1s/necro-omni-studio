@@ -89,6 +89,8 @@ import {
   ServerIcon,
   SkipBackIcon,
   KeyboardIcon,
+  RedoIcon,
+  UndoIcon,
   SkipForwardIcon,
   Trash2Icon,
   UploadIcon,
@@ -869,6 +871,32 @@ export function App(): ReactNode {
     playhead,
     onChange: commitDocument,
   });
+
+  /*
+   * Undo and redo, and what each would take back.
+   *
+   * Read from the snapshot rather than kept beside it: the store is the single mutation point, so its
+   * own account of the history is the only one that cannot fall behind. The labels have been recorded
+   * since M1 and surfaced on `StoreSnapshot` just as long, and until now nothing read them.
+   */
+  const historySnapshot = store.getSnapshot();
+  const history = useMemo<HistoryControls>(
+    () => ({
+      canUndo: historySnapshot.canUndo,
+      canRedo: historySnapshot.canRedo,
+      undoLabel: historySnapshot.undoLabel,
+      redoLabel: historySnapshot.redoLabel,
+      undo: () => store.undo(),
+      redo: () => store.redo(),
+    }),
+    [
+      store,
+      historySnapshot.canUndo,
+      historySnapshot.canRedo,
+      historySnapshot.undoLabel,
+      historySnapshot.redoLabel,
+    ],
+  );
 
   /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
   const resizing = useRef(false);
@@ -1920,6 +1948,7 @@ export function App(): ReactNode {
           themeId={appSettings.settings?.theme}
           onChangeTheme={(theme) => appSettings.update({ theme })}
           onOpenStory={() => setWorkspace((current) => openTab(current, { kind: 'story' }))}
+          history={history}
         />
 
         <ResizablePanelGroup
@@ -2247,8 +2276,6 @@ export function App(): ReactNode {
               playhead={playhead}
               sidecar={sidecar}
               selectedClip={[...selected][0]}
-              canUndo={store.getSnapshot().canUndo}
-              canRedo={store.getSnapshot().canRedo}
               onSplit={clipEdits.split}
               onSplitAllTracks={clipEdits.splitAllTracks}
               onRemoveClip={clipEdits.remove}
@@ -2261,8 +2288,6 @@ export function App(): ReactNode {
               onNudge={nudge}
               onAuthorManifest={() => setAuthoring(true)}
               onAcceptVariant={acceptVariant}
-              onUndo={() => store.undo()}
-              onRedo={() => store.redo()}
               onAddText={addText}
               onReject={setError}
             />
@@ -2348,6 +2373,7 @@ function TitleBar({
   themeId,
   onChangeTheme,
   onOpenStory,
+  history,
 }: {
   readonly project: ProjectInfo | undefined;
   readonly sidecar: SidecarInfo | undefined;
@@ -2360,6 +2386,7 @@ function TitleBar({
   readonly themeId: string | undefined;
   readonly onChangeTheme: (theme: string) => void;
   readonly onOpenStory: () => void;
+  readonly history: HistoryControls;
 }): ReactNode {
   return (
     <header className="flex h-11 flex-none items-center gap-3 border-b px-4">
@@ -2391,6 +2418,7 @@ function TitleBar({
       {project !== undefined && <AutosaveChip status={autosaveStatus} />}
       {/* A button as well as the `?` chord, because a reference reachable only by a shortcut is one
           only the people who do not need it can open. */}
+      <HistoryButtons history={history} />
       <Button variant="ghost" size="icon-sm" onClick={onShowShortcuts} title="Keyboard and pointer (?)">
         <KeyboardIcon />
         <span className="sr-only">Keyboard and pointer</span>
@@ -2417,6 +2445,66 @@ function TitleBar({
         Export
       </Button>
     </header>
+  );
+}
+
+/** What the title bar needs to offer undo and redo, and to say what each would take back. */
+export interface HistoryControls {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  /** The label the store recorded for the edit undo would reverse. */
+  readonly undoLabel: string | undefined;
+  readonly redoLabel: string | undefined;
+  undo(): void;
+  redo(): void;
+}
+
+/**
+ * Undo and redo, in the title bar, naming the edit.
+ *
+ * §6.1 asks for undo and redo on *everything*, and until now the only visible pair sat inside the
+ * clip actions — on one tab, and only while a clip was selected. So the control for taking back a
+ * mistake disappeared exactly when the mistake was made somewhere other than a clip: a track deleted,
+ * a project setting changed, a manifest saved. The keyboard worked throughout, which is what kept
+ * this invisible: everyone who tested it knew the chord.
+ *
+ * The title bar, because these are the *editor's* actions and the workspace-tab rule puts those here
+ * — and because a control that moves depending on which tab is open is one you look for rather than
+ * reach for.
+ *
+ * **It says what it will undo.** Every commit in this application already carries a label — the store
+ * has recorded one since M1 and `StoreSnapshot` has exposed it just as long, and nothing has ever
+ * read it. "Undo" is a promise with no content; "Undo close the gap" is one you can act on, and it is
+ * the difference between pressing it and wondering what you just lost.
+ */
+export function HistoryButtons({ history }: { readonly history: HistoryControls }): ReactNode {
+  return (
+    <span className="flex items-center">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={history.undo}
+        disabled={!history.canUndo}
+        // Named in the tooltip rather than in the button, because the label is as long as the edit
+        // that made it and a title bar that reflowed on every edit would be its own distraction.
+        title={history.undoLabel === undefined ? 'Nothing to undo' : `Undo ${history.undoLabel} (Ctrl+Z)`}
+        aria-label={history.undoLabel === undefined ? 'Nothing to undo' : `Undo ${history.undoLabel}`}
+      >
+        <UndoIcon />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={history.redo}
+        disabled={!history.canRedo}
+        title={
+          history.redoLabel === undefined ? 'Nothing to redo' : `Redo ${history.redoLabel} (Ctrl+Shift+Z)`
+        }
+        aria-label={history.redoLabel === undefined ? 'Nothing to redo' : `Redo ${history.redoLabel}`}
+      >
+        <RedoIcon />
+      </Button>
+    </span>
   );
 }
 
