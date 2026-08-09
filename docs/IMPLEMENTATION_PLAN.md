@@ -741,6 +741,16 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 - Orphaned processes are not a tidiness problem. One took a port and the failure surfaced in an
   unrelated tool with a message pointing nowhere near the cause.
 
+### Project rules (keep these)
+
+- §4's "zip the folder and you have moved the project" holds only while **nothing** writes a path
+  outside it. `assetPath` refuses an absolute path at the brand constructor, which covers the document
+  — a planted one stops the project opening at all — but the provenance sidecars, mask records, cache
+  metadata and the rendered mixdown never pass through it.
+- The guard therefore reads a **finished project on disk**, which is the only place every writer meets.
+- Graph pointers are excluded by shape, not by guessing: a JSON-Pointer starts with a node id (digits,
+  optionally with a colon), a filesystem path with a directory name.
+
 ### Export rules (keep these)
 
 - A **review copy** renders smaller *and* reads the proxies. Scaling at the encoder saves nothing, and
