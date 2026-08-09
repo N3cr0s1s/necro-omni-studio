@@ -46,7 +46,6 @@ import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
-import { Separator } from '@nos/ui/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@nos/ui/components/ui/tabs';
 import { cn } from '@nos/ui/lib/utils';
 import { assetChoicesFrom } from './generator-assets.js';
@@ -59,6 +58,7 @@ import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
 import type { AppSettings } from '../main/app-settings.js';
+import { type ClipSection, type PanelTab, PANEL_TABS, sectionsFor } from './panel-tabs.js';
 
 /**
  * The right-hand panel.
@@ -72,7 +72,7 @@ import type { AppSettings } from '../main/app-settings.js';
  * value; it decides nothing about generators, masks or edits.
  */
 
-export type PanelTab = 'inspector' | 'generate' | 'variants' | 'segment';
+export type { PanelTab } from './panel-tabs.js';
 
 export interface RightPanelProps {
   readonly document: TimelineDocument;
@@ -191,24 +191,45 @@ export function RightPanel(props: RightPanelProps): ReactNode {
         onValueChange={(next) => onTabChange(next as PanelTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <div className="flex h-8.5 flex-none items-center px-2">
-          <TabsList aria-label="Panel">
-            {(['inspector', 'generate', 'variants', 'segment'] as const).map((entry) => (
-              <TabsTrigger key={entry} value={entry} className="capitalize">
-                {entry}
-                {entry === 'variants' && waiting > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 font-mono">
-                    {waiting}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-        <Separator />
+        {/*
+          Line tabs across the full width, per issue #30: the active tab's underline and the row's own
+          bottom border are one line, so the row reads as the top edge of the panel rather than as a
+          floating group of buttons. Drawn from `PANEL_TABS`, so a new tab is an entry rather than an
+          edit in three places.
+        */}
+        <TabsList
+          aria-label="Panel"
+          className="border-border flex h-8.5 w-full flex-none items-stretch gap-0 rounded-none border-b bg-transparent p-0"
+        >
+          {PANEL_TABS.map((entry) => (
+            <TabsTrigger
+              key={entry.id}
+              value={entry.id}
+              className={cn(
+                'flex-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none',
+                'data-[selected]:border-primary data-[selected]:bg-transparent data-[selected]:shadow-none',
+                // Over the row's own border rather than beside it, so the two never double up.
+                'data-[selected]:-mb-px',
+              )}
+            >
+              {entry.label}
+              {entry.id === 'variants' && waiting > 0 && (
+                <Badge variant="secondary" className="ml-1.5 font-mono">
+                  {waiting}
+                </Badge>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-        <TabsContent value="inspector" className="min-h-0 flex-1 overflow-auto">
-          <InspectorTab {...props} />
+        <TabsContent value="clip" className="min-h-0 flex-1 overflow-auto">
+          <ClipTab {...props} sections={sectionsFor('clip')} />
+        </TabsContent>
+        <TabsContent value="effects" className="min-h-0 flex-1 overflow-auto">
+          <ClipTab {...props} sections={sectionsFor('effects')} />
+        </TabsContent>
+        <TabsContent value="project" className="min-h-0 flex-1 overflow-auto">
+          <ProjectTab {...props} />
         </TabsContent>
         <TabsContent value="generate" className="min-h-0 flex-1 overflow-auto">
           <GenerateTab {...props} />
@@ -224,10 +245,40 @@ export function RightPanel(props: RightPanelProps): ReactNode {
   );
 }
 
-function InspectorTab({
+/**
+ * The project's shape and the machine's preferences.
+ *
+ * Its own tab, per issue #29. It was at the bottom of the clip inspector, under six other sections —
+ * which meant scrolling past everything about the selected clip to change the frame rate, and reading
+ * past the frame rate to get to the effect stack.
+ */
+function ProjectTab({
   document,
+  onChangeDocument,
+  onReject,
   appSettings,
   onChangeAppSettings,
+}: RightPanelProps): ReactNode {
+  return (
+    <ProjectSettings
+      document={document}
+      onChange={onChangeDocument}
+      onReject={onReject}
+      {...(appSettings !== undefined ? { appSettings } : {})}
+      {...(onChangeAppSettings !== undefined ? { onChangeAppSettings } : {})}
+    />
+  );
+}
+
+/**
+ * The clip, as much of it as this tab is asked for.
+ *
+ * One component for both the `clip` and `effects` tabs, differing only in the sections they pass —
+ * issue #29 split the column, and splitting the *component* six ways would scatter the rules that keep
+ * its parts consistent with each other.
+ */
+function ClipTab({
+  document,
   effects,
   onChangeDocument,
   playhead,
@@ -255,16 +306,19 @@ function InspectorTab({
   onCreateEffect,
   onEditEffect,
   editableEffects,
-}: RightPanelProps): ReactNode {
+  sections,
+}: RightPanelProps & { readonly sections: ReadonlySet<ClipSection> }): ReactNode {
   return (
     <div className="flex flex-col">
       {/* Text properties come first for a text clip: the effect stack applies to it too, but the words
-          are what the user opened the inspector to change. */}
-      <TextInspector
-        document={document}
-        {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
-        onChange={onChangeDocument}
-      />
+          are what the user opened the panel to change. On the clip tab only — they are not effects. */}
+      {sections.has('identity') && (
+        <TextInspector
+          document={document}
+          {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
+          onChange={onChangeDocument}
+        />
+      )}
 
       <ClipInspector
         document={document}
@@ -280,141 +334,142 @@ function InspectorTab({
         {...(onRenameClip !== undefined ? { onRename: onRenameClip } : {})}
         {...(effectProblems !== undefined ? { effectProblems } : {})}
         renaming={renamingClip}
+        sections={sections}
       />
 
-      <ProjectSettings
-        document={document}
-        onChange={onChangeDocument}
-        onReject={onReject}
-        {...(appSettings !== undefined ? { appSettings } : {})}
-        {...(onChangeAppSettings !== undefined ? { onChangeAppSettings } : {})}
-      />
-
-      <div className="flex flex-col gap-2 p-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSplit}
-          disabled={selectedClip === undefined}
-          title="Split at the playhead (S)"
-        >
-          <SplitIcon />
-          Split at playhead
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSplitAllTracks}
-          title="Cut every unlocked track at the playhead (Shift+S)"
-        >
-          <ScissorsIcon />
-          Split all tracks
-        </Button>
-        <div className="flex gap-2">
-          {/* Named for what it will do, not for the key that does it. Which of the two removals is
+      {/*
+        The actions stay with the clip and only with it. Every one of them acts on the clip or on the
+        timeline it sits in — splitting, deleting, nudging, copying a look, adding a title — and none is
+        an effect. Left ungated they appeared under the effect stack too, which is precisely the
+        "irrelevant content" issue #29 is about.
+      */}
+      {sections.has('identity') && (
+        <div className="flex flex-col gap-2 p-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSplit}
+            disabled={selectedClip === undefined}
+            title="Split at the playhead (S)"
+          >
+            <SplitIcon />
+            Split at playhead
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSplitAllTracks}
+            title="Cut every unlocked track at the playhead (Shift+S)"
+          >
+            <ScissorsIcon />
+            Split all tracks
+          </Button>
+          <div className="flex gap-2">
+            {/* Named for what it will do, not for the key that does it. Which of the two removals is
               about to happen is the Ripple toggle's state, and a button that said only "Delete"
               would leave the user to remember it. */}
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={onRemoveClip}
-            disabled={selectedClip === undefined}
-            title={removeHint}
-            className="flex-1"
-          >
-            <Trash2Icon />
-            {removeLabel}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onToggleClipEnabled}
-            disabled={selectedClip === undefined}
-            title="Take the clip out of the composite without removing it (E)"
-            className="flex-1"
-          >
-            <EyeIcon />
-            Enable / disable
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onNudge(-1)}
-            disabled={selectedClip === undefined}
-            title="Nudge one frame left"
-            className="flex-1"
-          >
-            <ChevronLeftIcon />
-            1f
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onNudge(1)}
-            disabled={selectedClip === undefined}
-            title="Nudge one frame right"
-            className="flex-1"
-          >
-            1f
-            <ChevronRightIcon />
-          </Button>
-        </div>
-        {/* Grading a scene clip by clip is how a grade drifts: the same eleven-step ritual, subtly
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onRemoveClip}
+              disabled={selectedClip === undefined}
+              title={removeHint}
+              className="flex-1"
+            >
+              <Trash2Icon />
+              {removeLabel}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleClipEnabled}
+              disabled={selectedClip === undefined}
+              title="Take the clip out of the composite without removing it (E)"
+              className="flex-1"
+            >
+              <EyeIcon />
+              Enable / disable
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNudge(-1)}
+              disabled={selectedClip === undefined}
+              title="Nudge one frame left"
+              className="flex-1"
+            >
+              <ChevronLeftIcon />
+              1f
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNudge(1)}
+              disabled={selectedClip === undefined}
+              title="Nudge one frame right"
+              className="flex-1"
+            >
+              1f
+              <ChevronRightIcon />
+            </Button>
+          </div>
+          {/* Grading a scene clip by clip is how a grade drifts: the same eleven-step ritual, subtly
             different each time. */}
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCopyAttributes}
-            disabled={selectedClip === undefined}
-            title="Copy this clip's effects, framing, speed and level (Ctrl+Shift+C)"
-            className="flex-1"
-          >
-            <PaletteIcon />
-            Copy look
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onPasteAttributes}
-            disabled={selectedClip === undefined || attributeSummary === undefined}
-            title={
-              attributeSummary === undefined
-                ? 'Copy a look first'
-                : `Apply ${attributeSummary} to every selected clip (Ctrl+Shift+V)`
-            }
-            className="flex-1"
-          >
-            <ClipboardPasteIcon />
-            Paste look
-          </Button>
-        </div>
-        {attributeSummary !== undefined && (
-          <p className="font-mono text-xs text-muted-foreground">{`clipboard: ${attributeSummary}`}</p>
-        )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCopyAttributes}
+              disabled={selectedClip === undefined}
+              title="Copy this clip's effects, framing, speed and level (Ctrl+Shift+C)"
+              className="flex-1"
+            >
+              <PaletteIcon />
+              Copy look
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onPasteAttributes}
+              disabled={selectedClip === undefined || attributeSummary === undefined}
+              title={
+                attributeSummary === undefined
+                  ? 'Copy a look first'
+                  : `Apply ${attributeSummary} to every selected clip (Ctrl+Shift+V)`
+              }
+              className="flex-1"
+            >
+              <ClipboardPasteIcon />
+              Paste look
+            </Button>
+          </div>
+          {attributeSummary !== undefined && (
+            <p className="font-mono text-xs text-muted-foreground">{`clipboard: ${attributeSummary}`}</p>
+          )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onAddText}
-          title="Add a title at the playhead, on the text track"
-        >
-          <TypeIcon />
-          Add title
-        </Button>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo} className="flex-1">
-            <UndoIcon />
-            Undo
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAddText}
+            title="Add a title at the playhead, on the text track"
+          >
+            <TypeIcon />
+            Add title
           </Button>
-          <Button variant="ghost" size="sm" onClick={onRedo} disabled={!canRedo} className="flex-1">
-            <RedoIcon />
-            Redo
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={onUndo} disabled={!canUndo} className="flex-1">
+              <UndoIcon />
+              Undo
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onRedo} disabled={!canRedo} className="flex-1">
+              <RedoIcon />
+              Redo
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

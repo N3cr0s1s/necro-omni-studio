@@ -583,6 +583,38 @@ second value could never be entered. It holds the typed text and writes the draf
 re-seeding only when the stored list is not what the field spells. Only driving the control found this
 — the pure functions under it were all correct.
 
+### Panel tab rules (keep these)
+
+Issue #29: the right column had one `inspector` tab holding a clip's name, its timing, its framing,
+the effect stack, the transitions, the audio mix, the project's settings *and* the application's. Most
+of it is irrelevant to whatever the panel was opened to do, and a stack that long buries the control
+you came for. Now: **Clip · Effects · Generate · Variants · Segment · Project**, as line tabs across
+the full width (#30) — the active tab's underline and the row's own border are one line, so the row
+reads as the panel's top edge rather than as a floating group of buttons.
+
+**Tabs are data.** `PANEL_TABS` decides the order, the label and which clip-inspector *sections* each
+one shows. Adding a tab used to mean editing three places — the union, the trigger list and the
+content list — and is now one entry.
+
+**Sections, not components.** The clip inspector covers six unrelated concerns, and splitting the
+component six ways would scatter the rules that keep them consistent. It takes a set and draws what it
+is asked for; `sections === undefined` still means all of them, which is what a one-column caller
+wants.
+
+**Two checks make the split safe**, and both are worth keeping: every section appears on *some* tab —
+one left out is a control that silently vanished from the application — and no section appears on two,
+because two stacks editing one clip means the second looks stale the moment the first is used.
+
+**Actions belong to the clip, and only to it.** Split, delete, nudge, copy a look, add a title: none is
+an effect. Ungated they drew under the effect stack as well, which is exactly the "irrelevant content"
+the issue is about — and it took a screenshot to notice, because nothing about it is wrong enough to
+fail a test.
+
+**The harnesses name tabs, so they had to move too.** `smokecheck` drove `inspector` in six places;
+the settings checks are on `Project` now and the effect-editor entry on `Effects`. A harness that
+names UI is a harness that has to be edited when the UI is right to change — which is the cost of
+checking the assembled application, and worth paying.
+
 ### Workspace tab rules (keep these)
 
 Issue #31 asked for tabs at the framework level; #30 for line tabs spanning the full width. Both are

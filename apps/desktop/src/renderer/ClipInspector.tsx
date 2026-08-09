@@ -25,6 +25,7 @@ import {
   transitionsOf,
 } from '@nos/editing';
 import type { MaskId } from '@nos/core';
+import type { ClipSection } from './panel-tabs.js';
 import { DiamondIcon, PlusIcon, TriangleAlertIcon, WandSparklesIcon, XIcon } from 'lucide-react';
 import { type EffectStackEntry, EditableName, EffectStack } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
@@ -82,6 +83,15 @@ export interface ClipInspectorProps {
   /** Effect ids whose source lives in this project, so a builtin is not offered an editor. */
   readonly editableEffects?: ReadonlySet<string> | undefined;
   /**
+   * Which parts to draw, per issue #29.
+   *
+   * The inspector covers six unrelated concerns — a clip's name, its timing, its framing, its effects,
+   * its mix, its transitions — and they now live on different tabs. Splitting the component six ways
+   * would scatter the rules that keep them consistent, so it takes a set and draws what it is asked
+   * for. Absent means all of them, which is what a caller with one column wants.
+   */
+  readonly sections?: ReadonlySet<ClipSection> | undefined;
+  /**
    * Opens the name field without a double-click, for a rename asked for from the context menu.
    *
    * Driven from outside for the same reason the track rename is: two ways of renaming that behaved
@@ -114,6 +124,7 @@ export function ClipInspector({
   onCreateEffect,
   onEditEffect,
   editableEffects,
+  sections,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -146,35 +157,49 @@ export function ClipInspector({
     onChange(label, replaceEffects(document, located.clip, next));
   };
 
+  // Absent means every section, which is what a caller with one column wants and what this was before
+  // the panel grew tabs.
+  const shows = (section: ClipSection): boolean => sections === undefined || sections.has(section);
+
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3">
-      {/* The clip's name, and the only place it can be changed. Three kept variants of one generator
+      {shows('identity') && (
+        <>
+          {/* The clip's name, and the only place it can be changed. Three kept variants of one generator
           all arrive called `Stable Audio 3`, and a bin of `ad0eb912-…` files gives nothing else to tell
           them apart by — naming them is how an edit stays legible to whoever opens it next. */}
-      <EditableName
-        value={located.clip.label}
-        title={`${located.clip.label} — double-click to rename`}
-        className="font-mono text-xs text-muted-foreground"
-        autoEdit={renaming === true}
-        {...(onRename !== undefined ? { onCommit: (name: string) => onRename(located.clip.id, name) } : {})}
-      />
+          <EditableName
+            value={located.clip.label}
+            title={`${located.clip.label} — double-click to rename`}
+            className="font-mono text-xs text-muted-foreground"
+            autoEdit={renaming === true}
+            {...(onRename !== undefined
+              ? { onCommit: (name: string) => onRename(located.clip.id, name) }
+              : {})}
+          />
+        </>
+      )}
 
       {/* Timing before framing before effects: where a clip *is* comes before how it is framed, and
           both come before what is done to it afterwards. */}
-      <ClipTiming
-        document={document}
-        clip={located.clip}
-        onChange={onChange}
-        {...(onReject !== undefined ? { onReject } : {})}
-      />
+      {shows('timing') && (
+        <ClipTiming
+          document={document}
+          clip={located.clip}
+          onChange={onChange}
+          {...(onReject !== undefined ? { onReject } : {})}
+        />
+      )}
 
-      <TransformInspector
-        document={document}
-        clip={located.clip}
-        playhead={playhead}
-        onChange={onChange}
-        {...(onReject !== undefined ? { onReject } : {})}
-      />
+      {shows('transform') && (
+        <TransformInspector
+          document={document}
+          clip={located.clip}
+          playhead={playhead}
+          onChange={onChange}
+          {...(onReject !== undefined ? { onReject } : {})}
+        />
+      )}
 
       <EffectStack
         entries={entries}
@@ -221,15 +246,19 @@ export function ClipInspector({
         />
       )}
 
-      <AudioMix document={document} clip={located.clip} playhead={playhead} onChange={onChange} />
+      {shows('audio') && (
+        <AudioMix document={document} clip={located.clip} playhead={playhead} onChange={onChange} />
+      )}
 
-      <Transitions
-        document={document}
-        clip={located.clip}
-        effects={effects}
-        onChange={onChange}
-        {...(onReject !== undefined ? { onReject } : {})}
-      />
+      {shows('transitions') && (
+        <Transitions
+          document={document}
+          clip={located.clip}
+          effects={effects}
+          onChange={onChange}
+          {...(onReject !== undefined ? { onReject } : {})}
+        />
+      )}
 
       {selected !== undefined && (
         <EffectParams

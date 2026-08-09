@@ -154,7 +154,9 @@ try {
    * Every tab of the inspector, because each mounts a different tree and three of them are the ones a
    * user reaches for first. A tab that throws on mount leaves an empty panel and no other symptom.
    */
-  for (const tab of ['inspector', 'generate', 'variants', 'segment']) {
+  // Every tab of the panel. Issue #29 split the crowded `inspector` into `Clip`, `Effects` and
+  // `Project`, so the set is wider than it was — and each still mounts a different tree.
+  for (const tab of ['Clip', 'Effects', 'Generate', 'Variants', 'Segment', 'Project']) {
     await page.getByRole('tab', { name: tab }).click();
     await page.waitForTimeout(700);
     const panel = page.locator('[role="tabpanel"]').last();
@@ -173,7 +175,7 @@ try {
    *
    * The `userData` here is a temporary directory, so nothing the user has set is touched.
    */
-  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.getByRole('tab', { name: 'Project' }).click();
   await page.waitForTimeout(600);
   const address = page.getByRole('textbox', { name: 'Backend address' });
   await address.fill('http://127.0.0.1:1');
@@ -207,7 +209,7 @@ try {
   }
 
   // Back to the default, so the checks after this one meet the project they expect.
-  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.getByRole('tab', { name: 'Project' }).click();
   await page.waitForTimeout(600);
   await page.getByRole('textbox', { name: 'Backend address' }).fill('');
   await page.getByRole('textbox', { name: 'Backend address' }).blur();
@@ -217,7 +219,7 @@ try {
    * §5.8's global variant override, which the queue has taken since it was written and nothing set.
    * A setting stored but unreachable is the same as no setting.
    */
-  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.getByRole('tab', { name: 'Project' }).click();
   await page.waitForTimeout(800);
   const cap = page.getByRole('spinbutton', { name: 'Variants per run, at most' });
   if ((await cap.count()) > 0) pass('the global variant ceiling can be set');
@@ -285,7 +287,7 @@ try {
     .first()
     .click({ force: true })
     .catch(() => undefined);
-  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.getByRole('tab', { name: 'Effects' }).click();
   await page.waitForTimeout(700);
 
   /*
@@ -357,7 +359,7 @@ try {
 
       // Usable without a restart, which is what `onSaved` reloading the library is for.
       await page.waitForTimeout(2500);
-      await page.getByRole('tab', { name: 'inspector' }).click();
+      await page.getByRole('tab', { name: 'Effects' }).click();
       await page.waitForTimeout(1000);
       const add = page.getByRole('button', { name: /Add effect/i }).first();
       if ((await add.count()) > 0) await add.click();

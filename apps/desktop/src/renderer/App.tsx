@@ -1109,7 +1109,7 @@ export function App(): ReactNode {
   // and those are siblings — a session owned by either could not be drawn by the other.
   // Owned here, not mirrored: the shell switches it — a clip rename opens the inspector, a recall
   // opens the generate panel — and a copy it could only read made both of those silently do nothing.
-  const [rightTab, setRightTab] = useState<PanelTab>('inspector');
+  const [rightTab, setRightTab] = useState<PanelTab>('clip');
 
   /*
    * Saying once that takes have landed.
@@ -1474,7 +1474,7 @@ export function App(): ReactNode {
           // and the inspector shows the selection. Renaming a clip the user is not looking at is the
           // one thing this must not do.
           if (target.clip !== undefined) setSelected(new Set([target.clip]));
-          setRightTab('inspector');
+          setRightTab('clip');
           setRenamingClip(target.clip);
           break;
         case 'remove':
