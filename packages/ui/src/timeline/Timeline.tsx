@@ -101,6 +101,13 @@ export interface TimelineProps {
 
   /** Filmstrips and waveforms by clip id, supplied as derivations complete. */
   readonly strips?: ReadonlyMap<string, ClipStrip>;
+  /**
+   * Clips whose file is not in the project folder.
+   *
+   * A set rather than a predicate so the timeline stays a rendering of values: the question "is this
+   * clip's media there" is about the folder, and answering it belongs to whoever read the folder.
+   */
+  readonly offlineClips?: ReadonlySet<string>;
 
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
@@ -406,6 +413,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                     {...(dropTarget?.track === track.id ? { dropAt: dropTarget.frame } : {})}
                     selectedClips={props.selectedClips}
                     {...(props.strips !== undefined ? { strips: props.strips } : {})}
+                    {...(props.offlineClips !== undefined ? { offlineClips: props.offlineClips } : {})}
                     {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
                     {...(props.onToggleExpandClip !== undefined
                       ? { onToggleExpandClip: props.onToggleExpandClip }
@@ -1304,6 +1312,7 @@ function TrackLane({
   viewport,
   selectedClips,
   strips,
+  offlineClips,
   expandedClip,
   onToggleExpandClip,
   onClipPointerDown,
@@ -1319,6 +1328,7 @@ function TrackLane({
   readonly dropAt?: FrameIndex;
   readonly selectedClips: ReadonlySet<string>;
   readonly strips?: ReadonlyMap<string, ClipStrip>;
+  readonly offlineClips?: ReadonlySet<string>;
   readonly expandedClip?: ClipId;
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -1364,6 +1374,7 @@ function TrackLane({
             heightPx={laneHeight(track)}
             selected={selectedClips.has(clip.id)}
             {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
+            {...(offlineClips?.has(clip.id) === true ? { offline: true } : {})}
             expanded={expandedClip === clip.id}
             {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
             onPointerDown={(clipId, event) => {

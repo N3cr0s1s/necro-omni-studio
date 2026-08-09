@@ -132,6 +132,7 @@ import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js'
 import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
+import { availabilityOf, describeAvailability } from '@nos/media';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
 import { useTimelineView } from './use-timeline-view.js';
@@ -966,7 +967,16 @@ export function App(): ReactNode {
    * not be derived. Neither is an error — the timeline still edits — but a silent one is found later,
    * as an export of the wrong length or a clip that stayed blank and read as a bug.
    */
+  /*
+   * Missing media comes first among the notices, because it is the only one of them that means the cut
+   * is *wrong* rather than merely degraded. A proxy that has not built yet still shows the picture; a
+   * file that has left the folder shows nothing, and nothing said so — a black frame with no
+   * explanation reads as a bug in the editor rather than as a file the user moved.
+   */
+  const availability = useMemo(() => availabilityOf(document, tree.tree), [document, tree.tree]);
+
   const notice =
+    describeAvailability(availability) ??
     range.notice ??
     describeProxies(proxies) ??
     (strips.failures.length === 0
@@ -1514,6 +1524,7 @@ export function App(): ReactNode {
                 <Timeline
                   document={drag.document}
                   strips={strips.strips}
+                  offlineClips={new Set(availability.offlineClips)}
                   onAddTrack={addTrackOfKind}
                   onTrackRemove={removeTrackById}
                   onTrackRename={(id, name) => {

@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { ChevronDownIcon, ChevronRightIcon, LinkIcon, SparklesIcon, SquareDashedIcon } from 'lucide-react';
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  LinkIcon,
+  SparklesIcon,
+  SquareDashedIcon,
+  UnplugIcon,
+} from 'lucide-react';
 import { type Clip, type ClipId, hasAnimation, isGenerated, linkedPartner, passCount } from '@nos/core';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
@@ -25,6 +32,14 @@ export interface ClipBodyProps {
   readonly selected: boolean;
   /** Filmstrip or waveform image and its placement, once derived. Absent means not ready yet. */
   readonly strip?: ClipStrip;
+  /**
+   * The clip's file is not in the project folder.
+   *
+   * Drawn rather than left to the empty picture it produces: a clip whose media has gone renders as
+   * nothing, and a black frame with no explanation reads as a bug in the editor rather than as a file
+   * the user moved. The fact belongs to the folder, so it is passed in — a document cannot know it.
+   */
+  readonly offline?: boolean;
   readonly onPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   /**
    * Whether each edge is a cut shared with a neighbour, so shift-dragging it rolls rather than trims.
@@ -98,6 +113,7 @@ export function ClipBody({
   heightPx,
   selected,
   strip,
+  offline,
   onPointerDown,
   rollableStart,
   rollableEnd,
@@ -126,7 +142,7 @@ export function ClipBody({
     >
       <div
         role="button"
-        aria-label={clipAccessibleLabel(clip)}
+        aria-label={clipAccessibleLabel(clip, offline === true)}
         aria-pressed={selected}
         tabIndex={0}
         data-clip-id={clip.id}
@@ -153,6 +169,11 @@ export function ClipBody({
 
         {!compact && (
           <div className="relative flex min-w-0 items-center gap-1">
+            {offline === true && (
+              // Before the generated mark, because "this cannot be drawn" outranks "a generator made
+              // it": one is a property of the take, the other is why nothing appears.
+              <UnplugIcon aria-hidden="true" className="size-2.5 flex-none text-destructive" />
+            )}
             {isGenerated(clip) && (
               <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />
             )}
@@ -311,8 +332,11 @@ function TrimHandle({
  * Includes provenance and effect count because those are conveyed visually by colour and a badge,
  * neither of which reaches a screen reader.
  */
-export function clipAccessibleLabel(clip: Clip): string {
+export function clipAccessibleLabel(clip: Clip, offline = false): string {
   const parts = [clip.label || clip.kind];
+  // First among the notes, and said in words: the icon that carries it visually reaches no screen
+  // reader, and it is the difference between a clip that will render and one that cannot.
+  if (offline) parts.push('media missing');
   if (isGenerated(clip)) parts.push('generated');
   const passes = passCount(clip);
   if (passes > 0) parts.push(`${passes} effect${passes === 1 ? '' : 's'}`);
