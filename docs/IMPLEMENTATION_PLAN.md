@@ -908,6 +908,12 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**Crash recovery is driven by killing the shell**, not by closing it: a polite close exercises the
+path that was never in doubt. Two assertions, because they fail for different reasons — the recovery
+file appears after an edit, and the next launch offers the work back. Checking only the second reports
+"recovery is broken" when the thirty-second autosave has simply not run yet, which is what a six-second
+wait did.
+
 **Print as you go, not in a `finally`.** Two throwaway probes were lost to this: a process killed
 before the end printed nothing at all, and the absence looked like a broken feature rather than a
 broken probe. The harnesses print incrementally, which is why they survive — and is a reason to put a
