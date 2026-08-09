@@ -900,6 +900,10 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**A binding that does nothing looks exactly like one that was never added**, which makes it the
+easiest regression to ship and the hardest to notice. The transport keys are checked against the
+playhead's own readout, which names the current time in its accessible label.
+
 **A harness's own first failures are usually its own.** Smokecheck's were: it copied a fixture without
 synthesizing the tone made at runtime, and it looked for the status bar as a `region` when a `<footer>`
 is `contentinfo`. Check the harness before filing a defect — and take the failures as proof the checks
