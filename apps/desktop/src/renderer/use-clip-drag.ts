@@ -15,17 +15,19 @@ import {
   clampRoll,
   clipAfter,
   clipBefore,
+  type TrimEdge,
   eligibleTracksFor,
   limitedStart,
   moveClip,
   moveClipsBy,
+  reachableTrimDelta,
   rollEdit,
   trackForOffset,
   slipClip,
+  snapEdgeDelta,
   snapSpanTranslation,
   snapThresholdFrames,
-  trimClipEnd,
-  trimClipStart,
+  trimGroup,
   withLinkedClips,
 } from '@nos/editing';
 import { type TimelineViewport, pxToFrames } from '@nos/ui';
@@ -249,11 +251,8 @@ function applyDrag(
     );
   }
 
-  if (state.kind === 'trim-start') {
-    return plain(trimClipStart(state.document, state.clip, deltaFrames));
-  }
-  if (state.kind === 'trim-end') {
-    return plain(trimClipEnd(state.document, state.clip, deltaFrames));
+  if (state.kind === 'trim-start' || state.kind === 'trim-end') {
+    return applyTrim(state, state.kind === 'trim-start' ? 'start' : 'end', deltaFrames, context);
   }
   if (state.kind === 'slip') {
     // Dragging left pulls later material into the window, which is what the hand expects: the content
@@ -322,8 +321,63 @@ function applyDrag(
   return moved.ok ? { ok: true, value: { document: moved.value, snappedTo: snap.snappedTo } } : moved;
 }
 
+/**
+ * A trim, reaching everything linked to the clip and snapping to the cuts around it.
+ *
+ * Both halves of one report. Trimming moved only the clip under the pointer, so cutting the head off
+ * an imported video left its own sound at the old length; and trimming was the one gesture that did
+ * not snap, so an edge could not be landed on a neighbouring cut and a single black frame survived
+ * between two clips that looked adjacent.
+ *
+ * Snapped **before** the group is trimmed, not after: the snap decides which frame the edge is asked
+ * for, and the trim decides whether it may have it.
+ */
+function applyTrim(
+  state: DragState,
+  edge: TrimEdge,
+  deltaFrames: number,
+  context: {
+    snapEnabled: boolean;
+    viewport: TimelineViewport;
+    playhead: FrameIndex;
+  },
+): Result<DragOutcome, EditError> {
+  const located = locateClip(state.document, state.clip);
+  if (located === undefined) return { ok: false, error: { kind: 'clip-not-found', clip: state.clip } };
+
+  const group = withLinkedClips(state.document, [state.clip]);
+  const span = located.clip.span;
+  const from = edge === 'start' ? span.start : frameIndex(span.start + span.duration);
+
+  // The group is excluded from its own candidates, or the edge being dragged would snap to where it
+  // already is and the gesture would never leave the frame it started on.
+  const snap = context.snapEnabled
+    ? snapEdgeDelta(
+        from,
+        deltaFrames,
+        collectSnapCandidates(state.document, context.playhead, { ignoreClips: group }),
+        snapThresholdFrames(DEFAULT_SNAP_PIXELS, context.viewport.framesPerPixel),
+      )
+    : { delta: deltaFrames, snappedTo: undefined };
+
+  const request = { document: state.document, clip: state.clip, edge, delta: snap.delta };
+  const trimmed = trimGroup(request);
+  if (trimmed.ok) {
+    return { ok: true, value: { document: trimmed.value, snappedTo: snap.snappedTo } };
+  }
+
+  // Blocked: travel as far as the group legitimately can rather than failing the whole gesture, the
+  // same rule a blocked move already follows. A pair refusing outright would be *harder* to trim
+  // than a lone clip, which is the wrong way round.
+  const reachable = reachableTrimDelta(request);
+  if (reachable === 0) return trimmed;
+
+  const limited = trimGroup({ ...request, delta: reachable });
+  return limited.ok ? { ok: true, value: { document: limited.value, snappedTo: undefined } } : limited;
+}
+
 /** An operation that cannot snap, in the shape the caller expects. */
-function plain(result: ReturnType<typeof trimClipStart>): Result<DragOutcome, EditError> {
+function plain(result: Result<TimelineDocument, EditError>): Result<DragOutcome, EditError> {
   return result.ok ? { ok: true, value: { document: result.value, snappedTo: undefined } } : result;
 }
 

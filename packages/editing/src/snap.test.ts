@@ -18,6 +18,7 @@ import {
   DEFAULT_SNAP_PIXELS,
   type SnapCandidate,
   collectSnapCandidates,
+  snapEdgeDelta,
   snapFrame,
   snapSpanTranslation,
   snapThresholdFrames,
@@ -201,6 +202,33 @@ describe('snapSpanTranslation', () => {
     // The end edge is what snapped, so it sits on the candidate and the length is unchanged.
     expect(result.frame + duration).toBe(100);
     expect(result.frame).toBe(50);
+  });
+});
+
+describe('snapping a trimmed edge', () => {
+  // A move snapped and a trim did not, which is how two clips end up looking adjacent while a single
+  // black frame sits between them: the gap is one pixel wide at a working zoom and invisible until
+  // the export is watched.
+  it('lands the edge exactly on the candidate and reports the delta that gets it there', () => {
+    const result = snapEdgeDelta(frameIndex(200), 7, [candidate(210)], 8);
+    expect(result.delta).toBe(10);
+    expect(result.snappedTo?.frame).toBe(210);
+  });
+
+  it('snaps backwards as readily as forwards', () => {
+    const result = snapEdgeDelta(frameIndex(200), -7, [candidate(190)], 8);
+    expect(result.delta).toBe(-10);
+  });
+
+  it('returns the requested delta untouched when nothing is in range', () => {
+    expect(snapEdgeDelta(frameIndex(200), 7, [candidate(400)], 8)).toEqual({ delta: 7 });
+  });
+
+  it('can snap a trim that has not moved yet onto a neighbouring edge', () => {
+    // Zero delta is not "no gesture" here: the pointer is down and one frame from a cut, and the edge
+    // should still catch it.
+    const result = snapEdgeDelta(frameIndex(199), 0, [candidate(200)], 8);
+    expect(result.delta).toBe(1);
   });
 });
 

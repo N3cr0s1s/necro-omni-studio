@@ -16,7 +16,7 @@ import {
   formatFrames,
   frameIndex,
 } from '@nos/core';
-import { eligibleTracksFor, moveClipsBy, slipClip, trimClipEnd, withLinkedClips } from '@nos/editing';
+import { eligibleTracksFor, moveClipsBy, slipClip, trimGroup, withLinkedClips } from '@nos/editing';
 import { NumberField } from '@nos/ui';
 import { describeEditError } from './edit-errors.js';
 
@@ -61,7 +61,7 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
   const source = clipSource(clip);
   const end = endExclusive(span);
 
-  const commit = (label: string, result: ReturnType<typeof trimClipEnd>): void => {
+  const commit = (label: string, result: ReturnType<typeof trimGroup>): void => {
     if (result.ok) onChange(label, result.value);
     else onReject?.(describeEditError(result.error));
   };
@@ -100,7 +100,14 @@ export function ClipTiming({ document, clip, onChange, onReject }: ClipTimingPro
         value={span.duration}
         rate={document.frameRate}
         min={1}
-        onCommit={(next) => commit('set clip duration', trimClipEnd(document, clip.id, next - span.duration))}
+        // Through the group trim for the same reason `start` goes through the group move: a typed
+        // length and a dragged edge have to be one edit, including reaching a linked partner.
+        onCommit={(next) =>
+          commit(
+            'set clip duration',
+            trimGroup({ document, clip: clip.id, edge: 'end', delta: next - span.duration }),
+          )
+        }
       />
 
       {source !== undefined && (

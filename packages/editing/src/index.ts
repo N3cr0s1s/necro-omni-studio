@@ -27,3 +27,4 @@ export * from './linking.js';
 export * from './clip-transform.js';
 export * from './story-ops.js';
 export * from './clip-speed.js';
+export * from './trim-group.js';

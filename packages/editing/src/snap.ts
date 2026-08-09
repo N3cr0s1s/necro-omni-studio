@@ -157,6 +157,36 @@ export function snapSpanTranslation(
     : { frame: translated, snappedTo: endResult.snappedTo };
 }
 
+export interface EdgeSnapResult {
+  /** The delta to apply, snapped. Equal to the input when nothing was in range. */
+  readonly delta: number;
+  readonly snappedTo?: SnapCandidate;
+}
+
+/**
+ * Snaps the edge a trim is moving, and reports the delta that lands it there.
+ *
+ * Trimming did not snap at all, and a move did — which is how a timeline ends up with a single black
+ * frame between two clips that look adjacent at every zoom level a person actually works at. The
+ * report named the symptom exactly: "I cannot put two videos precisely next to each other".
+ *
+ * Expressed as a **delta** rather than a frame because that is what the trim operations take, and
+ * converting in the caller is where an off-by-one would live. The edge itself is passed in rather
+ * than derived, since a head trim moves the start and a tail trim the end.
+ */
+export function snapEdgeDelta(
+  edge: FrameIndex,
+  delta: number,
+  candidates: readonly SnapCandidate[],
+  thresholdFrames: number,
+): EdgeSnapResult {
+  const wanted = frameIndex(edge + delta);
+  const snapped = snapFrame(wanted, candidates, thresholdFrames);
+  return snapped.snappedTo === undefined
+    ? { delta }
+    : { delta: snapped.frame - edge, snappedTo: snapped.snappedTo };
+}
+
 /**
  * Converts a pixel threshold to frames at the current zoom.
  *
