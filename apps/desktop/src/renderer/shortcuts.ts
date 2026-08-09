@@ -33,6 +33,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Shift', '←'], action: 'Step back ten frames' },
       { keys: ['Shift', '→'], action: 'Step forward ten frames' },
       { keys: ['Home'], action: 'Go to the start' },
+      { keys: ['End'], action: 'Go to the end', note: 'the last frame, not past it' },
     ],
   },
   {
@@ -54,6 +55,8 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Ctrl', 'V'], action: 'Paste', command: 'paste' },
       { keys: ['Ctrl', 'D'], action: 'Duplicate', command: 'duplicate' },
       { keys: ['Ctrl', 'A'], action: 'Select every clip' },
+      { keys: [','], action: 'Nudge back one frame', note: 'the selected clip' },
+      { keys: ['.'], action: 'Nudge forward one frame', note: 'the selected clip' },
       {
         keys: ['Ctrl', 'Shift', 'C'],
         action: 'Copy the look',
@@ -70,6 +73,8 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Ctrl', 'Shift', 'Z'], action: 'Redo' },
       { keys: ['Ctrl', 'Y'], action: 'Redo', note: 'the other spelling' },
       { keys: ['F'], action: 'Fit the sequence in the window' },
+      { keys: ['='], action: 'Zoom in', note: 'about the middle of the view' },
+      { keys: ['-'], action: 'Zoom out' },
       { keys: ['?'], action: 'Show this list' },
       { keys: ['Ctrl', 'F'], action: 'Filter the project folder' },
       { keys: ['Ctrl', 'S'], action: 'Save the project' },

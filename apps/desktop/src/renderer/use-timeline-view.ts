@@ -7,7 +7,14 @@ import {
   frameIndex,
   spanFromBounds,
 } from '@nos/core';
-import { type TimelineViewport, createViewport, scrollByPx, scrollToReveal, zoomToFit } from '@nos/ui';
+import {
+  type TimelineViewport,
+  clampZoom,
+  createViewport,
+  scrollByPx,
+  scrollToReveal,
+  zoomToFit,
+} from '@nos/ui';
 
 /**
  * Where the timeline is looking, and the keys that move it.
@@ -28,6 +35,8 @@ export interface TimelineView {
   readonly viewport: TimelineViewport;
   /** Zooms about a pixel anchor, which is what a wheel gesture means. */
   zoomAt(framesPerPixel: number, anchorPx: number): void;
+  /** Zooms by a factor about the centre, for the keyboard, which has no pointer to anchor on. */
+  zoomBy(factor: number): void;
   /** Scrolls by a pixel delta, for a wheel or a trackpad swipe. */
   scrollBy(deltaPx: number): void;
   /** Frames the whole sequence, or the marked range when there is one. */
@@ -85,6 +94,21 @@ export function useTimelineView(options: TimelineViewOptions): TimelineView {
     setScrollFrame(frameIndex(Math.max(0, Math.round(anchored))));
   }, []);
 
+  /**
+   * Zooms by a factor about the middle of the view.
+   *
+   * The keyboard has no pointer to anchor on, and the centre is the only anchor that does not move
+   * what the user is looking at — anchoring at zero would walk the view leftwards on every press.
+   */
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const current = latest.current.viewport;
+      const middle = current.widthPx / 2;
+      zoomAtPixel(clampZoom(current.framesPerPixel * factor), middle);
+    },
+    [zoomAtPixel],
+  );
+
   const scrollBy = useCallback((deltaPx: number) => {
     setScrollFrame(scrollByPx(latest.current.viewport, deltaPx).scrollFrame);
   }, []);
@@ -104,7 +128,7 @@ export function useTimelineView(options: TimelineViewOptions): TimelineView {
 
   useHistoryKeys(store, fit);
 
-  return { viewport, zoomAt: zoomAtPixel, scrollBy, fit };
+  return { viewport, zoomAt: zoomAtPixel, zoomBy, scrollBy, fit };
 }
 
 /**

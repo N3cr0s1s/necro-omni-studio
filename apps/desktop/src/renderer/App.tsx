@@ -217,6 +217,14 @@ type AcceptedVariant = Omit<AcceptOutcome, 'target'> & {
   readonly target: Extract<AcceptOutcome['target'], { kind: 'timeline' }>;
 };
 
+/**
+ * How much one keyboard zoom press changes the scale.
+ *
+ * A ratio rather than a fixed number of frames per pixel, so a press means the same thing whether the
+ * sequence is framed whole or a single second fills the window.
+ */
+const ZOOM_STEP = 1.4;
+
 export function App(): ReactNode {
   const [project, setProject] = useState<ProjectInfo | undefined>(undefined);
   const [sidecar, setSidecar] = useState<SidecarInfo | undefined>(undefined);
@@ -821,6 +829,58 @@ export function App(): ReactNode {
    * Ignored while a text field has focus, exactly like every other binding in the shell — a question
    * mark typed into a prompt is a question mark, not a request for help.
    */
+  /*
+   * The three staples of a keyboard-driven timeline that had no binding at all.
+   *
+   * `nudge` existed and was reachable only from the inspector's buttons, which is the slowest possible
+   * way to move a clip one frame; the sequence had a Home and no End; and zoom could be reached by a
+   * wheel or by Fit, but not by the keys every editor uses for it.
+   *
+   * Held apart from the transport's own handler because these need the document and the viewport, and
+   * threading either into the transport would make it something other than a transport.
+   */
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'End':
+          // The last frame, not one past it: the playhead sits *on* frames, and parking it beyond the
+          // end shows black and reports a frame the sequence does not have.
+          transport.seek(frameIndex(Math.max(0, documentEnd(document) - 1)));
+          break;
+        case ',':
+          nudge(-1);
+          break;
+        case '.':
+          nudge(1);
+          break;
+        case '=':
+        case '+':
+          view.zoomBy(1 / ZOOM_STEP);
+          break;
+        case '-':
+          view.zoomBy(ZOOM_STEP);
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [document, nudge, transport, view]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return;
