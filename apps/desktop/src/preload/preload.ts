@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC, IPC_EVENTS, type DesktopBridge } from '../main/ipc-contract.js';
 
 /**
@@ -43,6 +43,24 @@ const bridge: DesktopBridge = {
     const handler = (): void => listener();
     ipcRenderer.on(IPC_EVENTS.saveBeforeClose, handler);
     return () => ipcRenderer.removeListener(IPC_EVENTS.saveBeforeClose, handler);
+  },
+  /*
+   * Where a dropped file actually is on disk.
+   *
+   * Not an IPC call: `webUtils.getPathForFile` is synchronous and reads nothing the renderer did not
+   * already hand over — the page already has the `File`, and this only names it. Electron removed
+   * `File.path` precisely so that naming a file is a privilege the preload grants rather than a
+   * property every script can read.
+   *
+   * Returns an empty string for anything that is not a real file, which a caller must filter: a drag
+   * carrying text produces a `File` with no path at all.
+   */
+  pathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
   },
   chooseFilesToImport: () => ipcRenderer.invoke(IPC.chooseFilesToImport),
   copyIntoProject: (placements) => ipcRenderer.invoke(IPC.copyIntoProject, placements),

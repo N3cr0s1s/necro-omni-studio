@@ -253,6 +253,14 @@ export interface DesktopBridge {
   closeWindow(): Promise<void>;
   /** Runs when the user chose Save while closing. Returns a function that stops listening. */
   onSaveBeforeClose(listener: () => void): () => void;
+  /**
+   * Where a dropped file is on disk, or `''` for a drag that carries no real file.
+   *
+   * Synchronous and not a channel: it names a file the page already holds. Electron removed
+   * `File.path` so that naming one is a privilege the preload grants rather than a property every
+   * script can read.
+   */
+  pathForFile(file: File): string;
   chooseFilesToImport(): Promise<readonly string[]>;
   /**
    * Copies chosen files to project-relative destinations, returning the ones that landed.

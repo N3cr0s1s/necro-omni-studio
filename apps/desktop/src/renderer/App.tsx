@@ -941,6 +941,39 @@ export function App(): ReactNode {
 
   const files = useProjectFiles(bridge);
 
+  /**
+   * Brings chosen files into a folder of the project.
+   *
+   * Shared by the menu entry and the drag from outside, because they differ only in how the paths were
+   * chosen — and two routes that copied files by different rules would eventually name them by
+   * different rules too.
+   */
+  const importInto = useCallback(
+    async (sources: readonly string[], into: string) => {
+      const api = bridge();
+      if (api === undefined || sources.length === 0) return;
+
+      const taken = new Set(
+        (tree.tree === undefined ? [] : allFiles(tree.tree))
+          .filter((file) => file.path.startsWith(`${into}/`))
+          .map((file) => file.name),
+      );
+      const landed = await api.copyIntoProject(planImport(sources, into, taken));
+
+      tree.refresh();
+      if (landed.length === sources.length) {
+        confirmation.say(
+          landed.length === 1 ? `imported ${landed[0]}` : `imported ${landed.length} files into ${into}`,
+        );
+      } else {
+        // Said rather than swallowed: a partial import that reported success would leave the user
+        // believing material is there.
+        setError(`imported ${landed.length} of ${sources.length} files — the rest could not be read`);
+      }
+    },
+    [confirmation, tree],
+  );
+
   const runPrune = useCallback(async () => {
     const found = prune;
     setPrune(undefined);
@@ -1047,36 +1080,8 @@ export function App(): ReactNode {
           // §4 says imported source files live.
           const into = target.isDirectory && target.path !== undefined ? target.path : 'media';
           void (async () => {
-            const api = bridge();
-            if (api === undefined) return;
-
-            const chosen = await api.chooseFilesToImport();
-            if (chosen.length === 0) return;
-
-            /*
-             * Named here rather than in the main process, which cannot import the rule: the names have
-             * to avoid what the folder already holds *and* each other, since two cards each holding
-             * `shot.mp4` is an ordinary thing to import at once.
-             */
-            const taken = new Set(
-              (tree.tree === undefined ? [] : allFiles(tree.tree))
-                .filter((file) => file.path.startsWith(`${into}/`))
-                .map((file) => file.name),
-            );
-            const landed = await api.copyIntoProject(planImport(chosen, into, taken));
-
-            tree.refresh();
-            if (landed.length === chosen.length) {
-              confirmation.say(
-                landed.length === 1
-                  ? `imported ${landed[0]}`
-                  : `imported ${landed.length} files into ${into}`,
-              );
-            } else {
-              // Said rather than swallowed: a partial import that reported success would leave the
-              // user believing material is there.
-              setError(`imported ${landed.length} of ${chosen.length} files — the rest could not be read`);
-            }
+            const chosen = await bridge()?.chooseFilesToImport();
+            if (chosen !== undefined) await importInto(chosen, into);
           })();
           break;
         }
@@ -1086,7 +1091,7 @@ export function App(): ReactNode {
         }
       }
     },
-    [confirmation, files, tree],
+    [files, importInto],
   );
 
   /**
@@ -1646,6 +1651,17 @@ export function App(): ReactNode {
           <MediaBrowser
             tree={tree.tree ?? buildTree([])}
             projectOpen={project !== undefined}
+            onImportFiles={(dropped) => {
+              /*
+               * A renderer cannot name a file on disk, so the paths come back through the preload —
+               * and anything that is not a real file answers with an empty string, which a drag
+               * carrying text does.
+               */
+              const api = bridge();
+              if (api === undefined) return;
+              const paths = dropped.map((file) => api.pathForFile(file)).filter((path) => path !== '');
+              void importInto(paths, 'media');
+            }}
             watcher={tree.watcher}
             onRescan={tree.refresh}
             {...(browserSelection !== undefined ? { selected: browserSelection } : {})}

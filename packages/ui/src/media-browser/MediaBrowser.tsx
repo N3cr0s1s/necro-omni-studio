@@ -77,6 +77,17 @@ export interface MediaBrowserProps {
    * — does not have to say so.
    */
   readonly projectOpen?: boolean;
+  /**
+   * Files dragged in from outside the application.
+   *
+   * The most natural way to bring material into a project, and the one an editor is expected to have:
+   * the menu entry beside it is for people who prefer a chooser, not a substitute for this.
+   *
+   * Handed over as `File` objects rather than paths, because a renderer cannot name a file on disk —
+   * Electron removed `File.path` so that naming one is a privilege the preload grants. The caller
+   * resolves them.
+   */
+  readonly onImportFiles?: (files: readonly File[]) => void;
   readonly watcher: WatcherStatus;
   /** Currently selected asset, if any. */
   readonly selected?: AssetPath;
@@ -132,6 +143,7 @@ const DEFAULT_EXPANDED: readonly string[] = ['media', 'generated', 'notes'];
 export function MediaBrowser({
   tree,
   projectOpen,
+  onImportFiles,
   watcher,
   selected,
   onSelect,
@@ -184,6 +196,8 @@ export function MediaBrowser({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
   const [kind, setKind] = useState<AssetType | undefined>(undefined);
+  /** True while files from outside are over the panel, so the drop target is visible before it fires. */
+  const [importing, setImporting] = useState(false);
 
   const filter: TreeFilter = { query, ...(kind !== undefined ? { assetType: kind } : {}) };
   const narrowed = isNarrowing(filter);
@@ -229,7 +243,24 @@ export function MediaBrowser({
         items={menu === undefined ? [] : menu.items(background)}
         onChoose={(action) => menu?.onChoose(background, action)}
       >
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea
+          className={cn('min-h-0 flex-1', importing && 'bg-primary/10 ring-1 ring-primary ring-inset')}
+          onDragOver={(event) => {
+            // Files from outside the application, which arrive as `Files` in the type list. An internal
+            // asset drag carries its own type and must not be mistaken for one.
+            if (onImportFiles === undefined || !event.dataTransfer.types.includes('Files')) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            setImporting(true);
+          }}
+          onDragLeave={() => setImporting(false)}
+          onDrop={(event) => {
+            setImporting(false);
+            if (onImportFiles === undefined || event.dataTransfer.files.length === 0) return;
+            event.preventDefault();
+            onImportFiles([...event.dataTransfer.files]);
+          }}
+        >
           <div role="tree" aria-label="Project folder" className="flex flex-col gap-px py-1">
             {rows.length === 0 ? (
               <p className="p-4 font-mono text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assetPath } from '@nos/core';
@@ -419,5 +419,45 @@ describe('reaching the filter', () => {
 
     expect(box.selectionStart).toBe(0);
     expect(box.selectionEnd).toBe('seed4471'.length);
+  });
+});
+
+describe('files dragged in from outside', () => {
+  /** A drop carrying real files, as a file manager sends. */
+  const fileDrop = (files: readonly File[]) => ({
+    dataTransfer: { types: ['Files'], files, dropEffect: '', effectAllowed: '' },
+  });
+
+  it('takes files dropped on the panel', () => {
+    // The most natural way to bring material in, and the one an editor is expected to have.
+    const onImportFiles = vi.fn();
+    render(<MediaBrowser tree={buildTree([])} watcher={watching} onImportFiles={onImportFiles} />);
+
+    const dropped = [new File(['x'], 'shot.mp4')];
+    fireEvent.drop(screen.getByRole('tree', { name: 'Project folder' }), fileDrop(dropped));
+
+    expect(onImportFiles).toHaveBeenCalledWith(dropped);
+  });
+
+  it('ignores a drag that carries no file', () => {
+    // An internal asset drag carries its own type and must not be mistaken for an import.
+    const onImportFiles = vi.fn();
+    render(<MediaBrowser tree={buildTree([])} watcher={watching} onImportFiles={onImportFiles} />);
+
+    fireEvent.drop(screen.getByRole('tree', { name: 'Project folder' }), {
+      dataTransfer: { types: ['application/x-nos-asset'], files: [] },
+    });
+
+    expect(onImportFiles).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the caller does not accept imports', () => {
+    render(<MediaBrowser tree={buildTree([])} watcher={watching} />);
+    // No handler, no throw: the panel is still a tree and a drop over it is simply ignored.
+    fireEvent.drop(
+      screen.getByRole('tree', { name: 'Project folder' }),
+      fileDrop([new File(['x'], 'shot.mp4')]),
+    );
+    expect(screen.getByRole('tree', { name: 'Project folder' })).toBeDefined();
   });
 });
