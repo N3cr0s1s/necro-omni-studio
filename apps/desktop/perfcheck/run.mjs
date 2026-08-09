@@ -34,7 +34,7 @@
  *
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -142,6 +142,30 @@ function buildProject() {
 const work = mkdtempSync(join(tmpdir(), 'nos-perfcheck-'));
 const project = join(work, 'perfcheck');
 mkdirSync(join(project, 'media'), { recursive: true });
+
+/*
+ * The two source files every clip shares, made real.
+ *
+ * They were named `absent` and never created, which was harmless until the editor learned to notice
+ * missing media: after that, all two hundred clips were offline and each drew a marker, so this
+ * measured the cost of a pathological project rather than the cost of two hundred clips. The
+ * difference was about two milliseconds of the sixteen — enough to make the number mean something
+ * else without saying so.
+ *
+ * A second of black and a second of silence: nothing here decodes them, the clips only need the paths
+ * to resolve, and a real asset would put a filmstrip derivation in the middle of a timing run.
+ */
+for (const [name, args] of [
+  ['media/absent.mp4', ['-f', 'lavfi', '-i', 'color=c=black:s=64x36:d=1:r=30']],
+  ['media/absent.flac', ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '1']],
+]) {
+  const made = spawnSync('ffmpeg', ['-v', 'error', '-y', ...args, join(project, name)]);
+  if (made.status !== 0) {
+    console.error(`✗ the fixture media could not be made — is ffmpeg installed?`);
+    process.exitCode = 1;
+  }
+}
+
 writeFileSync(join(project, 'project.json'), JSON.stringify(buildProject(), null, 1));
 
 // The shell reopens the project it last had open, which is how this drives a native folder picker
