@@ -1427,7 +1427,35 @@ export function App(): ReactNode {
             },
           ]
         : []),
-      ...(notice !== undefined ? [{ id: 'notice', tone: 'warning' as const, message: notice }] : []),
+      /*
+       * Missing media carries its own repair.
+       *
+       * The notice is where a user first learns a file has gone, and until now the fix lived only in a
+       * clip's context menu — so the message told them about a problem and left them to find the
+       * answer somewhere else. A notice that names a problem it can solve should offer to.
+       */
+      ...(notice !== undefined
+        ? [
+            {
+              id: 'notice',
+              tone: 'warning' as const,
+              message: notice,
+              ...(availability.missing.length > 0
+                ? {
+                    actions: [
+                      {
+                        label: 'Relink…',
+                        primary: true,
+                        // The first clip using the first missing file, because the dialog is *about* an
+                        // asset and needs a clip only to find which one.
+                        onClick: () => setRelinking(availability.offlineClips[0]),
+                      },
+                    ],
+                  }
+                : {}),
+            },
+          ]
+        : []),
       ...(blocked !== undefined
         ? [
             {

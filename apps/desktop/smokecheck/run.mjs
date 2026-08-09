@@ -22,7 +22,7 @@
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -242,6 +242,39 @@ try {
    * A renderer that can put bytes anywhere on the machine is a different security posture from one
    * that can fill a project folder.
    */
+  /*
+   * Missing media, and the repair offered where it is announced.
+   *
+   * The fixture's audio clip points at a file that is not copied in until later in this run, so the
+   * project opens with one asset missing — which is the state a user meets after moving a folder.
+   */
+  const kept = readFileSync(tone);
+  rmSync(tone);
+
+  // The watcher reports the deletion on its own debounce, so this waits for the editor to notice
+  // rather than assuming — which also checks that it *does* notice, with no rescan asked for.
+  let noticed = '';
+  for (let waited = 0; waited < 20 && !/is missing/.test(noticed); waited += 1) {
+    await page.waitForTimeout(500);
+    noticed = await page
+      .locator('[aria-label="Status"]')
+      .innerText()
+      .catch(() => '');
+  }
+
+  if (/is missing/.test(noticed)) {
+    pass('a file removed under the editor is noticed and named');
+    const relink = page.getByRole('button', { name: 'Relink…' });
+    if ((await relink.count()) > 0) pass('the repair is offered where the problem is announced');
+    else fail('the missing-media notice offers no way to fix it');
+  } else {
+    fail('a file removed under the editor was never noticed');
+  }
+
+  // Put it back, so the checks after this one see the project they expect.
+  writeFileSync(tone, kept);
+  await page.waitForTimeout(2500);
+
   /*
    * The way in, before the thing it does.
    *
