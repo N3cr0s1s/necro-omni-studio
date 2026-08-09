@@ -88,6 +88,35 @@ export interface ClipSpeed {
   readonly preservePitch: boolean;
 }
 
+/**
+ * Ramps at a clip's own edges, in project frames.
+ *
+ * Its own field rather than keyframes on gain and opacity, for three reasons the crossfade report
+ * made concrete. A fade authored as keyframes is destroyed by the next automation the user writes,
+ * and there is no way to ask "does this clip fade in" afterwards — the shape has to be recognized
+ * from the curve. It has to be *removable*: a crossfade made by dropping one clip onto another is
+ * undone by dragging it back off, and undoing an edit by pattern-matching keyframes is not something
+ * to build. And a length is a number a person can type, which is what §6.1's frame accuracy asks for
+ * everywhere else.
+ *
+ * On `ClipBase` rather than on `AudioClip`, because a ramp at an edge means the same thing in both
+ * domains and only the quantity differs — level for sound, opacity for picture. A crossfade between
+ * two stacked video clips is then the same edit as one between two sounds, which is exactly how a
+ * user describes it.
+ *
+ * The two counts may overlap on a short clip; how they combine is the renderer's business, not the
+ * document's.
+ */
+export interface ClipFade {
+  /** Frames from the clip's in-point over which it ramps up from nothing. */
+  readonly inFrames: number;
+  /** Frames before the clip's out-point over which it ramps down to nothing. */
+  readonly outFrames: number;
+}
+
+/** No ramp at either edge — what a clip has unless something asked otherwise. */
+export const NO_FADE: ClipFade = { inFrames: 0, outFrames: 0 };
+
 export interface ClipBase {
   readonly id: ClipId;
   /** Placement on the timeline, in project-rate frames. */
@@ -97,6 +126,8 @@ export interface ClipBase {
   readonly enabled: boolean;
   readonly effects: readonly EffectInstance[];
   readonly provenance?: GeneratorProvenance;
+  /** Absent means no ramp at either edge, which is the common case and is not worth storing. */
+  readonly fade?: ClipFade;
 }
 
 export interface VideoClip extends ClipBase {
@@ -273,6 +304,52 @@ export function clipSpeed(clip: Clip): number {
 /** Every clip kind except text carries a transform; audio has none. */
 export function clipTransform(clip: Clip): ClipTransform | undefined {
   return clip.kind === 'audio' ? undefined : clip.transform;
+}
+
+/**
+ * A clip's edge ramps, as numbers rather than as an absence.
+ *
+ * Every renderer multiplying a fade into something wants two counts it can arithmetic with, and each
+ * of them writing `?? NO_FADE` is how one of them eventually forgets. Negatives are clamped here
+ * rather than refused: a stored file is not a trusted input, and a fade of −5 frames should render as
+ * no fade rather than as an inverted ramp nothing else in the system can express.
+ */
+export function clipFade(clip: Clip): ClipFade {
+  const fade = clip.fade;
+  if (fade === undefined) return NO_FADE;
+  return { inFrames: Math.max(0, fade.inFrames), outFrames: Math.max(0, fade.outFrames) };
+}
+
+/** Whether a clip ramps at either edge. */
+export function hasFade(clip: Clip): boolean {
+  const fade = clipFade(clip);
+  return fade.inFrames > 0 || fade.outFrames > 0;
+}
+
+/**
+ * How far through its ramps a clip is at one of its own frames: 0 at silence, 1 at full.
+ *
+ * **Linear, and deliberately not the final multiplier.** Sound and picture want different curves —
+ * two uncorrelated sounds crossfaded on a linear pair dip audibly in the middle, and a picture
+ * crossfaded on an equal-power pair goes *bright* in the middle — so the shape belongs with each
+ * renderer and only the position belongs here. What must be shared is where in the ramp a frame
+ * falls, because a fade the mixer and the compositor disagreed about would be a crossfade that
+ * sounds early.
+ *
+ * The **minimum** of the two ramps where they overlap on a short clip, so a clip shorter than its own
+ * fades still reaches silence at both ends rather than jumping.
+ *
+ * Frame-relative to the clip, like keyframes, so a head trim moves the ramp with the picture.
+ */
+export function fadeAmountAt(clip: Clip, clipRelativeFrame: number): number {
+  const fade = clipFade(clip);
+  if (fade.inFrames === 0 && fade.outFrames === 0) return 1;
+
+  const duration = clip.span.duration;
+  const rising = fade.inFrames === 0 ? 1 : clipRelativeFrame / fade.inFrames;
+  const falling = fade.outFrames === 0 ? 1 : (duration - clipRelativeFrame) / fade.outFrames;
+
+  return Math.min(1, Math.max(0, Math.min(rising, falling)));
 }
 
 /**

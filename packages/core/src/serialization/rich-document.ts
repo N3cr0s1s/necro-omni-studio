@@ -193,6 +193,9 @@ export function richDocument(): TimelineDocument {
         ]),
         pan: staticNumber(0),
         effects: [],
+        // Both ramps set, and to different lengths: a fixture where they matched would round-trip
+        // identically with the two fields swapped.
+        fade: { inFrames: 12, outFrames: 30 },
         linkedVideo: clipId('c1'),
       },
     ],

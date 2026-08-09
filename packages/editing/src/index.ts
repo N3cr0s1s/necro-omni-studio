@@ -28,3 +28,5 @@ export * from './clip-transform.js';
 export * from './story-ops.js';
 export * from './clip-speed.js';
 export * from './trim-group.js';
+export * from './fade-ops.js';
+export * from './move-crossfade.js';

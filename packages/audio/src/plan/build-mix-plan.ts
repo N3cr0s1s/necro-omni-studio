@@ -15,6 +15,7 @@ import {
   overlaps,
   spanFromBounds,
 } from '@nos/core';
+import { fadeAmountAt, hasFade } from '@nos/core';
 import type { GainPoint, MixPlan, MixSource } from '../contracts/mix-plan.js';
 
 /**
@@ -96,7 +97,7 @@ function buildSource(
 
   // Gain at the start of the audible range. When the curve is animated this is the ramp's first value
   // and the automation points carry the rest; when it is constant this is the whole story.
-  const startGain = evaluateAt(clip.gain, clipRelativeStart);
+  const startGain = clipGainAt(clip, clipRelativeStart);
 
   return {
     clip: clip.id,
@@ -111,10 +112,31 @@ function buildSource(
     pan: combinePan(evaluateAt(clip.pan, clipRelativeStart), track.pan),
     speed: clip.speed.factor,
     preservePitch: clip.speed.preservePitch,
-    gainAutomation: isAnimated(clip.gain)
-      ? sampleGainAutomation(clip, track, audible, rate, automationInterval)
-      : [],
+    // A fade is a curve like any other, so a clip carrying one is scheduled as automation even when
+    // its own gain is a constant. Without this the ramp would collapse to a single starting value
+    // and the crossfade a user made by overlapping two clips would play as a hard cut.
+    gainAutomation:
+      isAnimated(clip.gain) || hasFade(clip)
+        ? sampleGainAutomation(clip, track, audible, rate, automationInterval)
+        : [],
   };
+}
+
+/**
+ * The clip's own level at one of its frames: authored gain shaped by its edge ramps.
+ *
+ * **Equal power, not linear.** Two clips crossfaded on linear ramps are each at half amplitude in
+ * the middle, and for uncorrelated material — which two different takes always are — that sums to
+ * about −3 dB: an audible dip exactly where the join is supposed to be inaudible. A quarter-cycle
+ * sine pair sums to unity power instead, which is why every mixing desk uses it.
+ *
+ * One function, so the starting gain and every automation point are shaped identically. Sampling
+ * them through different code is how a fade ends up starting at the wrong level for one frame.
+ */
+function clipGainAt(clip: AudioClip, clipRelativeFrame: FrameIndex): number {
+  const authored = evaluateAt(clip.gain, clipRelativeFrame);
+  if (!hasFade(clip)) return authored;
+  return authored * Math.sin((Math.PI / 2) * fadeAmountAt(clip, clipRelativeFrame));
 }
 
 /**
@@ -150,7 +172,7 @@ function sampleGainAutomation(
     const clipRelative = frameIndex(frame - clip.span.start);
     points.push({
       atSeconds: framesToSecondsNumber(frameIndex(frame), rate),
-      gain: Math.max(0, evaluateAt(clip.gain, clipRelative)) * trackGain,
+      gain: Math.max(0, clipGainAt(clip, clipRelative)) * trackGain,
     });
   };
 

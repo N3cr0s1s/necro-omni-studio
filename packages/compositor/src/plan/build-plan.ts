@@ -11,6 +11,7 @@ import {
   containsFrame,
   endExclusive,
   evaluateAt,
+  fadeAmountAt,
   frameIndex,
   framesToSecondsNumber,
   isTrackAudible,
@@ -103,7 +104,14 @@ function itemsForTrack(
   // has to be evaluated against the whole track set rather than per track.
   if (!isTrackAudible(track, anySoloed)) return [];
 
-  const live = trackClips(track).filter((clip) => clip.enabled && containsFrame(clip.span, frame));
+  // Sorted by start, because two clips on one track can be live at the same frame — that is what an
+  // overlap crossfade *is* — and the document stores clips in insertion order. Unsorted, which of the
+  // two ended up on top depended on the order they happened to be added in, so the same overlap
+  // dissolved one way in a fresh project and the other way after a reload. The later-starting clip
+  // composites last, which is what makes a dissolve read as the incoming shot arriving.
+  const live = trackClips(track)
+    .filter((clip) => clip.enabled && containsFrame(clip.span, frame))
+    .sort((a, b) => a.span.start - b.span.start || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   if (live.length === 0) return [];
 
   const transitions = track.kind === 'video' ? track.transitions : [];
@@ -219,8 +227,10 @@ function resolveSource(
 
 function resolveTransform(clip: Clip, clipRelative: FrameIndex): ResolvedTransform {
   const transform: ClipTransform | undefined = clip.kind === 'audio' ? undefined : clip.transform;
+  // A clip with no transform can still ramp, so the fade is read before the early return.
+  const fade = fadeAmountAt(clip, clipRelative);
   if (transform === undefined) {
-    return { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 };
+    return { x: 0, y: 0, scale: 1, rotation: 0, opacity: fade };
   }
   return {
     x: evaluateAt(transform.x, clipRelative),
@@ -229,7 +239,16 @@ function resolveTransform(clip: Clip, clipRelative: FrameIndex): ResolvedTransfo
     rotation: evaluateAt(transform.rotation, clipRelative),
     // Clamped: an authored curve can overshoot, and a negative or >1 opacity would produce a
     // brighter-than-source composite rather than the intended fade.
-    opacity: clamp01(evaluateAt(transform.opacity, clipRelative)),
+    //
+    // The edge ramp **multiplies** the authored curve rather than replacing it. A clip dropped onto
+    // its neighbour to make a crossfade may already carry an opacity animation, and a fade that
+    // overwrote it would silently discard work; multiplying means the ramp and the animation are
+    // both honoured and either can be removed without disturbing the other.
+    //
+    // Linear, where the mixer's is equal-power: two pictures dissolving on a sine pair are each at
+    // ~0.71 in the middle and composite to a visibly *brighter* frame, because light adds where
+    // uncorrelated sound does not.
+    opacity: clamp01(evaluateAt(transform.opacity, clipRelative)) * fade,
   };
 }
 

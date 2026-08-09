@@ -62,6 +62,7 @@ import {
 } from '../document/ids.js';
 import {
   type AudioClip,
+  type ClipFade,
   type ClipSpeed,
   type ClipTransform,
   type EffectInstance,
@@ -247,6 +248,23 @@ export const vClipSpeed: Validator<ClipSpeed> = vObject<ClipSpeed>({
 
 export const DEFAULT_SPEED: ClipSpeed = { factor: 1, preservePitch: true };
 
+/**
+ * Edge ramps.
+ *
+ * Non-negative because a negative ramp has no meaning the renderers can express, and rounded to
+ * whole frames because that is the unit a fade is authored and drawn in. Clamped rather than
+ * rejected: a file that has been hand-edited into a bad fade should open with the fade ignored, not
+ * fail to open.
+ */
+export const vFadeFrames: Validator<number> = vMap(vNumber, (value) =>
+  Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0,
+);
+
+export const vClipFade: Validator<ClipFade> = vObject<ClipFade>({
+  inFrames: vWithDefault(vFadeFrames, 0),
+  outFrames: vWithDefault(vFadeFrames, 0),
+});
+
 const vClipBaseShape = {
   id: vClipId,
   span: vFrameSpan,
@@ -254,6 +272,7 @@ const vClipBaseShape = {
   enabled: vWithDefault(vBoolean, true),
   effects: vWithDefault(vArray(vEffectInstance), []),
   provenance: vOptional(vGeneratorProvenance),
+  fade: vOptional(vClipFade),
 } as const;
 
 export const vVideoClip: Validator<VideoClip> = vObject<VideoClip>({

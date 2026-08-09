@@ -9,6 +9,7 @@ import {
 import {
   type AudioClip,
   type Clip,
+  type ClipFade,
   type ClipSpeed,
   type ClipTransform,
   type EffectInstance,
@@ -177,6 +178,20 @@ export function serializeSpeed(speed: ClipSpeed): JsonObject | undefined {
   });
 }
 
+/**
+ * Edge ramps, omitted when there are none.
+ *
+ * A fade of zero at both edges is what almost every clip has, and writing it would put an object in
+ * every clip of every project for every reader to skip.
+ */
+export function serializeFade(fade: ClipFade | undefined): JsonObject | undefined {
+  if (fade === undefined || (fade.inFrames === 0 && fade.outFrames === 0)) return undefined;
+  return compact({
+    inFrames: unlessDefault(fade.inFrames, 0),
+    outFrames: unlessDefault(fade.outFrames, 0),
+  });
+}
+
 function serializeClipBase(clip: Clip): Record<string, JsonValue | undefined> {
   return {
     id: clip.id as string,
@@ -186,6 +201,7 @@ function serializeClipBase(clip: Clip): Record<string, JsonValue | undefined> {
     enabled: unlessDefault(clip.enabled, true),
     effects: clip.effects.length === 0 ? undefined : clip.effects.map(serializeEffectInstance),
     provenance: clip.provenance === undefined ? undefined : serializeProvenance(clip.provenance),
+    fade: serializeFade(clip.fade),
   };
 }
 

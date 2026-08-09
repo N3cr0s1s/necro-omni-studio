@@ -341,6 +341,35 @@ describe('transform evaluation', () => {
     const layer = planLayers(plan(makeDocument({ v1: [video('a', 0, 100)] }), 10))[0]!;
     expect(layer.transform.scale).toBe(1);
   });
+
+  it('ramps opacity across an edge fade', () => {
+    const clip = video('a', 100, 200, { fade: { inFrames: 20, outFrames: 40 } } as Partial<Clip>);
+    const document = makeDocument({ v1: [clip] });
+    expect(planLayers(plan(document, 100))[0]!.transform.opacity).toBe(0);
+    expect(planLayers(plan(document, 110))[0]!.transform.opacity).toBeCloseTo(0.5, 6);
+    expect(planLayers(plan(document, 150))[0]!.transform.opacity).toBe(1);
+    expect(planLayers(plan(document, 180))[0]!.transform.opacity).toBeCloseTo(0.5, 6);
+  });
+
+  it('multiplies the ramp into an authored opacity rather than replacing it', () => {
+    // A clip dropped onto its neighbour to make a dissolve may already carry an opacity animation,
+    // and a ramp that overwrote it would silently discard work.
+    const clip = video('a', 0, 100, {
+      transform: { ...transform, opacity: staticNumber(0.5) },
+      fade: { inFrames: 20, outFrames: 0 },
+    } as Partial<Clip>);
+    const document = makeDocument({ v1: [clip] });
+    expect(planLayers(plan(document, 10))[0]!.transform.opacity).toBeCloseTo(0.25, 6);
+    expect(planLayers(plan(document, 40))[0]!.transform.opacity).toBeCloseTo(0.5, 6);
+  });
+
+  it('is linear, where the mixer’s is equal power', () => {
+    // Two pictures dissolving on a sine pair are each at ~0.71 in the middle and composite to a
+    // visibly brighter frame — light adds where uncorrelated sound does not.
+    const clip = video('a', 0, 100, { fade: { inFrames: 100, outFrames: 0 } } as Partial<Clip>);
+    const opacity = planLayers(plan(makeDocument({ v1: [clip] }), 50))[0]!.transform.opacity;
+    expect(opacity).toBeCloseTo(0.5, 6);
+  });
 });
 
 describe('effect passes', () => {

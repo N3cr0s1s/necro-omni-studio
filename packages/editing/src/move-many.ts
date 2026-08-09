@@ -33,6 +33,19 @@ export interface MoveManyResult {
   readonly deltaFrames: number;
 }
 
+export interface MoveManyOptions {
+  /**
+   * Clips this move is allowed to land on.
+   *
+   * Empty by default, which is the rule the timeline has always had: a collision is refused, never
+   * resolved by displacing a neighbour. The exception exists for exactly one gesture — dropping a
+   * clip onto the one before it to make a crossfade — where the overlap *is* the edit, and the
+   * caller has already decided what it means. Naming the clips rather than taking a boolean keeps
+   * that decision explicit: everything not listed still refuses.
+   */
+  readonly permitted?: ReadonlySet<string>;
+}
+
 /**
  * Translates a set of clips along their own tracks.
  *
@@ -47,6 +60,7 @@ export function moveClips(
   document: TimelineDocument,
   ids: readonly ClipId[],
   deltaFrames: number,
+  options: MoveManyOptions = {},
 ): Result<MoveManyResult, EditError> {
   const moving = new Set<string>(ids as readonly string[]);
   if (moving.size === 0 || deltaFrames === 0) return ok({ document, deltaFrames: 0 });
@@ -89,7 +103,7 @@ export function moveClips(
 
     // Checked once, after every clip in the set has been shifted — which is what makes moving a run
     // of adjacent clips possible at all.
-    const blocker = firstOverlap(shifted, moving);
+    const blocker = firstOverlap(shifted, moving, options.permitted);
     if (blocker !== undefined) {
       return err({ kind: 'collision', track: track.id, withClip: blocker });
     }
@@ -125,15 +139,16 @@ export function moveClipsBy(
   deltaFrames: number,
   deltaRows: number,
   eligibleTracks: (clip: Clip) => readonly TrackId[],
+  options: MoveManyOptions = {},
 ): Result<MoveManyResult, EditError> {
-  if (deltaRows === 0) return moveClips(document, ids, deltaFrames);
+  if (deltaRows === 0) return moveClips(document, ids, deltaFrames, options);
 
   const moving = new Set<string>(ids as readonly string[]);
   if (moving.size === 0) return ok({ document, deltaFrames: 0 });
 
   // Time first, on the existing tracks, so the horizontal part keeps the behaviour it already had —
   // including the clamp at frame zero and the all-or-nothing collision rule.
-  const shifted = moveClips(document, ids, deltaFrames);
+  const shifted = moveClips(document, ids, deltaFrames, options);
   if (!shifted.ok) return shifted;
 
   interface Pending {
@@ -179,7 +194,7 @@ export function moveClipsBy(
     if (!unlocked.ok) return unlocked;
 
     const combined = [...trackClips(target), move.clip].sort((a, b) => a.span.start - b.span.start);
-    const blocker = firstOverlap(combined, new Set<string>([move.clip.id]));
+    const blocker = firstOverlap(combined, new Set<string>([move.clip.id]), options.permitted);
     if (blocker !== undefined) {
       return err({ kind: 'collision', track: move.to, withClip: blocker });
     }
@@ -203,13 +218,20 @@ export function moveClipsBy(
  * not create. Pairs with neither side moving are, for the same reason, none of this operation's
  * business.
  */
-function firstOverlap(clips: readonly Clip[], moving: ReadonlySet<string>): ClipId | undefined {
+function firstOverlap(
+  clips: readonly Clip[],
+  moving: ReadonlySet<string>,
+  permitted?: ReadonlySet<string>,
+): ClipId | undefined {
   for (let index = 0; index < clips.length; index += 1) {
     const left = clips[index]!;
     for (let other = index + 1; other < clips.length; other += 1) {
       const right = clips[other]!;
       if (moving.has(left.id) === moving.has(right.id)) continue;
-      if (overlaps(left, right)) return moving.has(left.id) ? right.id : left.id;
+      if (!overlaps(left, right)) continue;
+      const stationary = moving.has(left.id) ? right.id : left.id;
+      if (permitted?.has(stationary) === true) continue;
+      return stationary;
     }
   }
   return undefined;

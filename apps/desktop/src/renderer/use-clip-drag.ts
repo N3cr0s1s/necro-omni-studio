@@ -1,5 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  type Clip,
   type ClipId,
   type FrameIndex,
   type Result,
@@ -8,6 +9,7 @@ import {
   locateClip,
 } from '@nos/core';
 import {
+  type CrossfadePlan,
   type EditError,
   type SnapCandidate,
   DEFAULT_SNAP_PIXELS,
@@ -19,7 +21,7 @@ import {
   eligibleTracksFor,
   limitedStart,
   moveClip,
-  moveClipsBy,
+  moveWithCrossfades,
   reachableTrimDelta,
   rollEdit,
   trackForOffset,
@@ -92,6 +94,13 @@ export interface ClipDrag {
    * pointer. A user who cannot see *what* it caught learns to distrust the feature and turns it off.
    */
   readonly snappedTo: SnapCandidate | undefined;
+  /**
+   * Crossfades the current position would create.
+   *
+   * Surfaced for the same reason `snappedTo` is: dropping a clip onto its neighbour changes both
+   * clips, and an edit that alters something the pointer is not on has to say so before it happens.
+   */
+  readonly crossfades: readonly CrossfadePlan[];
   begin(kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>): void;
 }
 
@@ -118,6 +127,11 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
   const [preview, setPreview] = useState<TimelineDocument | undefined>(undefined);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [snappedTo, setSnappedTo] = useState<SnapCandidate | undefined>(undefined);
+  const [crossfades, setCrossfades] = useState<readonly CrossfadePlan[]>(NO_CROSSFADES);
+
+  // The commit label is decided from the last position the drag reached, and `onUp` runs after the
+  // final `onMove`. Held in a ref rather than read from state, which that handler would see stale.
+  const lastCrossfades = useRef<readonly CrossfadePlan[]>(NO_CROSSFADES);
 
   // Read inside the window listeners, which are attached once per gesture and must not close over a
   // stale document or zoom.
@@ -141,6 +155,8 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
       setPreview(undefined);
       setRejection(undefined);
       setSnappedTo(undefined);
+      setCrossfades(NO_CROSSFADES);
+      lastCrossfades.current = NO_CROSSFADES;
     },
     [document],
   );
@@ -163,6 +179,8 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
       if (result.ok) {
         setPreview(result.value.document);
         setSnappedTo(result.value.snappedTo);
+        setCrossfades(result.value.crossfades);
+        lastCrossfades.current = result.value.crossfades;
         setRejection(undefined);
       } else {
         // The preview stops following the pointer and says why, rather than snapping the clip somewhere
@@ -173,11 +191,16 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 
     function onUp(): void {
       const state = latest.current.drag;
+      const made = lastCrossfades.current;
       setDrag(undefined);
       setSnappedTo(undefined);
+      setCrossfades(NO_CROSSFADES);
+      lastCrossfades.current = NO_CROSSFADES;
       setPreview((current) => {
         if (current !== undefined && state !== undefined) {
-          commit(labelFor(state.kind), current);
+          // Named for what it did, not for the gesture that did it. Undo offering "move clip" after a
+          // drop that also wrote two ramps describes the smaller half of what it will take back.
+          commit(made.length > 0 ? labelForCrossfade(made) : labelFor(state.kind), current);
         }
         return undefined;
       });
@@ -198,8 +221,16 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
     dragging: drag !== undefined,
     rejection,
     snappedTo,
+    crossfades,
     begin,
   };
+}
+
+/** One shared empty list, so an idle drag does not re-render every consumer on each pointer move. */
+const NO_CROSSFADES: readonly CrossfadePlan[] = [];
+
+function labelForCrossfade(plans: readonly CrossfadePlan[]): string {
+  return plans.length === 1 ? 'crossfade' : `crossfade ${plans.length} clips`;
 }
 
 function labelFor(kind: DragKind): string {
@@ -218,6 +249,8 @@ function labelFor(kind: DragKind): string {
 interface DragOutcome {
   readonly document: TimelineDocument;
   readonly snappedTo: SnapCandidate | undefined;
+  /** Crossfades this position would create, so the gesture can say what dropping here does. */
+  readonly crossfades: readonly CrossfadePlan[];
 }
 
 function applyDrag(
@@ -286,39 +319,56 @@ function applyDrag(
     deltaRows: 0,
   };
 
-  if (group.length > 1) {
-    // Translated as a set, so the clips keep their spacing and a run of adjacent ones can move at
-    // all — applied one at a time, each would collide with the neighbour that has not moved yet.
-    //
-    // The row delta travels with it, applied within each clip's own kind. An imported video and its
-    // audio are linked, so grabbing either drags both — and a group pinned to its tracks meant the
-    // *common* case could never change row, which is what "I cannot move clips between tracks,
-    // neither audio nor video" actually was.
-    const moved = moveClipsBy(
-      state.document,
-      group,
-      snap.frame - clip.span.start,
-      destination.deltaRows,
-      (member) => eligibleTracksFor(state.document.sequence.tracks, member),
-    );
-    return moved.ok
-      ? { ok: true, value: { document: moved.value.document, snappedTo: snap.snappedTo } }
-      : moved;
+  // Translated as a set, so the clips keep their spacing and a run of adjacent ones can move at all —
+  // applied one at a time, each would collide with the neighbour that has not moved yet.
+  //
+  // The row delta travels with it, applied within each clip's own kind. An imported video and its
+  // audio are linked, so grabbing either drags both — and a group pinned to its tracks meant the
+  // *common* case could never change row, which is what "I cannot move clips between tracks, neither
+  // audio nor video" actually was.
+  //
+  // Overlaps that form a crossfade are permitted and written as ramps in the same step. A clip
+  // dropped onto the one before it is how every editor makes a dissolve, and until now the move was
+  // simply clamped flush — so the only route to one was a dialog asking for two clips already
+  // meeting exactly at a cut.
+  const request = {
+    document: state.document,
+    ids: group,
+    deltaFrames: snap.frame - clip.span.start,
+    deltaRows: destination.deltaRows,
+    eligibleTracks: (member: Clip) => eligibleTracksFor(state.document.sequence.tracks, member),
+  };
+  const moved = moveWithCrossfades(request);
+  if (moved.ok) {
+    return {
+      ok: true,
+      value: {
+        document: moved.value.document,
+        snappedTo: snap.snappedTo,
+        crossfades: moved.value.crossfades,
+      },
+    };
   }
+
+  // Blocked by something that is not a crossfade — two clips at once, or one that would be swallowed.
+  // A single clip travels as far as it legitimately can rather than failing the whole gesture: "there
+  // is room and I cannot use it" was the report that produced this rule. A group cannot, because
+  // clamping one member of a set breaks exactly the spacing it was dragged to preserve.
+  if (group.length > 1) return moved;
+
   const targetTrack = state.document.sequence.tracks.find((candidate) => candidate.id === destination.track);
   if (targetTrack === undefined) {
     return { ok: false, error: { kind: 'track-not-found', track: destination.track } };
   }
 
-  // Clamped rather than refused. A move that overlapped anything used to fail the whole gesture, so
-  // the clip snapped back to where it started — "there is room and I cannot use it". It now travels
-  // as far as it legitimately can, and the obstacle is on screen the whole time.
   const reachable = limitedStart(targetTrack, [state.clip], clip.span, snap.frame, {
     changingTrack: destination.changed,
   });
 
-  const moved = moveClip(state.document, state.clip, destination.track, reachable);
-  return moved.ok ? { ok: true, value: { document: moved.value, snappedTo: snap.snappedTo } } : moved;
+  const clamped = moveClip(state.document, state.clip, destination.track, reachable);
+  return clamped.ok
+    ? { ok: true, value: { document: clamped.value, snappedTo: snap.snappedTo, crossfades: [] } }
+    : clamped;
 }
 
 /**
@@ -363,7 +413,7 @@ function applyTrim(
   const request = { document: state.document, clip: state.clip, edge, delta: snap.delta };
   const trimmed = trimGroup(request);
   if (trimmed.ok) {
-    return { ok: true, value: { document: trimmed.value, snappedTo: snap.snappedTo } };
+    return { ok: true, value: { document: trimmed.value, snappedTo: snap.snappedTo, crossfades: [] } };
   }
 
   // Blocked: travel as far as the group legitimately can rather than failing the whole gesture, the
@@ -373,12 +423,16 @@ function applyTrim(
   if (reachable === 0) return trimmed;
 
   const limited = trimGroup({ ...request, delta: reachable });
-  return limited.ok ? { ok: true, value: { document: limited.value, snappedTo: undefined } } : limited;
+  return limited.ok
+    ? { ok: true, value: { document: limited.value, snappedTo: undefined, crossfades: [] } }
+    : limited;
 }
 
-/** An operation that cannot snap, in the shape the caller expects. */
+/** An operation that neither snaps nor crossfades, in the shape the caller expects. */
 function plain(result: Result<TimelineDocument, EditError>): Result<DragOutcome, EditError> {
-  return result.ok ? { ok: true, value: { document: result.value, snappedTo: undefined } } : result;
+  return result.ok
+    ? { ok: true, value: { document: result.value, snappedTo: undefined, crossfades: [] } }
+    : result;
 }
 
 /**

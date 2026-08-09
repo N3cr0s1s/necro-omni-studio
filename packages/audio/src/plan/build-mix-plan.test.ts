@@ -237,6 +237,70 @@ describe('gain', () => {
   });
 });
 
+describe('edge ramps', () => {
+  /** The scheduled gain nearest a timeline frame, which is what the engine will actually apply. */
+  const gainNear = (document: TimelineDocument, frame: number): number => {
+    const source = plan(document, 0, 400).sources[0]!;
+    const wanted = frame / 30;
+    const nearest = [...source.gainAutomation].sort(
+      (a, b) => Math.abs(a.atSeconds - wanted) - Math.abs(b.atSeconds - wanted),
+    )[0];
+    return nearest?.gain ?? source.gain;
+  };
+
+  it('schedules automation for a fade even when the clip’s own gain is constant', () => {
+    // Without this the ramp collapses to one starting value and the crossfade a user made by
+    // overlapping two clips plays as a hard cut.
+    const document = makeDocument({
+      a1: [audioClip('a', 0, 100, { fade: { inFrames: 20, outFrames: 0 } })],
+    });
+    expect(plan(document, 0, 100).sources[0]!.gainAutomation.length).toBeGreaterThan(1);
+  });
+
+  it('starts a fade-in at silence and reaches full at the end of the ramp', () => {
+    const document = makeDocument({
+      a1: [audioClip('a', 0, 100, { fade: { inFrames: 20, outFrames: 0 } })],
+    });
+    expect(gainNear(document, 0)).toBeCloseTo(0, 6);
+    expect(gainNear(document, 20)).toBeCloseTo(1, 6);
+    expect(gainNear(document, 60)).toBeCloseTo(1, 6);
+  });
+
+  it('is equal power, so two crossfaded takes do not dip in the middle', () => {
+    // Linear ramps put each side at 0.5 amplitude at the join; for uncorrelated material that sums
+    // to roughly −3 dB, which is an audible hole exactly where the join should be inaudible. A
+    // quarter-cycle sine pair squares to unity instead.
+    const document = makeDocument({
+      a1: [audioClip('a', 0, 100, { fade: { inFrames: 20, outFrames: 0 } })],
+    });
+    const half = gainNear(document, 10);
+    expect(half).toBeCloseTo(Math.SQRT1_2, 3);
+    expect(half * half + (1 - half * half)).toBeCloseTo(1, 6);
+  });
+
+  it('multiplies the authored curve rather than replacing it', () => {
+    // A clip dropped onto its neighbour may already carry level automation, and a ramp that
+    // overwrote it would silently discard work.
+    const document = makeDocument({
+      a1: [
+        audioClip('a', 0, 100, {
+          gain: staticNumber(0.5),
+          fade: { inFrames: 20, outFrames: 0 },
+        }),
+      ],
+    });
+    expect(gainNear(document, 20)).toBeCloseTo(0.5, 6);
+    expect(gainNear(document, 0)).toBeCloseTo(0, 6);
+  });
+
+  it('leaves a clip with no fade exactly as it was', () => {
+    const document = makeDocument({ a1: [audioClip('a', 0, 100)] });
+    const source = plan(document, 0, 100).sources[0]!;
+    expect(source.gain).toBe(1);
+    expect(source.gainAutomation).toEqual([]);
+  });
+});
+
 describe('pan', () => {
   it('sums clip and track pan so they compound', () => {
     // Multiplying would pull a left-panned clip on a left-panned track back toward centre.
