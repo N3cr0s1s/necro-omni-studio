@@ -759,6 +759,16 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 - Settings that belong to the **installation** live beside `session.json` in `userData`, never in
   `project.json`: a cap on how much work a machine takes on follows the machine, not the cut. §5.8's
   global variant override was declared in the queue and unreachable for want of anywhere to put it.
+- A default is stored as **absent**, never as a copy of itself. Writing today's default into every
+  settings file freezes it there, and clearing a field then has no way to mean "whatever the default
+  is now". §3's backend address is empty by default for exactly this reason.
+- Precedence for a configurable endpoint: the **user's setting**, then the environment, then the
+  built-in. The environment still beats the built-in so a scripted launch keeps working; the user's
+  choice beats both, being the more deliberate.
+- A stored URL's **scheme is checked**, never assumed. A settings file is the kind of thing that gets
+  pasted into, and a `file:` or `javascript:` address would be handed straight to `fetch`.
+- An address commits on **blur**, not per keystroke: `http://1` is valid and would be stored, walking
+  the backend across a dozen machines on the way to the right one.
 - Settings are read **tolerantly, per field**, so one hand-edited mistake does not cost the rest — and
   so a file from an older build simply has defaults for what it does not mention.
 - A number out of range is **clamped, not discarded**; something that is not a number is. The first
