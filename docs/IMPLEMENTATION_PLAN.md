@@ -862,7 +862,7 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   two long texts differing past the truncation point otherwise collide, and a
   colliding key renders the wrong text from cache.
 
-### Verification harnesses (five of them now)
+### Verification harnesses (six of them now)
 
 Two of them drive the whole application. `apps/desktop/exportcheck` launches the shell, lets it reopen
 a fixture project, exports, and reads the delivered mp4 back with ffmpeg — it exists because the export
@@ -871,6 +871,17 @@ wrong. `apps/desktop/perfcheck` writes a **200-clip** project, zooms out until a
 and drags a clip for sixty frames while watching the main thread. It covers the half of §8 nothing
 measured: `@nos/smoke` guards the document and the plan builders, but what a user feels is React
 rendering two hundred clips under a moving pointer.
+
+`apps/desktop/smokecheck` asks the plainest question of all — does the editor open, does a project
+load, does every panel draw — and treats every renderer error as fatal, including the ones that leave
+the screen looking fine. It is shallow and wide on purpose: depth belongs to the harness that owns the
+capability, and this is the coverage no unit test gives, because a unit test renders a component with
+the props it chose rather than the ones the shell passes.
+
+**A harness's own first failures are usually its own.** Smokecheck's were: it copied a fixture without
+synthesizing the tone made at runtime, and it looked for the status bar as a `region` when a `<footer>`
+is `contentinfo`. Check the harness before filing a defect — and take the failures as proof the checks
+can fail, which is worth having.
 
 **Measured, so it does not have to be argued about again:** a pointer move costs ~12 ms of the 16 ms
 budget at 200 clips fully zoomed out, with **zero long tasks**. The timeline meets §8.
