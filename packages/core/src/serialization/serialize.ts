@@ -88,6 +88,17 @@ export function serializeKeyframe(keyframe: Keyframe): JsonObject {
     frame: keyframe.frame as number,
     value: keyframe.value,
     ease: unlessDefault<JsonValue>(keyframe.ease, 'linear'),
+    // Written whenever it exists, not only while `ease` is `bezier`: a curve someone shaped is kept
+    // through a trip to `hold` and back, and dropping it on save would make that trip destructive.
+    bezier:
+      keyframe.bezier === undefined
+        ? undefined
+        : {
+            x1: keyframe.bezier.x1,
+            y1: keyframe.bezier.y1,
+            x2: keyframe.bezier.x2,
+            y2: keyframe.bezier.y2,
+          },
   });
 }
 

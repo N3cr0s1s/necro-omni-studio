@@ -4,9 +4,12 @@ import { keyframeId } from './ids.js';
 import {
   type Easing,
   type Keyframe,
+  DEFAULT_BEZIER,
   animatedNumber,
   applyEasing,
+  bezierEase,
   evaluateAt,
+  evaluateBezier,
   freezeAt,
   isAnimated,
   isEasing,
@@ -63,11 +66,11 @@ describe('applyEasing', () => {
     expect(applyEasing('hold', 0.999)).toBe(0);
   });
 
-  it('recognizes exactly the five documented easings', () => {
-    for (const ease of ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold']) {
+  it('recognizes the five named shapes and the hand-drawn curve, and nothing else', () => {
+    for (const ease of ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold', 'bezier']) {
       expect(isEasing(ease)).toBe(true);
     }
-    expect(isEasing('bezier')).toBe(false);
+    expect(isEasing('spring')).toBe(false);
     expect(isEasing('')).toBe(false);
   });
 });
@@ -189,5 +192,85 @@ describe('transforms', () => {
   it('freezes an animated parameter to its value at one frame', () => {
     const frozen = freezeAt(animatedNumber([kf(0, 0), kf(10, 1)]), frameIndex(5));
     expect(frozen).toEqual(staticNumber(0.5));
+  });
+});
+
+/**
+ * The hand-drawn curve.
+ *
+ * Issue #37 asked for "bezier or my own curve", which is four numbers rather than a sixth preset —
+ * a preset list can never contain the curve someone actually wants. The properties worth pinning are
+ * the ones a wrong solver breaks silently: the endpoints, monotonic time, and the fact that a curve
+ * matching linear's control points evaluates as linear everywhere rather than nearly everywhere.
+ */
+describe('a bezier easing', () => {
+  it('pins both endpoints exactly, whatever the control points are', () => {
+    const wild = bezierEase({ x1: 0.9, y1: -1.2, x2: 0.1, y2: 2.4 });
+    expect(evaluateBezier(wild, 0)).toBe(0);
+    expect(evaluateBezier(wild, 1)).toBe(1);
+  });
+
+  it('is linear when its control points are', () => {
+    // The curve `bezier` starts from, so switching a marker to it changes nothing until it is dragged.
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      expect(evaluateBezier(DEFAULT_BEZIER, t)).toBeCloseTo(t, 4);
+    }
+  });
+
+  it('matches the CSS ease-in-out curve, which is the reference every user has', () => {
+    // cubic-bezier(0.42, 0, 0.58, 1) is `ease-in-out` in every browser; halfway is exactly half.
+    const cssEaseInOut = bezierEase({ x1: 0.42, y1: 0, x2: 0.58, y2: 1 });
+    expect(evaluateBezier(cssEaseInOut, 0.5)).toBeCloseTo(0.5, 5);
+    expect(evaluateBezier(cssEaseInOut, 0.25)).toBeLessThan(0.25);
+    expect(evaluateBezier(cssEaseInOut, 0.75)).toBeGreaterThan(0.75);
+  });
+
+  it('solves a curve whose control points sit on the endpoints, where Newton stalls', () => {
+    // cubic-bezier(1, 0, 0, 1) — the hardest ease a user can ask for, and the case that makes the
+    // derivative vanish. Without the bisection fallback this returns whatever Newton last guessed.
+    const hard = bezierEase({ x1: 1, y1: 0, x2: 0, y2: 1 });
+    expect(evaluateBezier(hard, 0.5)).toBeCloseTo(0.5, 4);
+    expect(evaluateBezier(hard, 0.2)).toBeLessThan(0.1);
+    expect(evaluateBezier(hard, 0.8)).toBeGreaterThan(0.9);
+  });
+
+  it('overshoots when asked to, because that is what a spring curve is', () => {
+    const overshoot = bezierEase({ x1: 0.3, y1: 0, x2: 0.6, y2: 1.8 });
+    const peak = Math.max(...[0.6, 0.7, 0.8, 0.9].map((t) => evaluateBezier(overshoot, t)));
+    expect(peak).toBeGreaterThan(1);
+  });
+
+  it('clamps the time coordinates, since a curve running backwards has no meaning here', () => {
+    expect(bezierEase({ x1: -3, y1: 0, x2: 4, y2: 1 })).toEqual({ x1: 0, y1: 0, x2: 1, y2: 1 });
+    expect(bezierEase({ x1: Number.NaN, y1: Number.NaN, x2: 1, y2: 1 })).toEqual({
+      x1: 0,
+      y1: 0,
+      x2: 1,
+      y2: 1,
+    });
+  });
+
+  it('leaves the value coordinates alone, because overshoot is legitimate', () => {
+    expect(bezierEase({ x1: 0.2, y1: -0.5, x2: 0.8, y2: 1.5 }).y2).toBe(1.5);
+  });
+
+  it('drives a keyframe segment through the curve', () => {
+    const param = animatedNumber([
+      {
+        id: keyframeId('b1'),
+        frame: frameIndex(0),
+        value: 0,
+        ease: 'bezier',
+        bezier: bezierEase({ x1: 0.42, y1: 0, x2: 0.58, y2: 1 }),
+      },
+      { id: keyframeId('b2'), frame: frameIndex(100), value: 10, ease: 'linear' },
+    ]);
+    expect(evaluateAt(param, frameIndex(50))).toBeCloseTo(5, 4);
+    expect(evaluateAt(param, frameIndex(25))).toBeLessThan(2.5);
+  });
+
+  it('falls back to linear when a file says bezier and gives no points', () => {
+    // Refusing to evaluate would blank a frame over a missing default.
+    expect(applyEasing('bezier', 0.3)).toBe(0.3);
   });
 });

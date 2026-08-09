@@ -4,6 +4,7 @@ import {
   type FrameIndex,
   type Keyframe,
   type KeyframeId,
+  animatedNumber,
   evaluateAt,
   frameIndex,
 } from '@nos/core';
@@ -38,8 +39,15 @@ export interface KeyframeLaneProps {
   readonly heightPx?: number;
 
   readonly onSelectKeyframe?: (keyframe: KeyframeId) => void;
-  /** A drag in progress. The caller opens a gesture so the whole drag is one undo step. */
-  readonly onDragKeyframe?: (keyframe: KeyframeId, toFrame: FrameIndex) => void;
+  /**
+   * A drag in progress. The caller opens a gesture so the whole drag is one undo step.
+   *
+   * Two axes, because a marker has two coordinates and the lane draws it at both. Dragging changed
+   * only the frame, so the one thing a curve is *for* — its shape — could be adjusted nowhere except
+   * a number field, one marker at a time. `toValue` is what the vertical position of the pointer maps
+   * to under the lane's current range.
+   */
+  readonly onDragKeyframe?: (keyframe: KeyframeId, toFrame: FrameIndex, toValue: number) => void;
   readonly onDragStart?: (keyframe: KeyframeId) => void;
   readonly onDragEnd?: () => void;
   readonly onCycleEasing?: (keyframe: KeyframeId) => void;
@@ -56,8 +64,55 @@ export interface KeyframeLaneProps {
   readonly onAddKeyframe?: (atFrame: FrameIndex) => void;
 }
 
-/** Lane height from the mockups. */
+/** Lane height from the mockups. The smallest of the three; see `KEYFRAME_LANE_HEIGHTS`. */
 export const KEYFRAME_LANE_HEIGHT = 34;
+
+/**
+ * The heights a lane can be given, shortest first.
+ *
+ * This is the "zoom" the report asks for — *"which brings with it that I want to be able to magnify,
+ * so it is more precise"*. Magnifying a value curve means more pixels per unit of value, and on a
+ * fixed 34-pixel lane a marker at 0.51 and one at 0.55 are the same pixel however carefully they are
+ * dragged. A taller lane is the whole of the fix; nothing else about the lane changes.
+ *
+ * Three steps rather than a free drag: a lane is not a track and does not carry a resize edge, and
+ * three presses covers the useful range.
+ */
+export const KEYFRAME_LANE_HEIGHTS: readonly number[] = [34, 72, 140];
+
+/** Room kept above and below the value range, so a marker at an extreme is not half off the lane. */
+const VALUE_PADDING_PX = 9;
+
+/**
+ * The value range a lane draws against.
+ *
+ * The keyframes' own extent, not a fixed 0–1: an effect parameter can be a blur radius in pixels or a
+ * rotation in degrees, and a lane scaled to the wrong range would draw every marker on one edge. A
+ * parameter whose markers all share a value gets a range around it rather than a zero-height one,
+ * which would put every marker at the same pixel and make the curve undraggable.
+ */
+export function laneValueRange(keyframes: readonly Keyframe[]): {
+  readonly min: number;
+  readonly max: number;
+} {
+  if (keyframes.length === 0) return { min: 0, max: 1 };
+
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const keyframe of keyframes) {
+    if (keyframe.value < min) min = keyframe.value;
+    if (keyframe.value > max) max = keyframe.value;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };
+
+  if (max - min < 1e-9) {
+    // A flat parameter still has to be draggable, and the span has to scale with the value: ±0.5
+    // around a rotation of 180 would be a lane nobody could use.
+    const reach = Math.max(0.5, Math.abs(min) * 0.5);
+    return { min: min - reach, max: max + reach };
+  }
+  return { min, max };
+}
 
 const MARKER_SIZE = 11;
 const SELECTED_MARKER_SIZE = 15;
@@ -69,6 +124,7 @@ const EASING_LABELS: Readonly<Record<Easing, string>> = {
   'ease-out': 'ease-out',
   'ease-in-out': 'ease-io',
   hold: 'hold',
+  bezier: 'curve',
 };
 
 export function KeyframeLane({
@@ -94,6 +150,16 @@ export function KeyframeLane({
     keyframes.length === 0 ? undefined : evaluateAt({ kind: 'animated', keyframes }, clipRelativePlayhead);
 
   const absoluteFrame = (keyframe: Keyframe): FrameIndex => frameIndex(clipStart + keyframe.frame);
+
+  // Markers sit at their *value*, not on a shared baseline. A lane that drew every marker in a row
+  // said nothing about the shape of the animation, which is the thing a curve exists to show — and
+  // the report asked for the line itself, grabbable and movable.
+  const range = laneValueRange(keyframes);
+  const usable = Math.max(1, heightPx - VALUE_PADDING_PX * 2);
+  const valueToY = (value: number): number =>
+    VALUE_PADDING_PX + (1 - (value - range.min) / (range.max - range.min)) * usable;
+  const yToValue = (y: number): number =>
+    range.min + (1 - (y - VALUE_PADDING_PX) / usable) * (range.max - range.min);
 
   // Only when the selected marker is one of *this* lane's. Selection is held per clip, so without the
   // check every lane would open a field for a marker belonging to another parameter.
@@ -127,7 +193,11 @@ export function KeyframeLane({
       const frame = frameIndex(
         Math.max(0, Math.round(viewport.scrollFrame + offsetPx * viewport.framesPerPixel)),
       );
-      onDragKeyframe?.(keyframe.id, frame);
+      // The vertical axis is the value. Unclamped by the lane's own range on purpose: a drag to the
+      // top edge should be able to *raise* the range rather than stop at whatever the tallest
+      // existing marker happens to be, which would make a maximum impossible to exceed.
+      const offsetY = laneBounds === undefined ? 0 : moveEvent.clientY - laneBounds.top;
+      onDragKeyframe?.(keyframe.id, frame, laneBounds === undefined ? keyframe.value : yToValue(offsetY));
     };
 
     const detach = (): void => {
@@ -156,14 +226,26 @@ export function KeyframeLane({
     (keyframe: Keyframe) =>
     (event: KeyboardEvent<HTMLDivElement>): void => {
       const step = event.shiftKey ? 10 : 1;
+      // A hundredth of the lane's span, so a nudge is the same *proportion* of the curve whatever the
+      // parameter's units are — a step of one would be imperceptible on a rotation and enormous on an
+      // opacity.
+      const valueStep = ((range.max - range.min) / 100) * step;
       switch (event.key) {
         case 'ArrowLeft':
           event.preventDefault();
-          onDragKeyframe?.(keyframe.id, frameIndex(absoluteFrame(keyframe) - step));
+          onDragKeyframe?.(keyframe.id, frameIndex(absoluteFrame(keyframe) - step), keyframe.value);
           break;
         case 'ArrowRight':
           event.preventDefault();
-          onDragKeyframe?.(keyframe.id, frameIndex(absoluteFrame(keyframe) + step));
+          onDragKeyframe?.(keyframe.id, frameIndex(absoluteFrame(keyframe) + step), keyframe.value);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          onDragKeyframe?.(keyframe.id, absoluteFrame(keyframe), keyframe.value + valueStep);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          onDragKeyframe?.(keyframe.id, absoluteFrame(keyframe), keyframe.value - valueStep);
           break;
         case 'Enter':
         case ' ':
@@ -197,11 +279,14 @@ export function KeyframeLane({
       className="relative border-b bg-muted/40"
       style={{ height: heightPx }}
     >
-      {/* Baseline the markers sit on. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 h-px bg-border"
-        style={{ top: Math.round(heightPx / 2) - 1 }}
+      {/* The curve itself: the value at every frame, through the same evaluator the renderer uses.
+          Drawing it any other way would flatter a shape the picture does not have. */}
+      <ValueCurve
+        keyframes={keyframes}
+        clipStart={clipStart}
+        viewport={viewport}
+        valueToY={valueToY}
+        heightPx={heightPx}
       />
 
       {keyframes.map((keyframe, index) => {
@@ -228,12 +313,12 @@ export function KeyframeLane({
               className={cn(
                 // Rotated square: a diamond reads as a discrete marker where a circle reads as a handle,
                 // and it is the convention every editor uses for keyframes.
-                'absolute rotate-45 cursor-ew-resize touch-none bg-chart-2',
+                'absolute rotate-45 cursor-move touch-none bg-chart-2',
                 isSelected && 'ring-3 ring-chart-2/25',
               )}
               style={{
                 left: px - size / 2,
-                top: Math.round(heightPx / 2) - size / 2,
+                top: valueToY(keyframe.value) - size / 2,
                 width: size,
                 height: size,
               }}
@@ -248,9 +333,12 @@ export function KeyframeLane({
                   onCycleEasing?.(keyframe.id);
                 }}
                 className="absolute"
+                // Beside the marker rather than on the lane's midline, now that a marker sits at its
+                // own value: a badge pinned to the middle would drift away from the diamond it labels
+                // and end up naming whichever marker happened to be nearest.
                 style={{
                   left: px + size / 2 + 4,
-                  top: isSelected ? Math.round(heightPx / 2) - 10 : Math.round(heightPx / 2) - 8,
+                  top: valueToY(keyframe.value) - (isSelected ? 10 : 8),
                 }}
               >
                 <Badge
@@ -320,4 +408,53 @@ export function nextEasing(current: Easing): Easing {
 /** Header label for a lane, matching how the effect stack names a parameter. */
 export function laneLabel(effectLabel: string, paramLabel: string): string {
   return `${effectLabel} · ${paramLabel}`;
+}
+
+/**
+ * The animated value, drawn across the lane.
+ *
+ * Sampled through `evaluateAt` — the function the compositor and the mixer call — rather than by
+ * interpolating between markers here. Any second implementation of "what is this parameter at this
+ * frame" drifts from the first, and the drift would show as a curve that does not match the picture.
+ *
+ * One sample every two pixels: the lane is at most 140 px tall, so a straight segment between two
+ * samples that close is under a pixel of error even through the steepest part of a hard ease. `hold`
+ * is the exception the sampling handles for free — it draws as a step, because that is what it is.
+ */
+function ValueCurve({
+  keyframes,
+  clipStart,
+  viewport,
+  valueToY,
+  heightPx,
+}: {
+  readonly keyframes: readonly Keyframe[];
+  readonly clipStart: FrameIndex;
+  readonly viewport: TimelineViewport;
+  readonly valueToY: (value: number) => number;
+  readonly heightPx: number;
+}): ReactNode {
+  if (keyframes.length === 0) return undefined;
+
+  const param = animatedNumber(keyframes);
+  const width = Math.max(1, viewport.widthPx);
+  const points: string[] = [];
+  for (let px = 0; px <= width; px += 2) {
+    const frame = frameIndex(Math.round(viewport.scrollFrame + px * viewport.framesPerPixel - clipStart));
+    points.push(`${px},${valueToY(evaluateAt(param, frame)).toFixed(2)}`);
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      data-value-curve=""
+      className="pointer-events-none absolute inset-0"
+      width={width}
+      height={heightPx}
+      viewBox={`0 0 ${width} ${heightPx}`}
+      preserveAspectRatio="none"
+    >
+      <polyline points={points.join(' ')} className="fill-none stroke-chart-2/70" strokeWidth={1.5} />
+    </svg>
+  );
 }

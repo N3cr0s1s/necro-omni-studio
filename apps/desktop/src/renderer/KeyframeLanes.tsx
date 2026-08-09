@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   type AnimatableNumber,
+  type BezierEase,
   type Clip,
   type ClipTransform,
   type Easing,
@@ -17,7 +18,13 @@ import {
   removeKeyframe,
 } from '@nos/core';
 import { type EffectRegistry } from '@nos/effects';
-import { type TimelineLaneRow, type TimelineViewport, KEYFRAME_LANE_HEIGHT, KeyframeLane } from '@nos/ui';
+import {
+  type TimelineLaneRow,
+  type TimelineViewport,
+  KEYFRAME_LANE_HEIGHT,
+  KEYFRAME_LANE_HEIGHTS,
+  KeyframeLane,
+} from '@nos/ui';
 
 /**
  * Keyframe lanes for the selected clip.
@@ -74,6 +81,7 @@ export interface KeyframeLanesResult {
     readonly frame?: FrameIndex;
     readonly value?: number;
     readonly ease?: Easing;
+    readonly bezier?: BezierEase;
   }) => void;
   readonly remove: () => void;
 }
@@ -107,6 +115,18 @@ export function useKeyframeLanes({
   onChange,
 }: KeyframeLanesProps): KeyframeLanesResult {
   const [selected, setSelected] = useState<KeyframeId | undefined>(undefined);
+  /**
+   * How tall each lane is drawn, by lane id.
+   *
+   * The vertical zoom the report asks for. Held per lane rather than for all of them: a user
+   * magnifies the *one* curve they are shaping, and growing every lane at once would push the tracks
+   * below off the screen to look closely at one parameter.
+   *
+   * Not in the document. It is how closely someone is looking right now, not a property of the
+   * animation — persisting it would make a project file remember a zoom and apply it to a different
+   * clip a week later, the same reasoning the speed section's "keep the material" switch follows.
+   */
+  const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
   /**
    * The live drag.
    *
@@ -218,7 +238,12 @@ export function useKeyframeLanes({
   const clipStart = located?.clip.span.start;
 
   const edit = useCallback(
-    (change: { readonly frame?: FrameIndex; readonly value?: number; readonly ease?: Easing }) => {
+    (change: {
+      readonly frame?: FrameIndex;
+      readonly value?: number;
+      readonly ease?: Easing;
+      readonly bezier?: BezierEase;
+    }) => {
       if (selection === undefined || clipStart === undefined) return;
       // A frame arrives as a timeline position, because that is what the panel shows; keyframes are
       // stored clip-relative, which is what lets a clip be moved without its animation drifting.
@@ -232,6 +257,7 @@ export function useKeyframeLanes({
             ...(relative === undefined ? {} : { frame: relative }),
             ...(change.value === undefined ? {} : { value: change.value }),
             ...(change.ease === undefined ? {} : { ease: change.ease }),
+            ...(change.bezier === undefined ? {} : { bezier: change.bezier }),
           }),
         ),
       );
@@ -254,7 +280,24 @@ export function useKeyframeLanes({
     const laneRows = lanes.map((target) => ({
       id: target.id,
       label: target.label,
-      heightPx: KEYFRAME_LANE_HEIGHT,
+      heightPx: heights.get(target.id) ?? KEYFRAME_LANE_HEIGHT,
+      zoom: {
+        canGrow: (heights.get(target.id) ?? KEYFRAME_LANE_HEIGHT) !== KEYFRAME_LANE_HEIGHTS.at(-1),
+        canShrink: (heights.get(target.id) ?? KEYFRAME_LANE_HEIGHT) !== KEYFRAME_LANE_HEIGHTS[0],
+        onZoom: (direction: 1 | -1) => {
+          setHeights((current) => {
+            const at = KEYFRAME_LANE_HEIGHTS.indexOf(current.get(target.id) ?? KEYFRAME_LANE_HEIGHT);
+            const next =
+              KEYFRAME_LANE_HEIGHTS[
+                Math.min(KEYFRAME_LANE_HEIGHTS.length - 1, Math.max(0, (at < 0 ? 0 : at) + direction))
+              ];
+            if (next === undefined) return current;
+            const updated = new Map(current);
+            updated.set(target.id, next);
+            return updated;
+          });
+        },
+      },
       body: (
         <KeyframeLane
           label={target.label}
@@ -262,10 +305,11 @@ export function useKeyframeLanes({
           clipStart={located.clip.span.start}
           viewport={viewport}
           playhead={playhead}
+          heightPx={heights.get(target.id) ?? KEYFRAME_LANE_HEIGHT}
           {...(selected !== undefined ? { selected } : {})}
           onSelectKeyframe={setSelected}
           onDragStart={() => setDrag({ base: document, preview: document })}
-          onDragKeyframe={(id, toFrame) => {
+          onDragKeyframe={(id, toFrame, toValue) => {
             setDrag((current) => {
               const base = current?.base ?? document;
               const from = locateClip(base, located.clip.id);
@@ -273,9 +317,18 @@ export function useKeyframeLanes({
               if (from === undefined || original === undefined) return current;
 
               const relative = frameIndex(Math.max(0, toFrame - from.clip.span.start));
+              // Both axes in one edit. A drag that wrote the frame and then the value would be two
+              // history entries per pointer move once the gesture commits, and the second would be
+              // applied to a document the first had already re-sorted.
               return {
                 base,
-                preview: target.write(base, editKeyframe(original, id, { frame: relative })),
+                preview: target.write(
+                  base,
+                  editKeyframe(original, id, {
+                    frame: relative,
+                    ...(Number.isFinite(toValue) ? { value: toValue } : {}),
+                  }),
+                ),
               };
             });
           }}
@@ -321,7 +374,7 @@ export function useKeyframeLanes({
         ),
       },
     ];
-  }, [lanes, located, viewport, playhead, selected, document, onChange, commit]);
+  }, [lanes, located, viewport, playhead, selected, document, onChange, commit, heights]);
 
   return {
     rows,

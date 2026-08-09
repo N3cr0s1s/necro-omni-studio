@@ -803,6 +803,41 @@ describe('opening a clip', () => {
     }
   });
 
+  it('offers the vertical zoom on a lane that can be resized, disabled at its ends', () => {
+    // On a short lane a value of 0.51 and one of 0.55 are the same pixel however carefully a marker
+    // is dragged, so magnifying is the whole of what makes a curve precise. Disabled rather than
+    // hidden at the limits — a control that vanishes reads as a bug.
+    const onZoom = vi.fn();
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({
+      document: doc,
+      expandedClip: clipId('moving'),
+      lanes: [
+        {
+          id: 'opacity',
+          label: 'transform · opacity',
+          heightPx: 34,
+          body: <div />,
+          zoom: { canGrow: true, canShrink: false, onZoom },
+        },
+      ],
+    });
+
+    const shorter = screen.getByLabelText('Shorten the transform · opacity lane');
+    const taller = screen.getByLabelText('Magnify the transform · opacity lane');
+    expect((shorter as HTMLButtonElement).disabled).toBe(true);
+    expect((taller as HTMLButtonElement).disabled).toBe(false);
+
+    taller.click();
+    expect(onZoom).toHaveBeenCalledWith(1);
+  });
+
+  it('leaves the zoom controls off a lane that has no resize', () => {
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });
+    expect(screen.queryByLabelText(/Magnify/)).toBeNull();
+  });
+
   it('puts the lane headers after their own track´s header, so the columns stay in step', () => {
     const doc = makeDocument([animated('moving')]);
     renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });

@@ -6,6 +6,7 @@ import {
   type EffectId,
   type EffectInstance,
   type EffectInstanceId,
+  type BezierEase,
   type Easing,
   type FrameIndex,
   type StaticValue,
@@ -131,6 +132,7 @@ export interface KeyframeChange {
   readonly frame?: FrameIndex;
   readonly value?: number;
   readonly ease?: Easing;
+  readonly bezier?: BezierEase;
 }
 
 /** One bindable mask, as the inspector needs to show it. */

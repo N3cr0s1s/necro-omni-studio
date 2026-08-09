@@ -1,8 +1,8 @@
 import { type FrameIndex, frameIndex } from '../time/frame-time.js';
 import { keyframeId } from './ids.js';
 import type { KeyframeId } from './ids.js';
-import type { AnimatableNumber, Easing, Keyframe } from './params.js';
-import { EASINGS, animatedNumber, evaluateAt } from './params.js';
+import type { AnimatableNumber, BezierEase, Easing, Keyframe } from './params.js';
+import { CYCLED_EASINGS, animatedNumber, bezierEase, evaluateAt } from './params.js';
 
 /**
  * Editing one keyframe.
@@ -30,6 +30,14 @@ export interface KeyframeChange {
   readonly frame?: FrameIndex | undefined;
   readonly value?: number | undefined;
   readonly ease?: Easing | undefined;
+  /**
+   * Control points for a hand-drawn curve.
+   *
+   * Settable without touching `ease`, so dragging a handle does not have to restate the mode, and
+   * settable *with* it so switching to `bezier` can carry the curve in one edit — a marker in that
+   * mode with no points would draw as a straight line the editor could not move.
+   */
+  readonly bezier?: BezierEase | undefined;
 }
 
 /**
@@ -60,6 +68,10 @@ export function editKeyframe(
           ...(change.frame !== undefined ? { frame: frameIndex(Math.max(0, change.frame)) } : {}),
           ...(change.value !== undefined ? { value: change.value } : {}),
           ...(change.ease !== undefined ? { ease: change.ease } : {}),
+          // Clamped on the way in, like everything else read from outside: the x coordinates decide
+          // whether the curve runs forwards in time, and a handle dragged past the edge would
+          // otherwise store a curve nothing can evaluate.
+          ...(change.bezier !== undefined ? { bezier: bezierEase(change.bezier) } : {}),
         }
       : keyframe,
   );
@@ -112,15 +124,19 @@ export function removeKeyframe(param: AnimatableNumber, id: KeyframeId): Animata
  * The next easing in the cycle, applied to one marker.
  *
  * Cycling rather than opening a menu: five options is few enough that clicking through them is faster
- * than a picker, and it keeps the badge a single control. An unrecognized value restarts at `linear`,
- * which is also how a project written by a build with Bezier support degrades.
+ * than a picker, and it keeps the badge a single control. `bezier` is deliberately not in the cycle —
+ * a curve is four numbers, and landing on it by clicking a badge would put the user in a mode whose
+ * controls are elsewhere, on a first curve indistinguishable from linear. Anything not in the cycle,
+ * including a curve and an easing this build does not recognize, restarts at `linear`.
  */
 export function cycleKeyframeEasing(param: AnimatableNumber, id: KeyframeId): AnimatableNumber {
   const current = keyframeById(param, id);
   if (current === undefined) return param;
 
-  const index = EASINGS.indexOf(current.ease);
-  return editKeyframe(param, id, { ease: EASINGS[(index + 1) % EASINGS.length] ?? 'linear' });
+  const index = CYCLED_EASINGS.indexOf(current.ease);
+  return editKeyframe(param, id, {
+    ease: CYCLED_EASINGS[(index + 1) % CYCLED_EASINGS.length] ?? 'linear',
+  });
 }
 
 /** One keyframe by id, for a caller that needs to show what it is about to change. */

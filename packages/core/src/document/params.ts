@@ -24,12 +24,65 @@ import { type FrameIndex, frameIndex } from '../time/frame-time.js';
  * only assignment under which `hold` reads naturally ("keep this value until the next
  * marker"), and it means the last keyframe's easing is deliberately unused.
  */
-export type Easing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
+export type Easing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold' | 'bezier';
 
-export const EASINGS: readonly Easing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'];
+export const EASINGS: readonly Easing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold', 'bezier'];
+
+/**
+ * The easings a badge cycles through: the named shapes, and not `bezier`.
+ *
+ * A curve is four numbers, and landing on it by clicking a badge would leave the user in a mode whose
+ * controls are somewhere else entirely — and, the first time, on a curve identical to linear with no
+ * indication of why the click did nothing. It is chosen deliberately, from the inspector.
+ */
+export const CYCLED_EASINGS: readonly Easing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'];
 
 export function isEasing(value: string): value is Easing {
   return (EASINGS as readonly string[]).includes(value);
+}
+
+/**
+ * A curve drawn by hand, in the CSS `cubic-bezier` convention.
+ *
+ * The named easings are five shapes, and the request was for a sixth that is *not* a shape: "a
+ * grabbable, movable line where I can set whether it is bezier or my own curve". Four numbers is what
+ * that is — the two control points of a unit cubic whose endpoints are fixed at (0,0) and (1,1).
+ *
+ * **Its own field rather than six more names.** A preset list can never contain the curve someone
+ * actually wants, and a name that means "some bezier" would leave the numbers with nowhere to live.
+ * `ease` stays the discriminator so every existing reader keeps working and the common cases stay
+ * one word.
+ *
+ * `x` is clamped to `[0, 1]` on construction because a control point outside it makes the curve
+ * non-monotonic in time — the value would run backwards, which no evaluator here can express. `y` is
+ * deliberately *not* clamped: overshoot past the endpoint value is the whole point of a spring-like
+ * curve, and every renderer downstream already clamps what it must.
+ */
+export interface BezierEase {
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+}
+
+/** The curve `bezier` starts from: identical to `linear`, so switching to it changes nothing yet. */
+export const DEFAULT_BEZIER: BezierEase = { x1: 0.33, y1: 0.33, x2: 0.67, y2: 0.67 };
+
+export function bezierEase(points: BezierEase): BezierEase {
+  return {
+    x1: clampUnit(points.x1),
+    y1: finite(points.y1),
+    x2: clampUnit(points.x2),
+    y2: finite(points.y2),
+  };
+}
+
+function clampUnit(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+function finite(value: number): number {
+  return Number.isFinite(value) ? value : 0;
 }
 
 export interface Keyframe {
@@ -39,6 +92,13 @@ export interface Keyframe {
   readonly value: number;
   /** Governs the segment from this keyframe to the next. */
   readonly ease: Easing;
+  /**
+   * Control points, read only when `ease` is `bezier`.
+   *
+   * Kept when the easing is switched away and back, so trying `hold` for a moment does not throw away
+   * a curve someone shaped by hand.
+   */
+  readonly bezier?: BezierEase;
 }
 
 /** A parameter that is either constant or driven by keyframes. */
@@ -108,10 +168,14 @@ export function keyframeCount(param: AnimatableNumber): number {
  * closely enough that a user's expectation transfers. `hold` returns 0 for the whole
  * segment so the value stays at the outgoing keyframe until the next one is reached.
  */
-export function applyEasing(ease: Easing, t: number): number {
+export function applyEasing(ease: Easing, t: number, bezier?: BezierEase): number {
   switch (ease) {
     case 'linear':
       return t;
+    case 'bezier':
+      // A curve declared with no control points is linear rather than an error. A file can say
+      // `bezier` and omit them, and refusing to evaluate would blank a frame over a missing default.
+      return bezier === undefined ? t : evaluateBezier(bezier, t);
     case 'ease-in':
       return t * t * t;
     case 'ease-out': {
@@ -168,7 +232,7 @@ export function evaluateAt(param: AnimatableNumber, frame: FrameIndex): number {
   if (span <= 0) return to.value;
 
   const progress = (frame - from.frame) / span;
-  const eased = applyEasing(from.ease, progress);
+  const eased = applyEasing(from.ease, progress, from.bezier);
   return from.value + (to.value - from.value) * eased;
 }
 
@@ -214,4 +278,60 @@ export function scaleKeyframes(param: AnimatableNumber, factor: number): Animata
 /** Collapses an animated parameter to a constant, sampled at one frame. */
 export function freezeAt(param: AnimatableNumber, frame: FrameIndex): AnimatableNumber {
   return staticNumber(evaluateAt(param, frame));
+}
+
+/**
+ * Evaluates a unit cubic bezier at a time position.
+ *
+ * The curve is parameterized by an internal `s`, not by time, so finding the value at time `t` means
+ * first solving `x(s) = t`. Newton's method, falling back to bisection when the derivative is flat —
+ * which it is wherever a control point sits on an endpoint, exactly the case a user reaches for when
+ * they want a hard ease.
+ *
+ * Four iterations of Newton is well inside a frame's worth of precision for a curve whose output is
+ * multiplied by a value range; the bisection is bounded at twenty, which cannot loop.
+ */
+export function evaluateBezier(points: BezierEase, t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+
+  const s = solveBezierX(points.x1, points.x2, t);
+  return cubic(points.y1, points.y2, s);
+}
+
+/** One coordinate of the unit cubic with endpoints pinned at 0 and 1. */
+function cubic(a: number, b: number, s: number): number {
+  const inverse = 1 - s;
+  return 3 * inverse * inverse * s * a + 3 * inverse * s * s * b + s * s * s;
+}
+
+/** d/ds of the above, for Newton's step. */
+function cubicSlope(a: number, b: number, s: number): number {
+  const inverse = 1 - s;
+  return 3 * inverse * inverse * a + 6 * inverse * s * (b - a) + 3 * s * s * (1 - b);
+}
+
+function solveBezierX(x1: number, x2: number, t: number): number {
+  let s = t;
+  for (let step = 0; step < 4; step += 1) {
+    const slope = cubicSlope(x1, x2, s);
+    if (Math.abs(slope) < 1e-6) break;
+    const error = cubic(x1, x2, s) - t;
+    if (Math.abs(error) < 1e-7) return s;
+    s -= error / slope;
+  }
+
+  // Newton stalled or ran outside the interval. Bisection cannot fail here: x is monotonic on [0, 1]
+  // because both control x-coordinates are clamped into it.
+  let low = 0;
+  let high = 1;
+  s = t;
+  for (let step = 0; step < 20; step += 1) {
+    const x = cubic(x1, x2, s);
+    if (Math.abs(x - t) < 1e-7) return s;
+    if (x < t) low = s;
+    else high = s;
+    s = (low + high) / 2;
+  }
+  return s;
 }

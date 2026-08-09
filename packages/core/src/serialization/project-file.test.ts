@@ -185,8 +185,8 @@ describe('forward compatibility', () => {
 
   it('degrades an unrecognized easing to linear rather than refusing the timeline', () => {
     const text = JSON.stringify(serializeDocument(richDocument())).replace(
-      '"ease":"ease-in-out"',
       '"ease":"bezier"',
+      '"ease":"spring"',
     );
     const result = loadDocument(text);
     expect(result.ok).toBe(true);

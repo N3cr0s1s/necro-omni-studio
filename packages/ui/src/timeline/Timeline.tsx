@@ -26,6 +26,8 @@ import {
   AudioLinesIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   FilmIcon,
   HeadphonesIcon,
   LockIcon,
@@ -250,6 +252,20 @@ export interface TimelineLaneRow {
   readonly label: string;
   readonly heightPx: number;
   readonly body: ReactNode;
+  /**
+   * Making the lane taller or shorter — the vertical zoom.
+   *
+   * On the row rather than on the timeline, because the state belongs to whoever owns the lanes and
+   * only they know how many steps there are. Absent leaves the controls off, which is what a lane
+   * with a fixed height wants.
+   */
+  readonly zoom?: LaneZoom;
+}
+
+export interface LaneZoom {
+  readonly canGrow: boolean;
+  readonly canShrink: boolean;
+  onZoom(direction: 1 | -1): void;
 }
 
 /**
@@ -731,13 +747,44 @@ function LaneHeader({ lane }: { readonly lane: TimelineLaneRow }): ReactNode {
     <div
       data-lane-header={lane.id}
       title={lane.label}
-      className="flex flex-none items-center gap-1.5 border-b bg-muted/20 pr-2 pl-5"
+      className="flex flex-none items-center gap-1.5 border-b bg-muted/20 pr-1 pl-5"
       style={{ height: lane.heightPx }}
     >
       {/* A tick joining the lane to the track above it: the indent alone reads as an accident at a
           glance, and this is the only mark saying the two rows are related. */}
       <span aria-hidden="true" className="h-px w-2 flex-none bg-border" />
-      <span className="truncate text-[11px] text-muted-foreground">{lane.label}</span>
+      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{lane.label}</span>
+
+      {/* The vertical zoom. On a short lane a value of 0.51 and one of 0.55 are the same pixel
+          however carefully the marker is dragged, so magnifying is the whole of what makes a curve
+          precise. Disabled at the ends rather than hidden — a control that vanishes at its limit
+          reads as a bug. */}
+      {lane.zoom !== undefined && (
+        <span className="flex flex-none items-center">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="size-4"
+            aria-label={`Shorten the ${lane.label} lane`}
+            title="Shorter"
+            disabled={!lane.zoom.canShrink}
+            onClick={() => lane.zoom?.onZoom(-1)}
+          >
+            <ChevronsDownUpIcon className="size-2.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="size-4"
+            aria-label={`Magnify the ${lane.label} lane`}
+            title="Taller — more precision on the value axis"
+            disabled={!lane.zoom.canGrow}
+            onClick={() => lane.zoom?.onZoom(1)}
+          >
+            <ChevronsUpDownIcon className="size-2.5" />
+          </Button>
+        </span>
+      )}
     </div>
   );
 }

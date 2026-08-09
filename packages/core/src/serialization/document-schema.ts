@@ -25,6 +25,8 @@ import { type FrameCount, type FrameIndex, frameCount, frameIndex } from '../tim
 import { type FrameSpan } from '../time/frame-span.js';
 import {
   type AnimatableNumber,
+  type BezierEase,
+  bezierEase,
   type Keyframe,
   type RgbaColor,
   type StaticValue,
@@ -144,14 +146,32 @@ export const vRgbaColor: Validator<RgbaColor> = vObject<RgbaColor>({
   a: vWithDefault(vNumber, 1),
 });
 
+/**
+ * Hand-drawn control points.
+ *
+ * Read through `bezierEase`, which clamps the x coordinates into `[0, 1]`: a stored point outside
+ * that makes the curve run backwards in time, which no evaluator here can express. `y` is left alone
+ * because overshoot is a legitimate curve.
+ */
+export const vBezierEase: Validator<BezierEase> = vMap(
+  vObject<BezierEase>({
+    x1: vWithDefault(vNumber, 0),
+    y1: vWithDefault(vNumber, 0),
+    x2: vWithDefault(vNumber, 1),
+    y2: vWithDefault(vNumber, 1),
+  }),
+  bezierEase,
+);
+
 export const vKeyframe: Validator<Keyframe> = vObject<Keyframe>({
   id: vKeyframeId,
   frame: vFrameIndex,
   value: vNumber,
-  // An unrecognized easing degrades to linear rather than failing the load: a project
-  // written by a build with Bezier support must still open here, showing the segment
-  // straight instead of refusing to show the timeline at all.
+  // An unrecognized easing degrades to linear rather than failing the load: a project written by a
+  // later build must still open here, showing the segment straight instead of refusing to show the
+  // timeline at all.
   ease: vFallback(vEnum(EASINGS), 'linear'),
+  bezier: vOptional(vBezierEase),
 });
 
 /**

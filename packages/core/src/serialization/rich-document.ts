@@ -77,7 +77,16 @@ export function richDocument(): TimelineDocument {
           scale: staticNumber(1.08),
           rotation: staticNumber(0),
           opacity: animatedNumber([
-            { id: keyframeId('kf1'), frame: frameIndex(0), value: 0, ease: 'ease-in-out' },
+            // A hand-drawn curve, so the control points are exercised rather than merely declared.
+            // All four coordinates differ, or a fixture would round-trip identically with two of them
+            // swapped.
+            {
+              id: keyframeId('kf1'),
+              frame: frameIndex(0),
+              value: 0,
+              ease: 'bezier',
+              bezier: { x1: 0.2, y1: 0.05, x2: 0.8, y2: 1.4 },
+            },
             { id: keyframeId('kf2'), frame: frameIndex(30), value: 1, ease: 'linear' },
           ]),
         },

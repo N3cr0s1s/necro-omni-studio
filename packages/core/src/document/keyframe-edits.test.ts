@@ -98,9 +98,13 @@ describe('changing an easing', () => {
     expect(seen).toEqual(['ease-in', 'ease-out', 'ease-in-out', 'hold', 'linear', 'ease-in']);
   });
 
-  it('restarts at linear for an easing this build does not know', () => {
-    // How a project written by a build with Bezier support degrades, rather than sticking.
-    const exotic = animatedNumber([marker('a', 0, 1, 'bezier' as Keyframe['ease'])]);
+  it('restarts at linear for a curve, and for an easing this build does not know', () => {
+    // `bezier` is deliberately outside the cycle: it is four numbers chosen in the inspector, and
+    // landing on it from a badge would put the user in a mode whose controls are elsewhere.
+    const curve = animatedNumber([marker('a', 0, 1, 'bezier')]);
+    expect(keyframeById(cycleKeyframeEasing(curve, keyframeId('a')), keyframeId('a'))!.ease).toBe('linear');
+
+    const exotic = animatedNumber([marker('a', 0, 1, 'spring' as Keyframe['ease'])]);
     expect(keyframeById(cycleKeyframeEasing(exotic, keyframeId('a')), keyframeId('a'))?.ease).toBe('linear');
   });
 

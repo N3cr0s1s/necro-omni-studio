@@ -1,9 +1,18 @@
 import type { ReactNode } from 'react';
 import { DiamondIcon, Trash2Icon } from 'lucide-react';
-import { type Easing, type FrameRate, EASINGS, formatFrames, frameIndex } from '@nos/core';
+import {
+  type BezierEase,
+  type Easing,
+  type FrameRate,
+  DEFAULT_BEZIER,
+  EASINGS,
+  formatFrames,
+  frameIndex,
+} from '@nos/core';
 import { NumberField } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { cn } from '@nos/ui/lib/utils';
+import { BezierEditor } from './BezierEditor.js';
 import type { SelectedKeyframe } from './KeyframeLanes.js';
 
 /**
@@ -36,6 +45,7 @@ export interface KeyframeInspectorProps {
     readonly frame?: ReturnType<typeof frameIndex>;
     readonly value?: number;
     readonly ease?: Easing;
+    readonly bezier?: BezierEase;
   }) => void;
   readonly onRemove: () => void;
 }
@@ -47,6 +57,7 @@ const EASING_HELP: Readonly<Record<Easing, string>> = {
   'ease-out': 'leaves at full speed, arrives slowly',
   'ease-in-out': 'slow at both ends, fastest in the middle',
   hold: 'keeps this value until the next marker',
+  bezier: 'a curve you draw yourself',
 };
 
 export function KeyframeInspector({
@@ -126,7 +137,12 @@ export function KeyframeInspector({
                 role="radio"
                 aria-checked={keyframe.ease === ease}
                 title={EASING_HELP[ease]}
-                onClick={() => onEdit({ ease })}
+                // Switching to a curve carries the one it had, or the default if it never had one.
+                // Sending the points with the mode means a marker cannot be in `bezier` with nothing
+                // to draw, which would render as a straight line the editor could not move.
+                onClick={() =>
+                  onEdit(ease === 'bezier' ? { ease, bezier: keyframe.bezier ?? DEFAULT_BEZIER } : { ease })
+                }
                 className={cn(
                   'rounded border px-1.5 py-0.5 font-mono text-[10px]',
                   keyframe.ease === ease
@@ -138,6 +154,15 @@ export function KeyframeInspector({
               </button>
             ))}
           </div>
+        )}
+
+        {/* Only while the curve is the one in use. Showing it under every easing would suggest the
+            handles govern `ease-out` too, and moving them would appear to do nothing. */}
+        {!selected.last && keyframe.ease === 'bezier' && (
+          <BezierEditor
+            points={keyframe.bezier ?? DEFAULT_BEZIER}
+            onChange={(points) => onEdit({ bezier: points })}
+          />
         )}
       </div>
     </section>

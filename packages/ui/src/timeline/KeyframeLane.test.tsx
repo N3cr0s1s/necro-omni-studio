@@ -3,7 +3,14 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type Easing, type Keyframe, FRAME_RATES, frameIndex, keyframeId } from '@nos/core';
-import { EASING_CYCLE, KEYFRAME_LANE_HEIGHT, KeyframeLane, laneLabel, nextEasing } from './KeyframeLane.js';
+import {
+  EASING_CYCLE,
+  KEYFRAME_LANE_HEIGHT,
+  KeyframeLane,
+  laneLabel,
+  laneValueRange,
+  nextEasing,
+} from './KeyframeLane.js';
 import { createViewport } from './viewport.js';
 
 afterEach(cleanup);
@@ -237,7 +244,9 @@ describe('keyboard operation', () => {
     screen.getByRole('slider', { name: /frame 100/ }).focus();
     await user.keyboard('{ArrowRight}');
 
-    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 101);
+    // The value travels with every nudge: a marker has two coordinates and one edit writes both, so
+    // a horizontal nudge states the value it is keeping rather than leaving it to a second write.
+    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 101, 0.5);
   });
 
   it('nudges by ten frames with shift held', async () => {
@@ -248,7 +257,7 @@ describe('keyboard operation', () => {
     screen.getByRole('slider', { name: /frame 100/ }).focus();
     await user.keyboard('{Shift>}{ArrowLeft}{/Shift}');
 
-    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 90);
+    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 90, 0.5);
   });
 
   it('cycles easing with Enter', async () => {
@@ -282,7 +291,7 @@ describe('keyboard operation', () => {
     marker.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 
     // Reported in absolute frames, since that is what an edit operation takes.
-    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 601);
+    expect(onDragKeyframe).toHaveBeenCalledWith('k2', 601, 0.5);
   });
 });
 
@@ -363,5 +372,96 @@ describe('nextEasing', () => {
 describe('laneLabel', () => {
   it('joins the effect and parameter names the way the stack does', () => {
     expect(laneLabel('film_grain', 'amount')).toBe('film_grain · amount');
+  });
+});
+
+/**
+ * The curve, and markers placed at their values.
+ *
+ * Issue #37 asked for "a grabbable, movable line". A lane that drew every marker on one baseline said
+ * nothing about the shape of the animation — the one thing a curve exists to show — and dragging
+ * changed only the frame, so a value could be set nowhere but a number field, one marker at a time.
+ */
+describe('the value curve', () => {
+  it('places a marker at its own value rather than on a shared baseline', () => {
+    renderLane({ heightPx: 100 });
+    const low = document.querySelector('[data-keyframe="k1"]') as HTMLElement;
+    const mid = document.querySelector('[data-keyframe="k2"]') as HTMLElement;
+    const high = document.querySelector('[data-keyframe="k3"]') as HTMLElement;
+
+    // Values 0, 0.5, 1 — so the tops descend, since a larger value is further up the lane.
+    expect(Number.parseFloat(low.style.top)).toBeGreaterThan(Number.parseFloat(mid.style.top));
+    expect(Number.parseFloat(mid.style.top)).toBeGreaterThan(Number.parseFloat(high.style.top));
+  });
+
+  it('draws the curve through the evaluator, so a hold reads as a step', () => {
+    renderLane({ heightPx: 100 });
+    const curve = document.querySelector('[data-value-curve] polyline');
+    expect(curve).not.toBeNull();
+
+    const points = (curve!.getAttribute('points') ?? '').split(' ').map((pair) => {
+      const [x, y] = pair.split(',');
+      return { x: Number(x), y: Number(y) };
+    });
+    // `k2` at frame 100 holds until `k3` at 200, so every sample between them sits at k2's height.
+    const held = points.filter((point) => point.x > 110 && point.x < 190);
+    expect(new Set(held.map((point) => point.y)).size).toBe(1);
+  });
+
+  it('reports both axes from a drag, so one edit writes the marker', () => {
+    const onDragKeyframe = vi.fn();
+    const { container } = renderLane({ heightPx: 100, onDragKeyframe });
+    const marker = document.querySelector('[data-keyframe="k2"]') as HTMLElement;
+
+    // jsdom gives every element a zero box, so the lane has to be told its own.
+    const lane = container.querySelector('[data-keyframe-lane]') as HTMLElement;
+    lane.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 1000, bottom: 100, width: 1000, height: 100, x: 0, y: 0 }) as DOMRect;
+
+    marker.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 50 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 120, clientY: 20 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+
+    expect(onDragKeyframe).toHaveBeenCalled();
+    const [, frame, value] = onDragKeyframe.mock.calls.at(-1)!;
+    expect(frame).toBe(120);
+    // Dragged upward, so the value rose past where it was.
+    expect(value).toBeGreaterThan(0.5);
+  });
+
+  it('nudges the value with the vertical arrows', async () => {
+    const user = userEvent.setup();
+    const onDragKeyframe = vi.fn();
+    renderLane({ onDragKeyframe });
+
+    screen.getByRole('slider', { name: /frame 100/ }).focus();
+    await user.keyboard('{ArrowUp}');
+
+    const [, frame, value] = onDragKeyframe.mock.calls.at(-1)!;
+    expect(frame).toBe(100);
+    expect(value).toBeGreaterThan(0.5);
+  });
+});
+
+describe('the range a lane draws against', () => {
+  it('is the keyframes’ own extent, not a fixed zero to one', () => {
+    // A blur radius in pixels or a rotation in degrees would otherwise draw every marker on one edge.
+    expect(laneValueRange([kf('a', 0, 90), kf('b', 10, 270)])).toEqual({ min: 90, max: 270 });
+  });
+
+  it('opens a span around a flat parameter, which would otherwise be undraggable', () => {
+    const range = laneValueRange([kf('a', 0, 1), kf('b', 10, 1)]);
+    expect(range.max).toBeGreaterThan(range.min);
+    expect(range.min).toBeLessThan(1);
+    expect(range.max).toBeGreaterThan(1);
+  });
+
+  it('scales that span with the value, so a rotation is not given a ±0.5 lane', () => {
+    const range = laneValueRange([kf('a', 0, 180), kf('b', 10, 180)]);
+    expect(range.max - range.min).toBeGreaterThan(1);
+  });
+
+  it('answers a usable range for no keyframes at all', () => {
+    expect(laneValueRange([])).toEqual({ min: 0, max: 1 });
   });
 });
