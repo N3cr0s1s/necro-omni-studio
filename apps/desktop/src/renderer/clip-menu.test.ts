@@ -307,3 +307,38 @@ describe('shape', () => {
     expect(item(clipMenuItems(state()), 'remove')?.separated).toBe(true);
   });
 });
+
+/**
+ * Closing a gap.
+ *
+ * A gap of one frame is invisible at every zoom a person works at and unmistakable in the delivered
+ * file, so the row has to say what it found — a command offering to remove something the user cannot
+ * see is otherwise indistinguishable from one that does nothing.
+ */
+describe('closing a gap', () => {
+  const withGap = () =>
+    documentWith([
+      video('a', { span: spanFromBounds(frameIndex(0), frameIndex(100)) }),
+      video('b', { span: spanFromBounds(frameIndex(101), frameIndex(200)) }),
+    ]);
+
+  it('states how many frames it would close', () => {
+    const items = clipMenuItems(state({ document: withGap(), clip: clipId('b') }));
+    expect(item(items, 'close-gap')?.label).toBe('Close the gap (1 f)');
+    expect(item(items, 'close-gap')?.disabled).toBe(false);
+  });
+
+  it('is offered disabled when the clips already meet, rather than vanishing', () => {
+    const items = clipMenuItems(state({ clip: clipId('a') }));
+    expect(item(items, 'close-gap')?.disabled).toBe(true);
+    expect(item(items, 'close-gap')?.label).toBe('Close the gap');
+  });
+
+  it('offers the whole track only where a lane was clicked', () => {
+    const onLane = clipMenuItems(state({ document: withGap(), clip: clipId('b'), track: trackId('v1') }));
+    expect(item(onLane, 'close-track-gaps')?.disabled).toBe(false);
+
+    const offLane = clipMenuItems(state({ document: withGap(), clip: clipId('b') }));
+    expect(item(offLane, 'close-track-gaps')?.disabled).toBe(true);
+  });
+});

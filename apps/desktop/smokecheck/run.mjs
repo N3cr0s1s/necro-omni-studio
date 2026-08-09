@@ -90,7 +90,16 @@ async function readCode(page, name) {
     // The rendered rows: Monaco virtualizes long files, so this is what is *visible*, which is all a
     // check about the first lines of a file needs.
     const root = area?.closest('.monaco-editor');
-    return [...(root?.querySelectorAll('.view-line') ?? [])].map((line) => line.textContent).join('\n');
+    return (
+      [...(root?.querySelectorAll('.view-line') ?? [])]
+        .map((line) => line.textContent)
+        .join('\n')
+        // Monaco renders leading, trailing and repeated spaces as U+00A0 so the browser keeps them.
+        // Comparing rendered text against a literal therefore fails on exactly the completions that
+        // insert a trailing space — which is every one of them, and it read as the completion being
+        // wrong rather than as the reader being naive.
+        .replace(/\u00a0/gu, ' ')
+    );
   }, name);
 }
 
@@ -403,6 +412,15 @@ try {
     await fadeIn.press('Enter');
     await page.waitForTimeout(700);
 
+    /*
+     * Fitted first. The ramp is drawn as a fraction of the clip's own width, and the fixture's clips
+     * are thirty frames — about seven pixels at the default zoom, which is below the width at which a
+     * clip offers any edge control at all. Asserting there would be asserting that a deliberate rule
+     * is broken.
+     */
+    await page.getByTitle(/Fit the sequence/).click();
+    await page.waitForTimeout(600);
+
     // On the clip, not only in the field. A ramp that exists in the inspector and is not drawn is the
     // one that makes a drop-created crossfade indistinguishable from a collision allowed by mistake.
     if ((await page.locator('[data-fade-ramp="in"]').count()) > 0) {
@@ -411,13 +429,19 @@ try {
       fail('a fade never reached the clip on the timeline');
     }
 
+    /*
+     * Polled rather than slept on. A save is a write the shell schedules, and a single wait long
+     * enough to be reliable on this machine is a wait that is too short on a slower one — this check
+     * failed exactly that way while the value was in the file a second later.
+     */
     await page.keyboard.press('Control+s');
-    await page.waitForTimeout(2000);
-    if (/"fade"\s*:/.test(readFileSync(join(project, 'project.json'), 'utf8'))) {
-      pass('and it is saved into the project');
-    } else {
-      fail('a fade never reached project.json');
+    let saved = false;
+    for (let attempt = 0; attempt < 20 && !saved; attempt += 1) {
+      await page.waitForTimeout(500);
+      saved = /"fade"\s*:/.test(readFileSync(join(project, 'project.json'), 'utf8'));
     }
+    if (saved) pass('and it is saved into the project');
+    else fail('a fade never reached project.json');
   }
 
   /*

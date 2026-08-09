@@ -51,6 +51,8 @@ import {
   setClipLabel,
   setTrackHeight,
   toggleTrackFlag,
+  closeAllGaps,
+  closeGapBefore,
   trimClipEnd,
   trimClipStart,
   unlinkClips,
@@ -1496,6 +1498,20 @@ export function App(): ReactNode {
           setRightTab('clip');
           setRenamingClip(target.clip);
           break;
+        case 'close-gap':
+          if (target.clip !== undefined) {
+            const closed = closeGapBefore(store.getDocument(), target.clip);
+            if (closed.ok) commitDocument('close the gap', closed.value);
+            else setError(describeEditError(closed.error));
+          }
+          break;
+        case 'close-track-gaps':
+          if (target.track !== undefined) {
+            const closed = closeAllGaps(store.getDocument(), target.track);
+            if (closed.ok) commitDocument('close every gap', closed.value);
+            else setError(describeEditError(closed.error));
+          }
+          break;
         case 'remove':
           clipEdits.remove();
           break;
@@ -1511,7 +1527,7 @@ export function App(): ReactNode {
         }
       }
     },
-    [clipEdits, store],
+    [clipEdits, store, commitDocument],
   );
 
   /**

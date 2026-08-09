@@ -14,6 +14,7 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronsLeftIcon,
   PencilIcon,
   ScissorsIcon,
   SplitIcon,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import { shortcutLabel } from './shortcuts.js';
 import { type ClipId, type TimelineDocument, type TrackId, linkedPartner, locateClip } from '@nos/core';
+import { gapBefore } from '@nos/editing';
 import type { ActionMenuItem } from '@nos/ui';
 
 /**
@@ -93,6 +95,8 @@ export const CLIP_MENU_ACTIONS = [
   'link',
   'copy-attributes',
   'paste-attributes',
+  'close-gap',
+  'close-track-gaps',
   'remove',
 ] as const;
 
@@ -104,6 +108,7 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
   const linked = located === undefined ? false : linkedPartner(located.clip) !== undefined;
   const enabled = located?.clip.enabled ?? true;
   const nothing = state.selectionSize === 0 && target === undefined;
+  const gap = target === undefined ? undefined : gapBefore(state.document, target);
   const track = state.track;
   // The last of its kind cannot go: a sequence with no video track has nowhere to drop a video, and
   // the user's next action after deleting it would be to create one.
@@ -256,6 +261,29 @@ export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
       icon: PaintBucketIcon,
       shortcut: shortcutLabel('paste-attributes'),
       disabled: !state.hasAttributes || nothing,
+    },
+
+    /*
+     * Closing a gap, per issue #38's third complaint: "there is one frame of blackness, because for
+     * some reason I cannot place the videos exactly next to each other".
+     *
+     * The row states how many frames it would close, because a gap of one frame is invisible at every
+     * zoom a person works at — a command offering to remove something the user cannot see has to say
+     * what it found. Offered only when there is one, from the same function the action calls, so a row
+     * that is enabled cannot then do nothing.
+     */
+    {
+      id: 'close-gap',
+      label: gap === undefined ? 'Close the gap' : `Close the gap (${gap.frames} f)`,
+      icon: ChevronsLeftIcon,
+      disabled: gap === undefined,
+      separated: true,
+    },
+    {
+      id: 'close-track-gaps',
+      label: 'Close every gap on this track',
+      icon: ChevronsLeftIcon,
+      disabled: laneClicked === undefined || laneClicked.locked,
     },
 
     {
