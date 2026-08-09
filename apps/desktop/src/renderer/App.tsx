@@ -1801,6 +1801,9 @@ export function App(): ReactNode {
           // What the media browser has selected: attaching a reference is one gesture after looking at
           // the file, rather than a second file tree that would have to be kept in step with the first.
           {...(browserSelection !== undefined ? { attachable: browserSelection as AssetPath } : {})}
+          // The sidecar serves the project folder, which is how a reference is *shown* rather than
+          // named. Absent while it is starting, which the board reports as a glyph and not a failure.
+          {...(sidecar !== undefined ? { sidecar } : {})}
           onOpenAsset={(asset) => setBrowserSelection(asset)}
         />
       )}

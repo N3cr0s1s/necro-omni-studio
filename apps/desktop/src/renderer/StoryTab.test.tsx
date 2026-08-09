@@ -13,7 +13,7 @@ import {
   sequenceId,
   trackId,
 } from '@nos/core';
-import { addBeat, editBeat } from '@nos/editing';
+import { addBeat, attachReference, editBeat } from '@nos/editing';
 import { StoryTab } from './StoryTab.js';
 
 /**
@@ -35,6 +35,13 @@ const emptyDocument = (): TimelineDocument =>
     resolution: { width: 1920, height: 1080 },
     trackIds: { video: trackId('v1'), audio: trackId('a1'), text: trackId('t1') },
   });
+
+/** A beat with one image reference, which is what the board is for. */
+const withReference = (note?: string): TimelineDocument => {
+  const document = addBeat(emptyDocument(), frameIndex(0));
+  const id = document.story[0]!.id;
+  return attachReference(document, id, assetPath('media/dune.png'), note);
+};
 
 function renderLive(initial: TimelineDocument, attachable?: string) {
   const labels: string[] = [];
@@ -184,6 +191,27 @@ describe('references', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Detach media/dune.png' }));
 
     expect(screen.queryByRole('button', { name: 'Detach media/dune.png' })).toBeNull();
+  });
+});
+
+describe('references on the board itself', () => {
+  it('draws the reference rather than counting it', async () => {
+    /*
+     * The board is a *mood* board: what a beat should look like is the point, and "1 ref" says
+     * nothing about it. This is also the guard for a wiring failure that a screenshot caught and
+     * every other test missed — the tab computed how to resolve a reference and never handed it to
+     * the board, so the blocks fell back to counting while the inspector showed the picture.
+     */
+    renderLive(withReference(), 'media/dune.png');
+    const block = screen.getByLabelText('Untitled beat');
+    expect(within(block).queryByLabelText('media/dune.png')).not.toBeNull();
+    expect(within(block).queryByText(/1 ref/)).toBeNull();
+  });
+
+  it('shows the note as the reason it is attached', () => {
+    renderLive(withReference('the light in this'));
+    const block = screen.getByLabelText('Untitled beat');
+    expect(within(block).queryByLabelText('media/dune.png, the light in this')).not.toBeNull();
   });
 });
 

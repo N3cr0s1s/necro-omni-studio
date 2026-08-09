@@ -15,6 +15,7 @@ import {
   pxToFrame,
 } from '../timeline/viewport.js';
 import { boardWidthPx, layoutBeats, rowsUsed } from './story-layout.js';
+import { type ReferenceKind, ReferenceThumb } from './ReferenceThumb.js';
 
 /**
  * The story board, per issue #33.
@@ -64,11 +65,27 @@ export function accentSpineClass(accent: StoryAccent): string {
 /** Height of the board's own ruler. */
 const RULER_HEIGHT_PX = 26;
 
-/** Height of one beat row, in pixels. Enough for a title and two lines of prose. */
-const ROW_HEIGHT_PX = 76;
+/**
+ * Height of one beat row, in pixels.
+ *
+ * Enough for a title, two lines of prose *and* a row of reference thumbnails — the three things a
+ * block has to show at once. Sized for the tallest case rather than the common one, because a block
+ * that is a few pixels short does not drop its last row, it draws it over the text: the first version
+ * of this cut the second line of prose in half with a thumbnail, which reads as a rendering fault
+ * rather than as a block that ran out of room.
+ */
+const ROW_HEIGHT_PX = 100;
 
 /** Grab width of the edge that resizes a beat. */
 const HANDLE_PX = 6;
+
+/**
+ * How many references a block shows before counting the rest.
+ *
+ * A block is a few hundred pixels at most and the title and the prose come first; past this the
+ * thumbnails are too small to be references and only crowd out the text that says what the beat is.
+ */
+const MAX_BLOCK_THUMBS = 4;
 
 export interface StoryBoardProps {
   readonly beats: readonly StoryBeat[];
@@ -82,6 +99,14 @@ export interface StoryBoardProps {
   readonly onResize?: (id: StoryBeatId, end: FrameIndex) => void;
   /** Double-clicking empty board, which is how a beat is added where it belongs. */
   readonly onAddAt?: (frame: FrameIndex) => void;
+  /**
+   * How to draw a reference: what kind it is and where it can be fetched.
+   *
+   * A function rather than resolved data, because the board must not learn what a `.mp4` is or how
+   * the sidecar addresses files. Absent means references are counted rather than shown, which is
+   * what a caller with no sidecar can honestly offer.
+   */
+  readonly resolveReference?: (asset: string) => { readonly kind: ReferenceKind; readonly src?: string };
   readonly onSeek?: (frame: FrameIndex) => void;
 }
 
@@ -95,6 +120,7 @@ export function StoryBoard({
   onResize,
   onAddAt,
   onSeek,
+  resolveReference,
 }: StoryBoardProps): ReactNode {
   const surface = useRef<HTMLDivElement>(null);
   const blocks = layoutBeats(beats, viewport);
@@ -148,6 +174,7 @@ export function StoryBoard({
             height: ROW_HEIGHT_PX - 6,
           }}
           onSelect={() => onSelect(block.beat.id)}
+          {...(resolveReference !== undefined ? { resolveReference } : {})}
           {...(onMove !== undefined
             ? {
                 onDragTo: (clientX: number, grabbedAtPx: number) =>
@@ -209,6 +236,7 @@ function BeatBlockBody({
   onSelect,
   onDragTo,
   onResizeTo,
+  resolveReference,
 }: {
   readonly beat: StoryBeat;
   readonly selected: boolean;
@@ -216,6 +244,7 @@ function BeatBlockBody({
   readonly onSelect: () => void;
   readonly onDragTo?: (clientX: number, grabbedAtPx: number) => void;
   readonly onResizeTo?: (clientX: number) => void;
+  readonly resolveReference?: (asset: string) => { readonly kind: ReferenceKind; readonly src?: string };
 }): ReactNode {
   const accent = accentOf(beat);
 
@@ -278,9 +307,36 @@ function BeatBlockBody({
           {beat.title === '' ? 'Untitled beat' : beat.title}
         </button>
         {/* The prose, clamped. The board says what a beat is about; the whole of it is edited beside. */}
-        <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">{beat.notes}</p>
-        {beat.references.length > 0 && (
-          <span className="mt-auto font-mono text-[10px] text-muted-foreground">
+        <p className="text-muted-foreground line-clamp-2 flex-none text-[11px] leading-snug">{beat.notes}</p>
+        {/* The references themselves when they can be drawn, because this is a *mood* board: what a
+            beat should look like is the point, and a count says nothing about it. Counted instead
+            when nothing can resolve them, which is the honest answer with no sidecar. */}
+        {beat.references.length > 0 && resolveReference !== undefined && (
+          <div className="mt-auto flex flex-none gap-0.5 overflow-hidden pt-0.5">
+            {beat.references.slice(0, MAX_BLOCK_THUMBS).map((reference) => {
+              const resolved = resolveReference(reference.asset);
+              return (
+                <ReferenceThumb
+                  key={reference.asset}
+                  asset={reference.asset}
+                  kind={resolved.kind}
+                  {...(resolved.src !== undefined ? { src: resolved.src } : {})}
+                  {...(reference.note !== undefined ? { note: reference.note } : {})}
+                  showName={false}
+                  className="size-6 rounded-sm"
+                />
+              );
+            })}
+            {beat.references.length > MAX_BLOCK_THUMBS && (
+              <span className="text-muted-foreground self-end font-mono text-[10px]">
+                +{beat.references.length - MAX_BLOCK_THUMBS}
+              </span>
+            )}
+          </div>
+        )}
+
+        {beat.references.length > 0 && resolveReference === undefined && (
+          <span className="text-muted-foreground mt-auto font-mono text-[10px]">
             {beat.references.length} ref{beat.references.length === 1 ? '' : 's'}
           </span>
         )}

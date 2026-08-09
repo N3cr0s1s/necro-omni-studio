@@ -21,7 +21,14 @@ import {
   moveBeat,
   removeBeat,
 } from '@nos/editing';
-import { StoryBoard, accentSpineClass, createViewport, defaultBoardZoom } from '@nos/ui';
+import {
+  type ReferenceKind,
+  ReferenceThumb,
+  StoryBoard,
+  accentSpineClass,
+  createViewport,
+  defaultBoardZoom,
+} from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@nos/ui/components/ui/empty';
 import { Input } from '@nos/ui/components/ui/input';
@@ -29,7 +36,10 @@ import { Label } from '@nos/ui/components/ui/label';
 import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Textarea } from '@nos/ui/components/ui/textarea';
+import { classifyAsset } from '@nos/media';
+import type { SidecarInfo } from '../main/ipc-contract.js';
 import { cn } from '@nos/ui/lib/utils';
+import { fileUrl } from './file-url.js';
 import { useElementWidth } from './use-element-width.js';
 
 /**
@@ -61,6 +71,8 @@ export interface StoryTabProps {
   readonly onSeek: (frame: FrameIndex) => void;
   /** What the media browser has selected — what "attach" attaches. */
   readonly attachable?: AssetPath;
+  /** Where project files can be fetched, so references are shown rather than named. */
+  readonly sidecar?: SidecarInfo;
   readonly onOpenAsset?: (asset: AssetPath) => void;
 }
 
@@ -70,6 +82,7 @@ export function StoryTab({
   onChangeDocument,
   onSeek,
   attachable,
+  sidecar,
   onOpenAsset,
 }: StoryTabProps): ReactNode {
   const [selected, setSelected] = useState<StoryBeatId>();
@@ -95,6 +108,22 @@ export function StoryTab({
         frameRate,
       }),
     [zoom, boardWidth, frameRate],
+  );
+
+  /*
+   * What a reference is and where to fetch it.
+   *
+   * Passed to the board as a function so it never learns what a `.mp4` is or how the sidecar
+   * addresses files — the kind comes from `classifyAsset`, which is already the one answer to that
+   * question, and the URL from the same helper every other consumer uses.
+   */
+  const resolveReference = useCallback(
+    (asset: string): { readonly kind: ReferenceKind; readonly src?: string } => {
+      const kind = (classifyAsset(asset) ?? 'unknown') as ReferenceKind;
+      const src = fileUrl(sidecar, asset);
+      return src === undefined ? { kind } : { kind, src };
+    },
+    [sidecar],
   );
 
   /** Every change goes through the store, which is what puts the plan under undo with the cut. */
@@ -212,6 +241,7 @@ export function StoryTab({
             onSelect={setSelected}
             onSeek={onSeek}
             onAddAt={add}
+            resolveReference={resolveReference}
             onMove={(id, to) => change('move beat', (current) => moveBeat(current, id, to))}
             onResize={(id, end) => {
               const moving = beats.find((entry) => entry.id === id);
@@ -294,31 +324,39 @@ export function StoryTab({
                       Nothing attached. What it should look and sound like, pointed at rather than described.
                     </p>
                   )}
-                  <ul className="flex flex-col gap-1">
-                    {beat.references.map((reference) => (
-                      <li key={reference.asset} className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => onOpenAsset?.(reference.asset)}
-                          title={reference.asset}
-                          className="min-w-0 flex-1 truncate text-left font-mono text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          {reference.asset}
-                        </button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Detach ${reference.asset}`}
-                          onClick={() =>
-                            change('detach reference', (current) =>
-                              detachReference(current, beat.id, reference.asset),
-                            )
-                          }
-                        >
-                          <Trash2Icon />
-                        </Button>
-                      </li>
-                    ))}
+                  {/* Shown, not listed. A beat's references are what it should look and sound like,
+                      pointed at instead of described — a column of paths is the one presentation that
+                      throws that away. */}
+                  <ul className="flex flex-wrap gap-2">
+                    {beat.references.map((reference) => {
+                      const resolved = resolveReference(reference.asset);
+                      return (
+                        <li key={reference.asset} className="group relative">
+                          <ReferenceThumb
+                            asset={reference.asset}
+                            kind={resolved.kind}
+                            {...(resolved.src !== undefined ? { src: resolved.src } : {})}
+                            {...(reference.note !== undefined ? { note: reference.note } : {})}
+                            {...(onOpenAsset !== undefined
+                              ? { onOpen: (asset: string) => onOpenAsset(asset as AssetPath) }
+                              : {})}
+                          />
+                          <Button
+                            variant="secondary"
+                            size="icon-sm"
+                            aria-label={`Detach ${reference.asset}`}
+                            onClick={() =>
+                              change('detach reference', (current) =>
+                                detachReference(current, beat.id, reference.asset),
+                              )
+                            }
+                            className="absolute -top-1.5 -right-1.5 size-5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                          >
+                            <Trash2Icon className="size-3" />
+                          </Button>
+                        </li>
+                      );
+                    })}
                   </ul>
 
                   {/* Named, not "attach selection": a button that does not say what it will attach is

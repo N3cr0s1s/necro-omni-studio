@@ -3,3 +3,4 @@
  */
 export * from './story-layout.js';
 export * from './StoryBoard.js';
+export * from './ReferenceThumb.js';
