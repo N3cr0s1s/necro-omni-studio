@@ -288,6 +288,89 @@ try {
   await page.getByRole('tab', { name: 'inspector' }).click();
   await page.waitForTimeout(700);
 
+  /*
+   * The effect editor, per issue #28, driven to the end.
+   *
+   * Here rather than in a component test because every claim it makes needs a **real driver**: that a
+   * shader compiles, that a diagnostic names the line the author typed, and that the preview draws at
+   * all. jsdom has no WebGL2, so a component test can only check that the panel reports itself
+   * unavailable — which is the one state that does not matter.
+   */
+  const writeEffect = page.getByRole('button', { name: /Write a new effect/i });
+  if ((await writeEffect.count()) === 0) {
+    fail('the effect stack offers no way to write an effect');
+  } else {
+    await writeEffect.click();
+    await page.waitForTimeout(1200);
+
+    const editor = page.getByRole('dialog', { name: 'Effect editor' });
+    const canvas = page.locator('canvas[aria-label="Shader preview"]');
+
+    // Scoped to the editor and exact: Playwright matches an accessible name by substring, so a loose
+    // `Id` also finds the media browser's `Only video` filter behind the dialog.
+    const shader = editor.getByLabel('Fragment shader', { exact: true });
+    const saveEffect = editor.getByRole('button', { name: 'Save effect' });
+
+    // A screenshot, not `readPixels`: without `preserveDrawingBuffer` the drawing buffer is undefined
+    // once composited, so reading it back gives zeros for a canvas that is plainly visible.
+    const starter = await canvas.screenshot().catch(() => Buffer.alloc(0));
+    if (starter.length > 1000) pass('the effect editor previews the starter shader on a real driver');
+    else fail(`the preview drew nothing — ${starter.length} bytes`);
+
+    await shader.fill('void main() { fragColor = nosuchfn(source, v_uv); }');
+    await page.waitForTimeout(1200);
+    const reported = await editor.innerText();
+
+    if (/line 1:/.test(reported)) {
+      pass('and reports a compile error against the line the author typed');
+    } else {
+      // The whole value of the check: a diagnostic pointing past the end of the file is worse than
+      // none, and the assembled source is a dozen lines longer than what is on screen.
+      fail(
+        `a broken shader was not reported against line 1 — it said ${JSON.stringify(reported.slice(0, 160))}`,
+      );
+    }
+
+    if (await saveEffect.isDisabled()) pass('and refuses to save a shader that does not compile');
+    else fail('an effect that cannot compile could be saved');
+
+    await shader.fill(
+      'void main() { vec4 c = texture(source, v_uv); fragColor = vec4(1.0, 0.0, 0.0, c.a); }',
+    );
+    await editor.getByLabel('Id', { exact: true }).fill('smokecheck_red');
+    await editor.getByLabel('Name', { exact: true }).fill('Smokecheck red');
+    await page.waitForTimeout(1200);
+
+    if (await saveEffect.isDisabled()) {
+      fail('a finished effect could not be saved');
+    } else {
+      await saveEffect.click();
+      await page.waitForTimeout(2500);
+
+      const wrote =
+        existsSync(join(project, 'effects', 'smokecheck_red.frag')) &&
+        existsSync(join(project, 'effects', 'smokecheck_red.json'));
+      if (wrote) pass('and writes both the shader and the manifest that names it');
+      else fail('saving an effect did not produce both files');
+
+      // Usable without a restart, which is what `onSaved` reloading the library is for.
+      await page.waitForTimeout(2500);
+      await page.getByRole('tab', { name: 'inspector' }).click();
+      await page.waitForTimeout(1000);
+      const add = page.getByRole('button', { name: /Add effect/i }).first();
+      if ((await add.count()) > 0) await add.click();
+      await page.waitForTimeout(1200);
+
+      if ((await page.innerText('body')).includes('Smokecheck red')) {
+        pass('and the effect is in the library without a restart');
+      } else {
+        fail('an effect written by the editor did not appear in the library');
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+    }
+  }
+
   // The dialogs, each of which is a tree that never mounts until it is asked for.
   await page.getByRole('button', { name: 'Export' }).first().click();
   await page.waitForTimeout(700);

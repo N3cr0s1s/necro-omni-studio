@@ -583,6 +583,49 @@ second value could never be entered. It holds the typed text and writes the draf
 re-seeding only when the stored list is not what the field spells. Only driving the control found this
 — the pure functions under it were all correct.
 
+### Effect editor rules (keep these)
+
+Issue #28. §6.3 has always defined an effect as a GLSL fragment shader plus a manifest and §4 has
+always reserved `effects/` for both — so the *format* was reachable and the **authoring** was not: a
+text editor, a guess at the schema, a reload, and a drag onto a clip to find out whether it compiled.
+
+**The preview is the feature, not the decoration.** GLSL has no useful feedback loop otherwise, and a
+cycle that long is one where people stop making small changes — which is how shaders are actually
+written. It draws on a real WebGL2 context through the compositor's own `assembleFragmentShader`, so a
+shader that draws here is one the compositor accepts and a diagnostic here names the line the author is
+looking at. A second, editor-only compile path would drift, and the day it did the editor would call a
+shader good that the compositor then refused.
+
+**The test frame has to make an effect visible.** A flat colour hides anything positional and a
+photograph hides anything subtle: squares give edges, the gradient gives every luminance, and one
+transparent corner over a checkered backdrop shows what a shader does to **alpha** — the thing most
+first drafts get wrong, and invisible on an opaque background.
+
+**Both files, shader first.** A manifest naming a shader that is not there is a *broken* effect in the
+registry; a shader nothing names is a file nobody reads. If the second write fails, the worse state is
+the one that did not happen.
+
+**Save is gated on the contract *and* the compile.** Either alone is not enough: a draft that satisfies
+the schema and does not compile is an effect that breaks the frame it is dropped on, and one that
+compiles with a duplicate uniform is a control that silently does nothing. Both are visible before the
+file exists.
+
+**Samplers follow the kind.** They are what the compositor binds — an effect reads the frame so far, a
+transition reads the two it blends. Left alone, switching kind produced a transition reading `source`,
+which compiles and renders nothing.
+
+**Checked in `smokecheck`, because every claim needs a real driver.** jsdom has no WebGL2, so a
+component test can only assert the panel reports itself unavailable — the one state that does not
+matter. Five checks: the starter shader previews, a broken one reports against **line 1**, Save is
+refused while it will not compile, both files are written, and the effect is in the library without a
+restart.
+
+Two notes from driving it. `readPixels` on the preview canvas returns zeros once the frame has been
+composited — without `preserveDrawingBuffer` the buffer is undefined — so the harness screenshots it
+and asks the question the user asks. And Playwright matches an accessible name by substring, so a
+loose `Id` inside the editor also found the media browser's `Only video` filter behind the dialog:
+scoped and `exact`.
+
 ### Manifest authoring rules (keep these)
 
 **Saying what a save would replace.** A manifest is written to `generators/<id>.manifest.json`, so the

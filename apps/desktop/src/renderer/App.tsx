@@ -126,6 +126,7 @@ import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
 import { playbackEnd, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
+import { EffectAuthoring } from './EffectAuthoring.js';
 import { ModeToggle } from './ModeToggle.js';
 import { ThemePicker, useThemeAttribute } from './ThemePicker.js';
 import {
@@ -720,6 +721,28 @@ export function App(): ReactNode {
 
   const [exportSettings, setExportSettings] = useState<ExportSettings | undefined>(undefined);
   const [authoring, setAuthoring] = useState(false);
+  /**
+   * The effect editor, per issue #28. An object rather than a boolean so it can carry which effect is
+   * being edited — `{}` is a new one, `{ editing: id }` is an existing one.
+   */
+  const [writingEffect, setWritingEffect] = useState<{ readonly editing?: string } | undefined>(undefined);
+
+  /*
+   * The project's *own* effects, with the shader each one is.
+   *
+   * Builtins are deliberately excluded. A project effect declaring a builtin's id shadows it, and the
+   * library documents that as the useful direction — a shipped effect is a starting point. Warning
+   * that saving "replaces" one would be telling the user off for the intended behaviour.
+   */
+  const projectEffects = useMemo(() => {
+    const local = new Set(
+      effects.local.map((raw) => String((raw.json as { readonly id?: unknown }).id ?? '')),
+    );
+    return effects.registry
+      .available()
+      .filter((entry) => local.has(entry.id as string))
+      .map((entry) => ({ manifest: entry.manifest, shader: entry.source.source }));
+  }, [effects.local, effects.registry]);
 
   const openExport = useCallback(() => {
     setExportSettings({
@@ -1709,6 +1732,17 @@ export function App(): ReactNode {
         />
       )}
 
+      {writingEffect !== undefined && (
+        <EffectAuthoring
+          // The project's own effects, so saving cannot silently replace one — the id is two filenames
+          // and two effects cannot share it.
+          existing={projectEffects}
+          {...(writingEffect.editing !== undefined ? { editing: writingEffect.editing } : {})}
+          onClose={() => setWritingEffect(undefined)}
+          onSaved={effects.reload}
+        />
+      )}
+
       {exportSettings !== undefined && (
         <ExportDialog
           settings={exportSettings}
@@ -1990,6 +2024,7 @@ export function App(): ReactNode {
             tab={rightTab}
             onTabChange={setRightTab}
             takesWaiting={takesWaiting}
+            onCreateEffect={() => setWritingEffect({})}
             recalled={recalled}
             effectProblems={effects.problems}
             onRenameClip={renameClip}

@@ -112,6 +112,8 @@ export interface RightPanelProps {
   readonly takesWaiting: number;
   /** Opens the manifest authoring screen — the spec's route to a new generator without code. */
   readonly onAuthorManifest: () => void;
+  /** Opens the effect editor, per issue #28. */
+  readonly onCreateEffect: () => void;
   /** Lands an accepted variant on the timeline. Supplied by the shell, which owns the document. */
   readonly onAcceptVariant: (outcome: SelectionOutcome, manifest: GeneratorManifest) => void;
   readonly libraryProblems: readonly LibraryProblem[];
@@ -240,6 +242,7 @@ function InspectorTab({
   onRenameClip,
   renamingClip,
   effectProblems,
+  onCreateEffect,
 }: RightPanelProps): ReactNode {
   return (
     <div className="flex flex-col">
@@ -253,6 +256,7 @@ function InspectorTab({
 
       <ClipInspector
         document={document}
+        onCreateEffect={onCreateEffect}
         {...(selectedClip !== undefined ? { clip: selectedClip } : {})}
         effects={effects}
         playhead={playhead}

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useCallback, useRef, useState } from 'react';
 import {
   CircleAlertIcon,
+  FileCode2Icon,
   EyeIcon,
   EyeOffIcon,
   GripVerticalIcon,
@@ -54,6 +55,14 @@ export interface EffectStackProps {
   /** Reports a completed reorder as a single move. */
   readonly onReorder?: (from: number, to: number) => void;
   readonly onAdd?: () => void;
+  /**
+   * Opens the effect editor, per issue #28.
+   *
+   * Here rather than in a menu somewhere else: this is the panel where someone discovers that the
+   * effect they want does not exist, which is the moment they would want to write it. Optional, so a
+   * build without an editor simply does not offer one.
+   */
+  readonly onCreateEffect?: () => void;
 }
 
 export function EffectStack({
@@ -65,6 +74,7 @@ export function EffectStack({
   onRemove,
   onReorder,
   onAdd,
+  onCreateEffect,
 }: EffectStackProps): ReactNode {
   const [dragIndex, setDragIndex] = useState<number | undefined>(undefined);
   const [dropIndex, setDropIndex] = useState<number | undefined>(undefined);
@@ -161,6 +171,13 @@ export function EffectStack({
           ))
         )}
       </ItemGroup>
+
+      {onCreateEffect !== undefined && (
+        <Button variant="ghost" size="sm" onClick={onCreateEffect} className="w-full">
+          <FileCode2Icon />
+          Write a new effect
+        </Button>
+      )}
 
       <Button variant="outline" size="sm" onClick={onAdd} className="w-full border-dashed">
         <PlusIcon />
