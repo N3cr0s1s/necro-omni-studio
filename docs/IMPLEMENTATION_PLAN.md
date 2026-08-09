@@ -3690,3 +3690,30 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   its neighbour makes a crossfade, both sides ramped**, and it survives the save; a lane names its
   parameter and is measured to the same height as its header; magnifying makes it taller; the curve
   draws; a marker opens in the right column and `bezier` gives it an editor.
+
+- 2026-08-10: The dissolve, read as pixels — and a harness eating its own programs.
+
+  Nothing in the repository said what a crossfade *looks* like. The fade model, the plan and the
+  compositing order are each unit-tested, and none of them can catch two clips at the right opacities
+  composited in the wrong order: a plausible plan and a wrong picture. The GL check now builds a real
+  document with a twenty-frame overlap, plans it through `buildRenderPlan` — not from hand-written
+  render items, because the ordering rule being checked lives in the plan builder — and reads the
+  frame back. Halfway through, (128, 0, 128) on a real driver: half of each shot, and the two channels
+  summing to a whole one is what says the picture never went dark in the middle.
+
+  It failed for an hour against a correct dissolve. The mask scenario built a second compositor from
+  the **same** programs, builtins and pool and then disposed it, which disposed those — so every
+  scenario written after that point rendered through a program that no longer existed. The failure is
+  silent: uniforms stop being set and the draw comes out unblended, reading as a compositing bug in
+  whatever was added last. What finally settled it was that the *control* — a hand-written layer at
+  half opacity, the same shape as a check that passes earlier in the same run — was equally wrong.
+
+  **When a new check fails, run its control.** If the control fails too, the fault is in the harness
+  or in the state it inherited, not in the thing being tested. Both of this round's long hunts — this
+  and the perf check measuring the monitor — would have been minutes rather than hours with that
+  question asked first.
+
+  Also this round: `setGroupFade`, so a picture and the sound split out of it ramp together — the same
+  rule the linked trim follows, and more obvious when broken because you can hear it. `G` closes the
+  gap before the selection. And two exports nothing reached (`hasGapBefore`, `clearClipFade`) were
+  removed by the project's own sweep, which is the shape every gap in this codebase has had.
