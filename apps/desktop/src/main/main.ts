@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/pro
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
+import { type AppSettings, DEFAULT_SETTINGS, mergeSettings, parseSettings } from './app-settings.js';
 import {
   IPC,
   IPC_EVENTS,
@@ -185,6 +186,26 @@ async function stopSidecar(): Promise<void> {
  * editor whose stated reason for remembering is "you should not have to navigate a folder picker to
  * use it" sent the user to a folder picker at random.
  */
+/**
+ * Where settings that belong to the installation live.
+ *
+ * Beside the session file and the shared generator library, and for the same reason: a cap on how much
+ * work this machine takes on follows the machine, not the cut, so `project.json` is the wrong place by
+ * definition.
+ */
+function settingsFile(): string {
+  return join(app.getPath('userData'), 'settings.json');
+}
+
+/** The stored settings, or the defaults — a missing or unreadable file is not an error. */
+async function readAppSettings(): Promise<AppSettings> {
+  try {
+    return parseSettings(JSON.parse(await readFile(settingsFile(), 'utf8')));
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
 function sessionFile(): string {
   return join(app.getPath('userData'), 'session.json');
 }
@@ -385,6 +406,15 @@ function registerHandlers(): void {
     // window's own handler through rather than asking a second time.
     closing = true;
     BrowserWindow.getAllWindows().forEach((window) => window.close());
+  });
+
+  ipcMain.handle(IPC.appSettings, async (): Promise<AppSettings> => readAppSettings());
+
+  ipcMain.handle(IPC.updateAppSettings, async (_event, patch: unknown): Promise<AppSettings> => {
+    const next = mergeSettings(await readAppSettings(), patch);
+    await mkdir(dirname(settingsFile()), { recursive: true });
+    await writeFile(settingsFile(), JSON.stringify(next, null, 2), 'utf8');
+    return next;
   });
 
   ipcMain.handle(IPC.chooseFilesToImport, async (): Promise<readonly string[]> => {

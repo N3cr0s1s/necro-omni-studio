@@ -84,6 +84,13 @@ export interface RuntimeOptions {
    * cancelling them, where `clear` cancels first and then forgets.
    */
   readonly projectRoot?: string | undefined;
+  /**
+   * The installation's ceiling on variants per run, per §5.8's global override.
+   *
+   * `undefined` while the setting is still being read, which is a real state: capping at a default the
+   * user may have changed would refuse work they had asked to be allowed.
+   */
+  readonly variantMaximum?: number | undefined;
 }
 
 export const DEFAULT_COMFYUI_ENDPOINT = 'http://127.0.0.1:8188';
@@ -140,6 +147,7 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
   const endpoint = options.endpoint ?? configured ?? DEFAULT_COMFYUI_ENDPOINT;
   const graphs = options.graphs;
   const projectRoot = options.projectRoot;
+  const variantMaximum = options.variantMaximum;
 
   // The endpoint is a main-process setting, so it is asked for rather than assumed.
   useEffect(() => {
@@ -277,8 +285,9 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
           },
         },
         nextSeed: () => Math.floor(Math.random() * 2 ** 31),
+        ...(variantMaximum !== undefined ? { globalVariantMaximum: variantMaximum } : {}),
       }),
-    [backend, graphs, gpu],
+    [backend, graphs, gpu, variantMaximum],
   );
 
   useEffect(() => queue.subscribe(setSnapshot), [queue]);

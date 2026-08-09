@@ -43,6 +43,8 @@ export const IPC = {
   writeMixdown: 'export:write-mixdown',
   setUnsaved: 'window:set-unsaved',
   closeWindow: 'window:close',
+  appSettings: 'app:settings',
+  updateAppSettings: 'app:update-settings',
   chooseFilesToImport: 'project:choose-import',
   copyIntoProject: 'project:copy-in',
   /** Lists a project subtree. */
@@ -106,6 +108,7 @@ export const IPC_EVENTS = {
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
 
 import type { FileChange, WatcherStatus } from '@nos/media';
+import type { AppSettings } from './app-settings.js';
 
 /**
  * Suffix appended to name a file's provenance record.
@@ -261,6 +264,10 @@ export interface DesktopBridge {
    * script can read.
    */
   pathForFile(file: File): string;
+  /** Settings that belong to the installation rather than to a project, per §5.8's global override. */
+  appSettings(): Promise<AppSettings>;
+  /** Applies a change and answers with what was actually stored, validated. */
+  updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   chooseFilesToImport(): Promise<readonly string[]>;
   /**
    * Copies chosen files to project-relative destinations, returning the ones that landed.

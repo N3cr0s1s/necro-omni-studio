@@ -62,6 +62,8 @@ const bridge: DesktopBridge = {
       return '';
     }
   },
+  appSettings: () => ipcRenderer.invoke(IPC.appSettings),
+  updateAppSettings: (patch) => ipcRenderer.invoke(IPC.updateAppSettings, patch),
   chooseFilesToImport: () => ipcRenderer.invoke(IPC.chooseFilesToImport),
   copyIntoProject: (placements) => ipcRenderer.invoke(IPC.copyIntoProject, placements),
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),

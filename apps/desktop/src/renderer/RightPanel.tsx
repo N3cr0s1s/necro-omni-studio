@@ -57,6 +57,7 @@ import { useAudition } from './use-audition.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { GeneratorRuntime } from './use-generator-runtime.js';
 import type { LibraryProblem } from './use-generator-library.js';
+import type { AppSettings } from '../main/app-settings.js';
 
 /**
  * The right-hand panel.
@@ -145,6 +146,9 @@ export interface RightPanelProps {
   readonly renamingClip?: boolean | undefined;
   /** Files in the project's `effects/` folder that could not be loaded at all. */
   readonly effectProblems?: readonly LibraryProblem[] | undefined;
+  /** Settings that apply to every project on this machine, shown apart from the project's own. */
+  readonly appSettings?: AppSettings | undefined;
+  readonly onChangeAppSettings?: ((patch: Partial<AppSettings>) => void) | undefined;
 }
 
 export function RightPanel(props: RightPanelProps): ReactNode {
@@ -187,6 +191,8 @@ export function RightPanel(props: RightPanelProps): ReactNode {
 
 function InspectorTab({
   document,
+  appSettings,
+  onChangeAppSettings,
   effects,
   onChangeDocument,
   playhead,
@@ -235,7 +241,13 @@ function InspectorTab({
         renaming={renamingClip}
       />
 
-      <ProjectSettings document={document} onChange={onChangeDocument} onReject={onReject} />
+      <ProjectSettings
+        document={document}
+        onChange={onChangeDocument}
+        onReject={onReject}
+        {...(appSettings !== undefined ? { appSettings } : {})}
+        {...(onChangeAppSettings !== undefined ? { onChangeAppSettings } : {})}
+      />
 
       <div className="flex flex-col gap-2 p-4">
         <Button

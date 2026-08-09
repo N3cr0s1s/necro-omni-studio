@@ -163,6 +163,16 @@ try {
     else fail(`the ${tab} panel is empty`);
   }
 
+  /*
+   * §5.8's global variant override, which the queue has taken since it was written and nothing set.
+   * A setting stored but unreachable is the same as no setting.
+   */
+  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.waitForTimeout(800);
+  const cap = page.getByRole('spinbutton', { name: 'Variants per run, at most' });
+  if ((await cap.count()) > 0) pass('the global variant ceiling can be set');
+  else fail('nothing offers the global variant ceiling');
+
   // Back to the inspector with a clip selected, which is the state most of the panel's controls need.
   await page
     .locator('[data-clip-id]')

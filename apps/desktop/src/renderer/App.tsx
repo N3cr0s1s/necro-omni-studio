@@ -157,6 +157,7 @@ import { useGeneratorRuntime } from './use-generator-runtime.js';
 import { useProjectTree } from './use-project-tree.js';
 import { describeEditError } from './edit-errors.js';
 import { useEffectLibrary } from './use-effect-library.js';
+import { useAppSettings } from './use-app-settings.js';
 import { useConfirmation } from './use-confirmation.js';
 import { SHORTCUT_GROUPS } from './shortcuts.js';
 import { bridge } from './bridge.js';
@@ -264,7 +265,12 @@ export function App(): ReactNode {
   // validates `requires` against the node classes that probe returned, so an unavailable generator is
   // greyed for the real reason rather than because the backend was still starting.
   const graphsRef = useRef<ReadonlyMap<string, unknown> | undefined>(undefined);
-  const runtime = useGeneratorRuntime({ graphs: graphsRef, projectRoot: project?.root });
+  const appSettings = useAppSettings();
+  const runtime = useGeneratorRuntime({
+    graphs: graphsRef,
+    projectRoot: project?.root,
+    variantMaximum: appSettings.settings?.variantMaximum,
+  });
   const library = useGeneratorLibrary(project?.root, {
     ...(runtime.capabilities !== undefined ? { installedNodeClasses: runtime.capabilities.nodeClasses } : {}),
   });
@@ -1882,6 +1888,8 @@ export function App(): ReactNode {
             effects={effectRegistry}
             onChangeDocument={commitDocument}
             registry={library.registry}
+            {...(appSettings.settings !== undefined ? { appSettings: appSettings.settings } : {})}
+            onChangeAppSettings={appSettings.update}
             libraryProblems={library.problems}
             libraryPath={library.libraryPath}
             runtime={runtime}

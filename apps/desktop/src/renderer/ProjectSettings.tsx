@@ -7,10 +7,14 @@ import {
   frameRateEquals,
 } from '@nos/core';
 import { applyProjectSettings, retimeCost } from '@nos/editing';
-import { MonitorIcon, TriangleAlertIcon } from 'lucide-react';
+import { SlidersHorizontalIcon, MonitorIcon, TriangleAlertIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@nos/ui/components/ui/alert';
 import { Button } from '@nos/ui/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
+import { Field, FieldLabel } from '@nos/ui/components/ui/field';
+import { Separator } from '@nos/ui/components/ui/separator';
+import { NumberField } from '@nos/ui';
+import { type AppSettings, VARIANT_MAXIMUM_RANGE } from '../main/app-settings.js';
 
 /**
  * The project's rate and resolution.
@@ -46,6 +50,12 @@ export interface ProjectSettingsProps {
   readonly document: TimelineDocument;
   readonly onChange: (label: string, next: TimelineDocument) => void;
   readonly onReject: (reason: string) => void;
+  /**
+   * Settings that apply to every project on this machine. Absent until the first read lands, which
+   * leaves the section out rather than showing a value that may be about to change under the user.
+   */
+  readonly appSettings?: AppSettings | undefined;
+  readonly onChangeAppSettings?: ((patch: Partial<AppSettings>) => void) | undefined;
 }
 
 /**
@@ -81,7 +91,13 @@ function currentPreset(resolution: { readonly width: number; readonly height: nu
   );
 }
 
-export function ProjectSettings({ document, onChange, onReject }: ProjectSettingsProps): ReactNode {
+export function ProjectSettings({
+  document,
+  onChange,
+  onReject,
+  appSettings,
+  onChangeAppSettings,
+}: ProjectSettingsProps): ReactNode {
   const [pendingRate, setPendingRate] = useState<FrameRate | undefined>(undefined);
 
   const apply = (rate: FrameRate, width: number, height: number, label: string): void => {
@@ -184,6 +200,44 @@ export function ProjectSettings({ document, onChange, onReject }: ProjectSetting
             </div>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/*
+       * Application settings, kept visibly apart from the project's.
+       *
+       * §5.8 asks for a global override of the variant count, and a cap on how much work a machine
+       * takes on follows the machine rather than the cut — so it is stored beside the session file and
+       * labelled here as applying to every project, rather than sitting silently among settings that
+       * do not.
+       */}
+      {appSettings !== undefined && (
+        <>
+          <Separator />
+          <div className="flex items-center gap-2">
+            <SlidersHorizontalIcon className="size-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Application
+            </span>
+          </div>
+
+          <Field orientation="horizontal">
+            {/* The field carries the name itself; a second label pointing at it would read the name
+                twice to a screen reader. */}
+            <FieldLabel className="text-xs">Variants per run, at most</FieldLabel>
+            <NumberField
+              aria-label="Variants per run, at most"
+              value={appSettings.variantMaximum}
+              min={VARIANT_MAXIMUM_RANGE.min}
+              max={VARIANT_MAXIMUM_RANGE.max}
+              step={1}
+              onCommit={(next) => onChangeAppSettings?.({ variantMaximum: Math.round(next) })}
+              className="ml-auto w-16 font-mono tabular-nums"
+            />
+          </Field>
+          <p className="font-mono text-xs text-muted-foreground">
+            a ceiling for every project on this machine — a manifest still decides how many it wants
+          </p>
+        </>
       )}
     </div>
   );
