@@ -10,6 +10,7 @@ import {
 import {
   type Clip,
   type ClipId,
+  NO_FADE,
   clipFade,
   hasAnimation,
   isGenerated,
@@ -167,13 +168,19 @@ export function ClipBody({
   // Handles are hidden in a compact lane too: a 10 px bar cannot be trimmed with any precision, and
   // the grab zones would sit exactly where the user is aiming to click the clip itself.
   const showHandles = geometry.widthPx >= MIN_HANDLE_CLIP_WIDTH_PX && !compact;
-  // Ramps are drawn from the clip's own proportions, so they need no viewport: a fade is a fraction
-  // of the clip and the clip's width in pixels is already known.
-  const fade = clipFade(clip);
+  /*
+   * Ramps are drawn from the clip's own proportions, so they need no viewport: a fade is a fraction of
+   * the clip and the clip's width in pixels is already known.
+   *
+   * The width test comes first because it is the cheap one, and this whole block runs once per clip
+   * per render — which during a drag is every clip on screen, sixty times a second, inside a 16 ms
+   * budget. A clip too narrow to carry a handle need not have its fade read at all.
+   */
+  const showFades = geometry.widthPx >= MIN_FADE_CLIP_WIDTH_PX && !compact;
+  const fade = showFades ? clipFade(clip) : NO_FADE;
   const perFrame = clip.span.duration === 0 ? 0 : geometry.widthPx / clip.span.duration;
   const fadeIn = fade.inFrames * perFrame;
   const fadeOut = fade.outFrames * perFrame;
-  const showFades = geometry.widthPx >= MIN_FADE_CLIP_WIDTH_PX && !compact;
   const Disclosure = expanded ? ChevronDownIcon : ChevronRightIcon;
   // Less inset when there is less to inset. The default six pixels top and bottom is most of a
   // collapsed lane, and would leave the bar too thin to see the colour that says what kind it is.

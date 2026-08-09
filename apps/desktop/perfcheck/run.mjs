@@ -281,22 +281,31 @@ try {
   }
 
   /*
-   * Against the spec's 16 ms, not against this display.
+   * The work the drag *adds*, against the spec's 16 ms.
    *
-   * The idle frame is measured and reported, but deliberately not asserted on: the first version of
-   * this check compared the drag to it and failed on a 123 Hz monitor, where keeping pace means 8.1 ms
-   * — a stricter bar than the spec sets, imposed by whichever screen the harness happened to run on.
-   * A requirement that moves with the hardware is not a requirement.
+   * Each move waits on a frame, so the wall clock per move is the application's work plus one frame of
+   * this display — and the assertion used to charge the application for both. That is the mistake this
+   * file's own comment warns about, made one line further down than the comment: the figure moved with
+   * the refresh rate, reading 12.9 ms on a 131 Hz run and 14.8 ms on a 101 Hz run for **the same
+   * build**. Two hours went into hunting a regression that was a monitor.
+   *
+   * Subtracting the idle frame is what the measured `frameMs` was always for. What is left is the cost
+   * the drag adds to a frame that would have been served anyway, which is the number the budget is
+   * about and the only one that does not depend on the screen.
    */
-  if (perMove > BUDGET_MS) {
+  const added = Math.max(0, perMove - measured.frameMs);
+
+  if (added > BUDGET_MS) {
     fail(
-      `a pointer move cost ${perMove.toFixed(1)} ms at ${CLIPS} clips, over the ${BUDGET_MS} ms budget ` +
-        `(${Math.round(measured.wall)} ms for ${MOVES} moves; this display serves ${refreshHz} Hz)`,
+      `a pointer move added ${added.toFixed(1)} ms at ${CLIPS} clips, over the ${BUDGET_MS} ms budget ` +
+        `(${perMove.toFixed(1)} ms per move less a ${measured.frameMs.toFixed(1)} ms idle frame; ` +
+        `${Math.round(measured.wall)} ms for ${MOVES} moves; this display serves ${refreshHz} Hz)`,
     );
   } else {
     pass(
-      `a pointer move cost ${perMove.toFixed(1)} ms of the ${BUDGET_MS} ms budget at ${CLIPS} clips ` +
-        `(display ${refreshHz} Hz)`,
+      `a pointer move added ${added.toFixed(1)} ms of the ${BUDGET_MS} ms budget at ${CLIPS} clips ` +
+        `(${perMove.toFixed(1)} ms per move, ${measured.frameMs.toFixed(1)} ms of it an idle frame at ` +
+        `${refreshHz} Hz)`,
     );
   }
 

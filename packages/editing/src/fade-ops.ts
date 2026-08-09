@@ -7,6 +7,7 @@ import {
   type TimelineDocument,
   type TrackId,
   clipFade,
+  endExclusive,
   err,
   intersection,
   ok,
@@ -87,11 +88,24 @@ export function crossfadeForPlacement(
   if (track === undefined || track.locked) return undefined;
   if (track.kind === 'text') return undefined;
 
-  const others = trackClips(track).filter((candidate) => candidate.id !== clip);
-  const touched = others.filter((candidate) => intersection(candidate.span, span) !== undefined);
-  if (touched.length !== 1) return undefined;
+  /*
+   * One pass, and it stops at the second clip it touches.
+   *
+   * This runs on **every pointer move of every drag** — a single-clip move has to come through here,
+   * because dropping one clip onto another is how a crossfade is made — so a pair of `filter` calls
+   * over the track was two arrays of a few hundred clips per move, on the path with a 16 ms budget.
+   * Two touched clips is already an answer, so there is nothing to gain by looking at the rest.
+   */
+  let neighbour: Clip | undefined;
+  for (const candidate of trackClips(track)) {
+    if (candidate.id === clip) continue;
+    if (candidate.span.start >= endExclusive(span) || span.start >= endExclusive(candidate.span)) continue;
+    // A second one, and which of them is the outgoing side has no answer. Refuse rather than guess.
+    if (neighbour !== undefined) return undefined;
+    neighbour = candidate;
+  }
+  if (neighbour === undefined) return undefined;
 
-  const neighbour = touched[0]!;
   const overlap = intersection(neighbour.span, span);
   if (overlap === undefined) return undefined;
   if (overlap.duration < MIN_CROSSFADE_FRAMES) return undefined;
