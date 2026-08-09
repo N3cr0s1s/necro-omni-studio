@@ -3892,3 +3892,24 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Also: **Fit frames the selection first**, then the marked range, then everything — three ways of
   saying "this bit", ordered rather than combined, because a union of them would frame a stretch the
   user never indicated.
+
+- 2026-08-10: The blend rule, proved as a pixel.
+
+  "A transition governs the blend inside its own span" was unit-tested at every layer and none of them
+  could say what the frame looks like. `glcheck` now lays a transition over an overlap that already
+  carries ramps on **both** clips and reads the picture either side of the wipe boundary.
+
+  **A hard wipe is what makes the rule readable.** Either side of the boundary the shader picks one
+  source whole, so "the ramp was ignored" and "the ramp was applied" are 255 and 128 rather than two
+  shades of the same blend. Read off-centre deliberately: at progress 0.5 the centre pixel sits *on*
+  the boundary, where either answer is defensible and neither is evidence.
+
+  It ships with its **control** — the identical document with the transition taken away, which reads
+  (64, 0, 128) at alpha 191: both ramps at half with the empty frame showing between them, which is
+  the dip the rule prevents. Without that control a wipe silently failing to take over would be
+  indistinguishable from one doing its job, because the check would pass on a document where the ramps
+  had never mattered either way.
+
+  Then run against the mutant, as everything here now is: inverting one condition in `withoutFade`
+  drops both sides to 128 and fails exactly the two new checks, and the control still passes — which
+  is what says the control is measuring the other thing rather than the same thing twice.

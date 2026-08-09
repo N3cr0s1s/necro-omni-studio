@@ -85,6 +85,28 @@ const checks = {
   // channels summing to a whole one is what says the picture never went dark in the middle.
   'the dissolve never goes dark': (r?.dissolve?.middle?.[0] ?? 0) + (r?.dissolve?.middle?.[2] ?? 0) > 235,
   'the dissolve raises no GL error': r?.dissolve?.glError === 0,
+
+  /*
+   * A transition over an overlap that already carries ramps.
+   *
+   * The shader is the blend inside its own span, so a hard wipe must show each shot *whole* on its
+   * own side. Half-strength either side would mean the ramps were applied as well, which reads as a
+   * dip through the middle of a cut.
+   */
+  'the wipe shows the incoming shot whole':
+    near(r?.transitionOverFade?.incomingSide?.[2] ?? -1, 255) &&
+    near(r?.transitionOverFade?.incomingSide?.[0] ?? -1, 0),
+  'the wipe shows the outgoing shot whole':
+    near(r?.transitionOverFade?.outgoingSide?.[0] ?? -1, 255) &&
+    near(r?.transitionOverFade?.outgoingSide?.[2] ?? -1, 0),
+  // The control: the same document without the transition dips, because both ramps are at half and
+  // the empty frame shows between them. If this passed too, the ramps never mattered and the check
+  // above would be proving nothing.
+  'without the transition the same frame dips':
+    (r?.transitionOverFade?.withoutTransition?.[0] ?? 0) +
+      (r?.transitionOverFade?.withoutTransition?.[2] ?? 0) <
+    235,
+  'the transition raises no GL error': r?.transitionOverFade?.glError === 0,
 };
 const failed = Object.entries(checks)
   .filter(([, ok]) => !ok)

@@ -231,13 +231,26 @@ function readAt(x: number, y: number): number[] {
   return [...pixels];
 }
 
+export interface DissolveOptions {
+  /**
+   * An out-ramp on the outgoing clip as well, so both sides of a transition can be read.
+   *
+   * The drop gesture writes only the incoming ramp on a video track — but `setClipFade` will put one
+   * on either edge of any clip, so a clip carrying an out-ramp under a transition is a document a
+   * user can reach, and the rule has to hold on that side too.
+   */
+  readonly outFade?: number;
+  /** A transition covering the overlap, which must take the blend over from both ramps. */
+  readonly transition?: boolean;
+}
+
 /**
  * Two clips overlapping by twenty frames, the incoming one ramping in across the overlap.
  *
  * Exactly what dropping a clip onto its neighbour produces: the outgoing clip untouched, the incoming
  * one carrying `fade.inFrames` equal to the overlap.
  */
-function buildDissolveDocument(): TimelineDocument {
+function buildDissolveDocument(options: DissolveOptions = {}): TimelineDocument {
   const base = createDocument({
     id: projectId('glcheck'),
     sequenceId: sequenceId('s'),
@@ -254,7 +267,13 @@ function buildDissolveDocument(): TimelineDocument {
     rotation: staticNumber(0),
     opacity: staticNumber(1),
   };
-  const shot = (id: string, asset: string, from: number, to: number, fadeIn = 0) => ({
+  const shot = (
+    id: string,
+    asset: string,
+    from: number,
+    to: number,
+    fade: { in?: number; out?: number } = {},
+  ) => ({
     kind: 'video' as const,
     id: clipId(id),
     span: spanFromBounds(frameIndex(from), frameIndex(to)),
@@ -264,15 +283,31 @@ function buildDissolveDocument(): TimelineDocument {
     source: { asset: assetPath(asset), sourceIn: frameIndex(0), sourceRate: FRAME_RATES.WEB_30 },
     transform,
     speed: { factor: 1, preservePitch: true },
-    ...(fadeIn === 0 ? {} : { fade: { inFrames: fadeIn, outFrames: 0 } }),
+    ...((fade.in ?? 0) === 0 && (fade.out ?? 0) === 0
+      ? {}
+      : { fade: { inFrames: fade.in ?? 0, outFrames: fade.out ?? 0 } }),
   });
 
+  const overlap = spanFromBounds(frameIndex(40), frameIndex(60));
   const video: VideoTrack = {
     ...(base.sequence.tracks[0] as VideoTrack),
     clips: [
-      shot('outgoing', 'media/red.mp4', 0, 60),
-      shot('incoming', 'media/blue.mp4', 40, 100, 20),
+      shot('outgoing', 'media/red.mp4', 0, 60, { out: options.outFade ?? 0 }),
+      shot('incoming', 'media/blue.mp4', 40, 100, { in: 20 }),
     ] as VideoTrack['clips'],
+    transitions:
+      options.transition === true
+        ? [
+            {
+              id: effectInstanceId('over-the-overlap'),
+              effect: effectId('wipe'),
+              span: overlap,
+              from: clipId('outgoing'),
+              to: clipId('incoming'),
+              params: {},
+            },
+          ]
+        : [],
   };
 
   return { ...base, sequence: { ...base.sequence, tracks: [video, ...base.sequence.tracks.slice(1)] } };
@@ -474,6 +509,53 @@ results.builtinLibrary = builtinResults;
     middle: at(50).pixel,
     // After it: the incoming clip alone.
     after: at(90).pixel,
+    glError: gl.getError(),
+  };
+}
+
+/*
+ * A transition laid over an overlap that already has ramps — the rule that lets the two coexist.
+ *
+ * Dropping a clip onto its neighbour makes a dissolve out of ramps; naming a wipe over that same
+ * overlap must produce a *wipe*, not a wipe of two half-transparent pictures. The rule is that a
+ * transition governs the blend inside its own span and the ramps are ignored there, and it is applied
+ * by the plan rather than written into the document, so removing the transition leaves the fades doing
+ * what they always did.
+ *
+ * A hard wipe is what makes this readable as a pixel. Either side of the boundary the shader picks one
+ * source *whole*, so "the ramp was ignored" and "the ramp was applied" are 255 and about 128 rather
+ * than two shades of the same blend. Read off-centre on purpose: at progress 0.5 the centre pixel sits
+ * on the boundary, where either answer is defensible and neither is evidence.
+ *
+ * The control renders the identical document with the transition taken away. Both ramps are then at
+ * half across the overlap and the empty frame shows through between them, so the picture reads darker
+ * than either shot — the dip the rule exists to prevent. Without it, a wipe that silently failed to
+ * take over would be indistinguishable from one that did its job: the check would pass on a document
+ * where the ramps had never mattered either way.
+ */
+{
+  const middle = frameIndex(50);
+  const render = (options: DissolveOptions) =>
+    renderAndRead(
+      buildRenderPlan({
+        document: buildDissolveDocument(options),
+        frame: middle,
+        effects,
+      }) as unknown as RenderPlan,
+    );
+
+  render({ outFade: 20, transition: true });
+  // uv.x below progress takes the incoming picture, above it the outgoing one.
+  const incomingSide = readAt(16, 32);
+  const outgoingSide = readAt(48, 32);
+
+  render({ outFade: 20, transition: false });
+  const withoutTransition = readAt(16, 32);
+
+  results.transitionOverFade = {
+    incomingSide,
+    outgoingSide,
+    withoutTransition,
     glError: gl.getError(),
   };
 }
