@@ -453,14 +453,17 @@ try {
 
     await page.getByRole('tab', { name: 'Editor' }).click();
     await page.waitForTimeout(1000);
-    await page
-      .getByRole('treeitem', { name: /effects/ })
-      .first()
-      .click()
-      .catch(() => undefined);
-    await page.waitForTimeout(1200);
 
-    const jsonRow = page.getByRole('treeitem', { name: /\.json/ }).first();
+    /*
+     * The effect's *manifest*, named rather than pattern-matched.
+     *
+     * Two things were wrong here and they hid each other. Clicking `effects` a second time *collapsed*
+     * the folder it had just opened, so `tint.json` was off screen — and `.first()` on a `/\.json/`
+     * pattern then matched `project.json` at the root instead. The check still passed, because all it
+     * asserted was that the buffer starts with a brace. A locator loose enough to match the wrong file
+     * turns a failure into a pass, which is the worst thing a harness can do.
+     */
+    const jsonRow = page.getByRole('treeitem', { name: /tint\.json/ }).first();
     if ((await jsonRow.count()) === 0) {
       fail('the browser does not list the project’s manifest');
     } else {
@@ -476,6 +479,45 @@ try {
         const contents = await page.getByLabel('File contents').inputValue();
         if (contents.trim().startsWith('{')) pass('and a manifest opens in the text editor, loaded');
         else fail(`the text editor opened empty — ${contents.length} characters`);
+
+        /*
+         * Completion, per issue #31 — driven rather than merely present.
+         *
+         * The engine is tested on its own; what only a real window can show is that the caret the
+         * suggestions are computed from is the one on screen, and that accepting one writes into the
+         * file being edited. The manifest under the caret is an effect manifest, so the names offered
+         * are the ones `effects/*.json` uses.
+         */
+        const editor = page.getByLabel('File contents');
+        await editor.click();
+        await page.keyboard.press('Control+End');
+        await page.keyboard.press('Control+a');
+        await editor.fill('{\n  "sha\n}');
+        await page.waitForTimeout(400);
+
+        // Caret at the end of the half-typed name, which is where someone asking for help would be.
+        await page.keyboard.press('Control+End');
+        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('End');
+        await page.keyboard.press('Control+Space');
+        await page.waitForTimeout(700);
+
+        const list = page.getByRole('listbox', { name: 'Suggestions' });
+        if ((await list.count()) === 0) {
+          const shown = await page.locator('section[aria-label="File editor"] header span').first().textContent();
+          fail(`the completion list did not open on Ctrl+Space (editing ${String(shown)})`);
+        } else {
+          pass('and suggests what belongs at the caret');
+
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(500);
+          const completed = await editor.inputValue();
+
+          // The name, the quote it was inside closed, and the colon — accepting a completion that
+          // left you to type `": "` yourself would have done the easy half.
+          if (completed.includes('"shader": ')) pass('and accepting one writes it into the file');
+          else fail(`accepting a completion produced ${JSON.stringify(completed)}`);
+        }
       }
     }
 
@@ -976,7 +1018,9 @@ try {
 } finally {
   await broken?.browser.close().catch(() => undefined);
   if (broken !== undefined) stop(broken.child);
-  if (failures === 0) rmSync(work, { recursive: true, force: true });
+  // Retried: the shell is still shutting down and may write into the folder while it is being
+// removed, which surfaces as ENOTEMPTY and would fail a run that actually passed.
+if (failures === 0) rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 if (failures === 0) console.log('smokecheck passed');

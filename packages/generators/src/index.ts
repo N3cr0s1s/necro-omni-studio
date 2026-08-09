@@ -26,3 +26,4 @@ export * from './manifest/choices.js';
 export * from './manifest/param-fields.js';
 export * from './manifest/preset-draft.js';
 export * from './manifest/save-target.js';
+export * from './manifest/manifest-schema.js';

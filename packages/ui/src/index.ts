@@ -40,3 +40,5 @@ export * from './theme/theme-css.js';
 export * from './workspace/WorkspaceTabs.js';
 export * from './story/index.js';
 export * from './code/json-tokens.js';
+export * from './code/completion-keys.js';
+export * from './code/CompletionList.js';

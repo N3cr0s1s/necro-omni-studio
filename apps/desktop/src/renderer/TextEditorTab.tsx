@@ -1,11 +1,13 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SaveIcon, TriangleAlertIcon } from 'lucide-react';
-import { jsonProblem, tokenizeJson } from '@nos/ui';
+import { type SchemaShape, acceptCompletion, completionsFor, locationAt } from '@nos/core';
+import { CompletionList, completionCommand, cycle, jsonProblem, opensOnTyping, tokenizeJson } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Spinner } from '@nos/ui/components/ui/spinner';
 import { cn } from '@nos/ui/lib/utils';
 import { bridge } from './bridge.js';
+import { schemaFor } from './file-schemas.js';
 
 /**
  * A project file, open for editing.
@@ -19,6 +21,14 @@ import { bridge } from './bridge.js';
  * The renderer runs under a CSP that forbids fetching anything, so an editor library would have to be
  * vendored. What is actually needed is JSON colouring, which is a tokenizer — written, tested, and
  * kept in `@nos/ui`.
+ *
+ * ## Completion
+ *
+ * Issue #31 asked for it "based on a JSON schema". The knowing-what-goes-where part lives in
+ * `@nos/core` and the descriptions of the manifests live beside the types they describe; this file
+ * only turns a caret into a position on screen and a keypress into a command. That split is what lets
+ * the hard parts — a caret inside quotes, a key already written further down — be tested without
+ * rendering anything.
  *
  * The technique is a highlighted layer *under* a transparent textarea, aligned character for
  * character. Editing therefore stays a real textarea: selection, undo, IME, spellcheck and the caret
@@ -73,6 +83,9 @@ export function TextEditorTab({ path, onDirty, onSaved }: TextEditorTabProps): R
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
   const isJson = path.toLowerCase().endsWith('.json');
+  // Which description applies, if any. `undefined` for a file nothing models, which offers nothing —
+  // the same path a `.txt` takes.
+  const schema = useMemo(() => (isJson ? schemaFor(path) : undefined), [isJson, path]);
   const problem = useMemo(() => (isJson ? jsonProblem(text) : undefined), [isJson, text]);
 
   const save = useCallback(async () => {
@@ -127,7 +140,7 @@ export function TextEditorTab({ path, onDirty, onSaved }: TextEditorTabProps): R
       <Separator />
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        <Highlighted text={text} json={isJson} onChange={setText} />
+        <Highlighted text={text} json={isJson} schema={schema?.shape} onChange={setText} />
       </div>
     </section>
   );
@@ -144,14 +157,63 @@ export function TextEditorTab({ path, onDirty, onSaved }: TextEditorTabProps): R
 function Highlighted({
   text,
   json,
+  schema,
   onChange,
 }: {
   readonly text: string;
   readonly json: boolean;
+  readonly schema: SchemaShape | undefined;
   readonly onChange: (text: string) => void;
 }): ReactNode {
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const caretRef = useRef<HTMLSpanElement | null>(null);
   const tokens = useMemo(() => (json ? tokenizeJson(text) : []), [json, text]);
+
+  /** The caret the suggestions are for. `undefined` means the list is closed. */
+  const [asking, setAsking] = useState<number>();
+  const [active, setActive] = useState(0);
+  const [anchor, setAnchor] = useState({ left: 0, top: 0 });
+
+  const completions = useMemo(
+    () => (asking === undefined ? [] : completionsFor(schema, locationAt(text, asking))),
+    [asking, schema, text],
+  );
+
+  /*
+   * Where to draw the list.
+   *
+   * Measured off a mirror of the highlighted layer rather than computed. A textarea gives no way to
+   * ask where its caret is, and every arithmetic answer — characters times an assumed advance width —
+   * is wrong the moment a line wraps or a glyph is not the width it was assumed to be. The mirror
+   * holds the text up to the caret in the same font, the same width and the same wrapping, so the
+   * marker after it is exactly where the caret is by construction.
+   */
+  useEffect(() => {
+    if (asking === undefined) return;
+    const marker = caretRef.current?.getBoundingClientRect();
+    const container = areaRef.current?.parentElement?.getBoundingClientRect();
+    if (marker === undefined || container === undefined) return;
+    setAnchor({ left: marker.left - container.left, top: marker.bottom - container.top + 4 });
+  }, [asking, text]);
+
+  const accept = useCallback(
+    (index: number) => {
+      const completion = completions[index];
+      if (asking === undefined || completion === undefined) return;
+
+      const accepted = acceptCompletion(text, locationAt(text, asking), completion);
+      onChange(accepted.text);
+      setAsking(undefined);
+
+      // The caret goes where the insertion ended, after React has written the new value — setting it
+      // before would put it back where the browser's own update lands it.
+      requestAnimationFrame(() => {
+        areaRef.current?.setSelectionRange(accepted.caret, accepted.caret);
+        areaRef.current?.focus();
+      });
+    },
+    [asking, completions, onChange, text],
+  );
 
   const shared = 'font-mono text-xs leading-5 whitespace-pre-wrap break-words';
 
@@ -169,12 +231,71 @@ function Highlighted({
         {text.endsWith('\n') ? '\n' : ''}
       </pre>
 
+      {/* The measuring mirror: the same text, font, width and wrapping, up to the caret. Invisible and
+          untouchable, so it costs a layout and nothing else. */}
+      {asking !== undefined && (
+        <pre
+          aria-hidden="true"
+          className={cn(shared, 'pointer-events-none invisible absolute inset-0 m-0 p-0')}
+        >
+          {text.slice(0, asking)}
+          <span ref={caretRef} />
+        </pre>
+      )}
+
       <textarea
         ref={areaRef}
         aria-label="File contents"
         spellCheck={false}
         value={text}
-        onChange={(event) => onChange(event.target.value)}
+        role="combobox"
+        aria-expanded={completions.length > 0}
+        aria-controls="json-completions"
+        {...(completions.length > 0 ? { 'aria-activedescendant': `json-completions-${active}` } : {})}
+        onChange={(event) => {
+          onChange(event.target.value);
+
+          const caret = event.target.selectionStart;
+          const typed = event.target.value[caret - 1] ?? '';
+          // Reopened at the new caret while a word is being typed, and closed the moment it is not —
+          // a list left hanging over a comma is a list that is describing the wrong place.
+          if (json && schema !== undefined && opensOnTyping(typed)) {
+            setAsking(caret);
+            setActive(0);
+          } else setAsking(undefined);
+        }}
+        onKeyDown={(event) => {
+          const command = completionCommand(event, asking !== undefined && completions.length > 0);
+          if (command === 'none') return;
+
+          // Every one of these is a key the textarea would otherwise act on — Tab moving focus out of
+          // the editor being the one that is hardest to recover from.
+          event.preventDefault();
+
+          switch (command) {
+            case 'open':
+              if (json && schema !== undefined) {
+                setAsking(event.currentTarget.selectionStart);
+                setActive(0);
+              }
+              return;
+            case 'next':
+              setActive((current) => cycle(current, completions.length, 1));
+              return;
+            case 'previous':
+              setActive((current) => cycle(current, completions.length, -1));
+              return;
+            case 'accept':
+              accept(active);
+              return;
+            default:
+              setAsking(undefined);
+          }
+        }}
+        // Moving the caret by pointer describes a different place, and the old list would be about the
+        // old one.
+        onPointerDown={() => setAsking(undefined)}
+        onBlur={() => setAsking(undefined)}
         // Transparent text over the coloured copy, with a visible caret. `resize-none` because the
         // container scrolls; a textarea that grew its own scrollbar would scroll independently of the
         // layer beneath it.
@@ -183,6 +304,17 @@ function Highlighted({
           'caret-foreground absolute inset-0 m-0 resize-none border-0 bg-transparent p-0 text-transparent outline-none',
         )}
       />
+
+      {asking !== undefined && (
+        <CompletionList
+          completions={completions}
+          active={active}
+          left={anchor.left}
+          top={anchor.top}
+          onAccept={accept}
+          idPrefix="json-completions"
+        />
+      )}
     </div>
   );
 }

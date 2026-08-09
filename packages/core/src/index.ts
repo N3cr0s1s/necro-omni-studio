@@ -13,3 +13,4 @@ export * from './time/index.js';
 export * from './document/index.js';
 export * from './patch/index.js';
 export * from './serialization/index.js';
+export * from './json/index.js';

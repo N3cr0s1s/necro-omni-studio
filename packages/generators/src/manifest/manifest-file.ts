@@ -85,23 +85,32 @@ const vScalar: Validator<string | number | boolean> = (value, path) =>
     ? ok(value)
     : err([issue(path, 'expected a string, number or boolean')]);
 
+/**
+ * A parameter as the *file* spells it.
+ *
+ * Exported because the editor's completion description is written as a record over this type, so the
+ * compiler proves the names it offers are the names the file uses. Suggesting the in-memory spelling
+ * — `defaultFrom` for `default_from` — writes a field the loader drops without a word.
+ */
+export interface GeneratorParamFile {
+  key: string;
+  label?: string;
+  type: GeneratorParamType;
+  bind: string | null;
+  also?: readonly AlsoBinding[];
+  multiline?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  default?: string | number | boolean;
+  options?: readonly string[] | CapabilityOptions;
+  required?: boolean;
+  transport?: string;
+  default_from?: string;
+}
+
 function parseParam(value: unknown, path: string): Validated<GeneratorParam> {
-  const shape = vObject<{
-    key: string;
-    label?: string;
-    type: GeneratorParamType;
-    bind: string | null;
-    also?: readonly AlsoBinding[];
-    multiline?: boolean;
-    min?: number;
-    max?: number;
-    step?: number;
-    default?: string | number | boolean;
-    options?: readonly string[] | CapabilityOptions;
-    required?: boolean;
-    transport?: string;
-    default_from?: string;
-  }>({
+  const shape = vObject<GeneratorParamFile>({
     key: vString,
     label: vOptional(vString),
     type: vParamType,
@@ -239,8 +248,13 @@ const vBatch: Validator<BatchDescriptor> = vObject<BatchDescriptor>({
   max: vNumber,
 });
 
-/** The file's shape, in the names the file uses. */
-interface ManifestFileShape {
+/**
+ * The file's shape, in the names the file uses.
+ *
+ * Exported for the same reason as `GeneratorParamFile`: the completion description is a record over
+ * it, so a field added here without being described stops the build.
+ */
+export interface GeneratorManifestFile {
   id: string;
   name: string;
   backend: string;
@@ -264,7 +278,7 @@ interface ManifestFileShape {
   }[];
 }
 
-const vManifestFile = vObject<ManifestFileShape>({
+const vManifestFile = vObject<GeneratorManifestFile>({
   id: vString,
   name: vString,
   // Defaulted rather than required: every manifest in this project targets ComfyUI, and a field whose value
