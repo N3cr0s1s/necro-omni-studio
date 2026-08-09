@@ -401,6 +401,16 @@ export function App(): ReactNode {
     await adopt(opened, api);
   }, [adopt]);
 
+  /*
+   * The shell needs to know whether there is unsaved work *before* the user tries to close, because a
+   * question asked at close time races the window's teardown — and a stale answer means either a lost
+   * edit or a prompt nobody can explain.
+   */
+  const unsaved = store.getSnapshot().dirty;
+  useEffect(() => {
+    void bridge()?.setUnsaved(unsaved && project !== undefined);
+  }, [unsaved, project]);
+
   const save = useCallback(async () => {
     const api = bridge();
     if (api === undefined || project === undefined) return;
@@ -410,6 +420,21 @@ export function App(): ReactNode {
     // offer to "recover" the file the user just saved.
     await autosave.clear();
   }, [autosave, project, store]);
+
+  /*
+   * Saving because the window is closing, then closing it.
+   *
+   * The renderer closes rather than the shell, so a slow write cannot be overtaken by the close it was
+   * meant to precede — an editor that saved *while* quitting would be a data-loss bug wearing the
+   * costume of a fix.
+   */
+  useEffect(
+    () =>
+      bridge()?.onSaveBeforeClose(() => {
+        void save().finally(() => void bridge()?.closeWindow());
+      }),
+    [save],
+  );
 
   /**
    * Nudges the selected clip by a number of frames.

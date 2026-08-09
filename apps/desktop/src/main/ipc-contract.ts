@@ -41,6 +41,8 @@ export const IPC = {
   /** Writes a project-relative text file. */
   writeTextFile: 'project:write-text',
   writeMixdown: 'export:write-mixdown',
+  setUnsaved: 'window:set-unsaved',
+  closeWindow: 'window:close',
   chooseFilesToImport: 'project:choose-import',
   copyIntoProject: 'project:copy-in',
   /** Lists a project subtree. */
@@ -81,6 +83,13 @@ export const IPC = {
  * every channel the main process ever sends on.
  */
 export const IPC_EVENTS = {
+  /**
+   * The user chose Save when closing with unsaved work.
+   *
+   * The renderer writes and then closes the window itself, so a slow save cannot be overtaken by the
+   * close it was meant to precede.
+   */
+  saveBeforeClose: 'window:save-before-close',
   /** A batch of project-relative filesystem changes. */
   projectChanged: 'project:changed',
   /** The watcher started, stopped, or failed. */
@@ -233,6 +242,17 @@ export interface DesktopBridge {
    * they are called is a rule with tests, and it lives in the renderer where that package can be
    * imported. The main process may import types from the workspace but not values.
    */
+  /**
+   * Publishes whether the document has changes that are not on disk.
+   *
+   * Pushed rather than asked for at close time: a question then races the window's own teardown, and a
+   * stale answer means either a lost edit or a prompt nobody can explain.
+   */
+  setUnsaved(unsaved: boolean): Promise<void>;
+  /** Closes the window, for the renderer to call once a save asked for at close time has landed. */
+  closeWindow(): Promise<void>;
+  /** Runs when the user chose Save while closing. Returns a function that stops listening. */
+  onSaveBeforeClose(listener: () => void): () => void;
   chooseFilesToImport(): Promise<readonly string[]>;
   /**
    * Copies chosen files to project-relative destinations, returning the ones that landed.

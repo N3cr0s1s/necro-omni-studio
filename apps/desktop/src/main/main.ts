@@ -61,6 +61,8 @@ interface Session {
   info: SidecarInfo;
   watcher: ProjectWatcherHandle | undefined;
   watcherState: WatcherStatus;
+  /** Whether the document has changes not on disk, published by the renderer as it edits. */
+  unsaved: boolean;
 }
 
 const session: Session = {
@@ -69,6 +71,7 @@ const session: Session = {
   info: { baseUrl: '', token: '', available: false, detail: 'no project is open' },
   watcher: undefined,
   watcherState: { watching: false },
+  unsaved: false,
 };
 
 /**
@@ -371,6 +374,17 @@ function registerHandlers(): void {
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, contents);
     return relative;
+  });
+
+  ipcMain.handle(IPC.setUnsaved, (_event, unsaved: unknown): void => {
+    session.unsaved = unsaved === true;
+  });
+
+  ipcMain.handle(IPC.closeWindow, (): void => {
+    // The renderer asked, which it only does once a save it started has landed. The flag lets the
+    // window's own handler through rather than asking a second time.
+    closing = true;
+    BrowserWindow.getAllWindows().forEach((window) => window.close());
   });
 
   ipcMain.handle(IPC.chooseFilesToImport, async (): Promise<readonly string[]> => {
@@ -705,6 +719,14 @@ function requireString(value: unknown): string {
   return value;
 }
 
+/**
+ * Set once the user has answered the unsaved-changes prompt, so the second `close` goes through.
+ *
+ * Module-level rather than per-window because there is one window; a multi-window build would key it
+ * by window, and this is the line that would have to change.
+ */
+let closing = false;
+
 function createWindow(): void {
   const window = new BrowserWindow({
     width: 1920,
@@ -727,6 +749,45 @@ function createWindow(): void {
   });
 
   window.once('ready-to-show', () => window.show());
+
+  /*
+   * Closing with unsaved work asks first.
+   *
+   * The autosave would recover it on the next launch, so nothing is lost outright — but up to thirty
+   * seconds of editing sits between two ticks, and a user who meant to keep their work should not have
+   * to discover a recovery prompt to get it back. Being asked is also how they find out there *was*
+   * unsaved work, which a window that simply vanishes never tells them.
+   *
+   * The renderer publishes whether it is dirty rather than being asked at close time: a question at
+   * that moment races the window's own teardown, and a stale answer here means either a lost edit or a
+   * prompt nobody can explain.
+   */
+  window.on('close', (event) => {
+    if (!session.unsaved || closing) return;
+    event.preventDefault();
+
+    const choice = dialog.showMessageBoxSync(window, {
+      type: 'warning',
+      buttons: ['Save', "Don't save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'Unsaved changes',
+      message: 'This project has changes that have not been saved.',
+      detail: 'Saving keeps them in project.json. Closing without saving leaves them recoverable.',
+    });
+
+    if (choice === 2) return;
+
+    if (choice === 0) {
+      // Asked of the renderer, which owns the document; it closes the window when the write lands, so
+      // a slow save cannot be overtaken by the close it was meant to precede.
+      window.webContents.send(IPC_EVENTS.saveBeforeClose);
+      return;
+    }
+
+    closing = true;
+    window.close();
+  });
 
   const devServer = process.env['NOS_DEV_SERVER'];
   if (devServer !== undefined && devServer !== '') {

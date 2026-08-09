@@ -37,6 +37,13 @@ const bridge: DesktopBridge = {
   readTextFile: (path) => ipcRenderer.invoke(IPC.readTextFile, path),
   writeTextFile: (path, contents) => ipcRenderer.invoke(IPC.writeTextFile, path, contents),
   writeMixdown: (contents) => ipcRenderer.invoke(IPC.writeMixdown, contents),
+  setUnsaved: (unsaved) => ipcRenderer.invoke(IPC.setUnsaved, unsaved),
+  closeWindow: () => ipcRenderer.invoke(IPC.closeWindow),
+  onSaveBeforeClose: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC_EVENTS.saveBeforeClose, handler);
+    return () => ipcRenderer.removeListener(IPC_EVENTS.saveBeforeClose, handler);
+  },
   chooseFilesToImport: () => ipcRenderer.invoke(IPC.chooseFilesToImport),
   copyIntoProject: (placements) => ipcRenderer.invoke(IPC.copyIntoProject, placements),
   listFolder: (path) => ipcRenderer.invoke(IPC.listFolder, path),
