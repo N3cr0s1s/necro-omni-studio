@@ -8,6 +8,8 @@ import {
   type GeneratorParamType,
   type GraphLiteral,
   type ManifestDraft,
+  type ParamField,
+  DERIVED_DEFAULTS,
   PARAM_TYPES,
   TEXT_SOURCES,
   capabilitySource,
@@ -18,8 +20,12 @@ import {
   editConsumes,
   missingConsumes,
   removeConsumes,
+  defaultAsText,
+  defaultControl,
+  hasField,
   optionsForMode,
   parseChoices,
+  parseDefault,
   suggestedConsumes,
   toCapabilityOptions,
   unmatchedConsumes,
@@ -514,8 +520,15 @@ function Identity({
 /**
  * One parameter row.
  *
- * The range fields appear only for numeric types, because a minimum on a boolean is meaningless and an
- * inspector that offers meaningless fields teaches the user to ignore all of them.
+ * Which fields appear is decided by `fieldsFor`, not by conditions written here. That is the fix for
+ * how this row came to offer four of the format's ten fields: each was added where it was needed and
+ * nobody ever saw the set, so a manifest authored in the application came out with no labels, no
+ * defaults, single-line prompt boxes, and — worst — no `transport`, without which an image parameter
+ * cannot upload its image.
+ *
+ * A field still only appears where it means something: a minimum on a boolean, a line-wrapping flag on
+ * a number, an upload transport for an integer. A panel that offers meaningless fields teaches the
+ * user to ignore all of them.
  */
 function ParamRow({
   param,
@@ -524,14 +537,15 @@ function ParamRow({
   readonly param: DraftParam;
   readonly onEdit?: (id: string, changes: DraftParamChanges) => void;
 }): ReactNode {
-  const numeric = param.type === 'int' || param.type === 'float';
+  const has = (field: ParamField): boolean => hasField(param.type, field);
+  const numeric = has('min');
 
   return (
     <div className="flex flex-col gap-3 rounded-md border bg-muted/50 p-3">
       <div
         className={cn(
           'grid items-end gap-3',
-          numeric ? 'grid-cols-[1.2fr_1fr_0.7fr_0.7fr]' : 'grid-cols-[1.2fr_1fr]',
+          numeric ? 'grid-cols-[1.2fr_1fr_1fr_0.6fr_0.6fr_0.6fr]' : 'grid-cols-[1.2fr_1fr_1fr]',
         )}
       >
         <Labelled label={`Key · ${param.pointer === '' ? 'not bound' : param.pointer}`}>
@@ -540,6 +554,22 @@ function ParamRow({
               id={id}
               value={param.key}
               onChange={(event) => onEdit?.(param.id, { key: event.target.value })}
+            />
+          )}
+        </Labelled>
+        <Labelled label="Label">
+          {(id) => (
+            <Input
+              id={id}
+              // The name the generate panel shows. Without it the panel shows the raw key, so a
+              // manifest authored here read `duration_s` where the shipped ones read `Length`.
+              placeholder={param.key}
+              value={param.label ?? ''}
+              onChange={(event) =>
+                onEdit?.(param.id, {
+                  label: event.target.value === '' ? undefined : event.target.value,
+                })
+              }
             />
           )}
         </Labelled>
@@ -589,9 +619,24 @@ function ParamRow({
                 />
               )}
             </Labelled>
+            <Labelled label="Step">
+              {(id) => (
+                <Input
+                  id={id}
+                  type="number"
+                  value={param.step ?? ''}
+                  onChange={(event) =>
+                    onEdit?.(param.id, {
+                      step: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
+                  }
+                />
+              )}
+            </Labelled>
           </>
         )}
       </div>
+      <ParamBehaviour param={param} {...(onEdit !== undefined ? { onEdit } : {})} />
       {param.type === 'enum' && <ChoiceEditor param={param} {...(onEdit !== undefined ? { onEdit } : {})} />}
       <AlsoBindings param={param} {...(onEdit !== undefined ? { onEdit } : {})} />
     </div>
@@ -1050,5 +1095,154 @@ function ChoiceEditor({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The fields that decide how a parameter behaves, rather than what it is.
+ *
+ * A second row so the first stays scannable: a reader running down a list of twenty parameters is
+ * looking for keys and types, and burying those among six more controls each would cost more than the
+ * controls are worth. Rendered only when the type actually has some of them — a seed has none, and an
+ * empty row would read as a panel that failed to draw.
+ */
+function ParamBehaviour({
+  param,
+  onEdit,
+}: {
+  readonly param: DraftParam;
+  readonly onEdit?: (id: string, changes: DraftParamChanges) => void;
+}): ReactNode {
+  const has = (field: ParamField): boolean => hasField(param.type, field);
+  const control = defaultControl(param.type);
+  const choices = Array.isArray(param.options) ? param.options : [];
+
+  if (!has('default') && !has('transport') && !has('multiline') && !has('defaultFrom')) {
+    return <RequiredToggle param={param} {...(onEdit !== undefined ? { onEdit } : {})} />;
+  }
+
+  return (
+    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+      {control !== 'none' && (
+        <Labelled label="Default">
+          {(id) =>
+            control === 'boolean' || control === 'choice' ? (
+              <NativeSelect
+                id={id}
+                className="w-full"
+                value={defaultAsText(param.default)}
+                onChange={(event) =>
+                  onEdit?.(param.id, { default: parseDefault(param.type, event.target.value) })
+                }
+              >
+                {/* An empty entry, because "no default" is a real state the format distinguishes from
+                    a default of `false` — absent means the graph's own value stands. */}
+                <NativeSelectOption value="">no default</NativeSelectOption>
+                {(control === 'boolean' ? ['true', 'false'] : choices).map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            ) : (
+              <Input
+                id={id}
+                {...(control === 'number' ? { type: 'number' } : {})}
+                value={defaultAsText(param.default)}
+                onChange={(event) =>
+                  onEdit?.(param.id, { default: parseDefault(param.type, event.target.value) })
+                }
+              />
+            )
+          }
+        </Labelled>
+      )}
+
+      {has('defaultFrom') && (
+        <Labelled label="Or derived from">
+          {(id) => (
+            <NativeSelect
+              id={id}
+              className="w-full"
+              value={param.defaultFrom ?? ''}
+              onChange={(event) =>
+                onEdit?.(param.id, {
+                  defaultFrom: event.target.value === '' ? undefined : event.target.value,
+                })
+              }
+            >
+              {/* A closed list: these are the things the *application* can work out, and one the
+                  application does not know is a default that never resolves. */}
+              <NativeSelectOption value="">nothing</NativeSelectOption>
+              {DERIVED_DEFAULTS.map((source) => (
+                <NativeSelectOption key={source} value={source}>
+                  {source}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </Labelled>
+      )}
+
+      {has('transport') && (
+        <Labelled label="Transport">
+          {(id) => (
+            <Input
+              id={id}
+              // How the file reaches the backend. Free text rather than a list, because it is the
+              // backend's vocabulary and no concrete backend belongs in this code.
+              placeholder="upload_image"
+              value={param.transport ?? ''}
+              onChange={(event) =>
+                onEdit?.(param.id, {
+                  transport: event.target.value === '' ? undefined : event.target.value,
+                })
+              }
+            />
+          )}
+        </Labelled>
+      )}
+
+      <div className="flex items-center gap-4 pb-2">
+        {has('multiline') && (
+          <Label className="flex items-center gap-2 text-xs font-normal">
+            <Checkbox
+              checked={param.multiline === true}
+              onCheckedChange={(checked) =>
+                onEdit?.(param.id, { multiline: checked === true ? true : undefined })
+              }
+            />
+            Multiline
+          </Label>
+        )}
+        <RequiredToggle param={param} {...(onEdit !== undefined ? { onEdit } : {})} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Whether a run can proceed without a value.
+ *
+ * Its own component because it is the one behaviour field every type has, so it appears both inside
+ * the behaviour row and on its own for the types that have nothing else.
+ */
+function RequiredToggle({
+  param,
+  onEdit,
+}: {
+  readonly param: DraftParam;
+  readonly onEdit?: (id: string, changes: DraftParamChanges) => void;
+}): ReactNode {
+  return (
+    <Label className="flex items-center gap-2 text-xs font-normal">
+      <Checkbox
+        checked={param.required === true}
+        // Cleared rather than set to `false`: the format's absent and `false` mean the same thing, and
+        // writing the second puts a field in every manifest that every reader has to skip.
+        onCheckedChange={(checked) => onEdit?.(param.id, { required: checked === true ? true : undefined })}
+      />
+      Required
+    </Label>
   );
 }

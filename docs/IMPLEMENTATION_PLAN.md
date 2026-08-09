@@ -554,6 +554,29 @@ type list with no field for its choices anywhere on the panel, so choosing it ra
 on screen could clear, with Save disabled the whole time. Fixed by a choices control that offers both
 shapes as one mode switch.
 
+**Which fields a parameter has is data, not a chain of conditions in the panel.** The row had grown to
+four of the format's ten — key, type, min, max — each added where it was needed, so the *set* was
+never visible anywhere and the missing six were invisible with it. A manifest authored in the
+application came out with no labels, no defaults, single-line prompt boxes, and no `transport`, which
+is the whole of how an image parameter reaches the backend: §5.9's "authored from inside the
+application" held only in the sense that a file appeared. `fieldsFor` in `@nos/generators` now decides,
+so a new parameter type is one entry there and arrives with the right controls everywhere.
+
+A field still appears only where it means something — a minimum on a boolean, a line-wrapping flag on
+a number, an upload transport for an integer are all controls that do nothing, and a panel offering
+meaningless fields teaches the user to ignore all of them. A seed deliberately has no default:
+varying is the point of one.
+
+**An absent value and a falsy one are different gestures.** No default lets the graph's own value
+stand; a default of `0` or `false` overrides it. Both are offered, and `required` is *cleared* rather
+than written `false`, because the format treats absent and `false` alike and the second puts a field
+in every manifest that every reader has to skip.
+
+**Controlled fields cannot be tested against a mock.** Every field here is driven by the draft, so a
+handler that never updates it leaves each keystroke landing in a field that re-renders to its old
+value — only the last survives, and the test reads a value nobody could have typed. `renderLive` in
+the panel's test wires real state; anything typing more than one character goes through it.
+
 **A field that re-renders from parsed state cannot be typed into.** The choices field derived its text
 from the parsed list, so the comma between two values was swallowed the instant it was typed and a
 second value could never be entered. It holds the typed text and writes the draft on each keystroke,

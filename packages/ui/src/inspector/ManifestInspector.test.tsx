@@ -4,7 +4,14 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GraphLiteral, ManifestDraft } from '@nos/generators';
-import { addOutput, editParam, emptyDraft, promote } from '@nos/generators';
+import {
+  DERIVED_DEFAULTS,
+  addOutput,
+  draftManifestJson,
+  editParam,
+  emptyDraft,
+  promote,
+} from '@nos/generators';
 import { ManifestInspector } from './ManifestInspector.js';
 
 afterEach(cleanup);
@@ -23,6 +30,31 @@ const usable = (): ManifestDraft =>
 
 const renderInspector = (overrides: Partial<Parameters<typeof ManifestInspector>[0]> = {}) =>
   render(<ManifestInspector draft={usable()} literals={literals} {...overrides} />);
+
+/**
+ * Renders wired to real state, and hands back a reader for the current draft.
+ *
+ * Every field in this panel is controlled by the draft, so against a mocked handler it never advances:
+ * each keystroke lands in a field that re-renders to its old value, and only the last survives. That
+ * is a fact about how the panel is driven, not about the controls — anything that types more than one
+ * character has to go through here.
+ */
+function renderLive(initial: ManifestDraft): () => ManifestDraft {
+  let latest = initial;
+  function Harness(): ReactNode {
+    const [draft, setDraft] = useState(latest);
+    latest = draft;
+    return (
+      <ManifestInspector
+        draft={draft}
+        literals={literals}
+        onEditParam={(id, changes) => setDraft((now) => editParam(now, id, changes))}
+      />
+    );
+  }
+  render(<Harness />);
+  return () => latest;
+}
 
 describe('listing the graph', () => {
   it('groups inputs by node, because a graph has hundreds of them', () => {
@@ -431,28 +463,13 @@ describe('what an enum offers', () => {
 
   it('takes a typed list', async () => {
     /*
-     * Wired to real state rather than to a mock, because the field is controlled by the draft: with a
-     * handler that never updates it, every keystroke is typed into the same empty field and the last
-     * one is all that survives. That is a fact about how the panel is driven, not about the control,
-     * and asserting through a live draft is the only version of this that means anything.
+     * Through `renderLive`, because the field is controlled by the draft — see its comment.
      */
-    let latest = withEnum([]);
-    function Harness(): ReactNode {
-      const [draft, setDraft] = useState(latest);
-      latest = draft;
-      return (
-        <ManifestInspector
-          draft={draft}
-          literals={literals}
-          onEditParam={(id, changes) => setDraft((current) => editParam(current, id, changes))}
-        />
-      );
-    }
-    render(<Harness />);
+    const draft = renderLive(withEnum([]));
 
     await userEvent.type(screen.getByLabelText('Values, comma separated'), 'euler, ddim');
 
-    expect(latest.params[0]?.options).toEqual(['euler', 'ddim']);
+    expect(draft().params[0]?.options).toEqual(['euler', 'ddim']);
     // The comma is still under the cursor. Derived from the parsed list it is swallowed the instant it
     // is typed, and a second value can never be entered — which is what this assertion is for.
     expect((screen.getByLabelText('Values, comma separated') as HTMLInputElement).value).toBe('euler, ddim');
@@ -487,5 +504,116 @@ describe('what an enum offers', () => {
 
     rerender(<ManifestInspector draft={withEnum(['euler'])} literals={literals} onEditParam={vi.fn()} />);
     expect(screen.queryByText(/an enum needs options/)).toBeNull();
+  });
+});
+
+describe('the fields a manifest needs and this panel never offered', () => {
+  /**
+   * §5.9 says a new generative capability is a JSON file authored from inside the application. It was
+   * — in the sense that a file appeared. A parameter had four of the format's ten fields, so what came
+   * out had no labels, no defaults, single-line prompt boxes, and no `transport`, without which an
+   * image parameter cannot upload its image.
+   *
+   * Each case below drives the control and reads the manifest the panel would write, rather than
+   * asserting a field exists: a control wired to nothing looks identical from the outside.
+   */
+  const typed = (type: string): ManifestDraft => {
+    const promoted = promote(usable(), literals[1]!);
+    return editParam(promoted, promoted.params[0]!.id, { key: 'p', type: type as never });
+  };
+
+  it('names a parameter, so the generate panel does not show a raw key', () => {
+    const draft = typed('int');
+    render(<ManifestInspector draft={draft} literals={literals} onEditParam={vi.fn()} />);
+    // The placeholder is the key, so the panel says what it will fall back to.
+    expect((screen.getByLabelText('Label') as HTMLInputElement).placeholder).toBe('p');
+  });
+
+  it('gives an image parameter a transport, which is how the file reaches the backend', async () => {
+    const onEditParam = vi.fn();
+    render(<ManifestInspector draft={typed('image')} literals={literals} onEditParam={onEditParam} />);
+
+    await userEvent.type(screen.getByLabelText('Transport'), 'u');
+
+    expect(onEditParam.mock.calls.at(-1)?.[1]).toEqual({ transport: 'u' });
+  });
+
+  it('does not offer a transport where a file is never uploaded', () => {
+    render(<ManifestInspector draft={typed('int')} literals={literals} onEditParam={vi.fn()} />);
+    expect(screen.queryByLabelText('Transport')).toBeNull();
+  });
+
+  it('takes a numeric default as a number rather than as its text', async () => {
+    // Stored as text the manifest fails its own schema, and the graph is patched with a string where
+    // the node wants an integer.
+    const draft = renderLive(typed('int'));
+
+    // Cleared first: promoting a literal already carries its value as the default, so typing alone
+    // would append to it.
+    await userEvent.clear(screen.getByLabelText('Default'));
+    await userEvent.type(screen.getByLabelText('Default'), '25');
+
+    expect(draft().params[0]?.default).toBe(25);
+  });
+
+  it('offers a boolean its two values and the absence of one', () => {
+    render(<ManifestInspector draft={typed('bool')} literals={literals} onEditParam={vi.fn()} />);
+    const values = [...(screen.getByLabelText('Default') as HTMLSelectElement).options].map(
+      (option) => option.value,
+    );
+    // "no default" is a state the format distinguishes from `false`: absent lets the graph's own value
+    // stand.
+    expect(values).toEqual(['', 'true', 'false']);
+  });
+
+  it('offers a prompt the line-wrapping flag, and a number never', () => {
+    render(<ManifestInspector draft={typed('text')} literals={literals} onEditParam={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: 'Multiline' })).toBeDefined();
+    cleanup();
+    render(<ManifestInspector draft={typed('int')} literals={literals} onEditParam={vi.fn()} />);
+    expect(screen.queryByRole('checkbox', { name: 'Multiline' })).toBeNull();
+  });
+
+  it('marks a parameter required, and clears it rather than writing false', () => {
+    // Absent and `false` mean the same thing in the format, and writing the second puts a field in
+    // every manifest that every reader has to skip.
+    const onEditParam = vi.fn();
+    render(<ManifestInspector draft={typed('seed')} literals={literals} onEditParam={onEditParam} />);
+
+    void userEvent.click(screen.getByRole('checkbox', { name: 'Required' }));
+
+    return vi.waitFor(() => {
+      expect(onEditParam.mock.calls.at(-1)?.[1]).toEqual({ required: true });
+    });
+  });
+
+  it('offers only the derived defaults the application can actually work out', () => {
+    render(<ManifestInspector draft={typed('int')} literals={literals} onEditParam={vi.fn()} />);
+    const values = [...(screen.getByLabelText('Or derived from') as HTMLSelectElement).options].map(
+      (option) => option.value,
+    );
+    // A source the application does not know is a default that never resolves.
+    expect(values).toEqual(['', ...DERIVED_DEFAULTS]);
+  });
+
+  it('reaches the manifest the panel would write', async () => {
+    /*
+     * The claim the whole panel makes, checked once end to end: what is typed comes out of
+     * `draftManifestJson`, which is what lands on disk. Wired to live state, because the fields are
+     * controlled by the draft and a mocked handler never advances it.
+     */
+    const draft = renderLive(typed('text'));
+
+    // Promoting a literal names the parameter after the graph input it came from, so the field starts
+    // filled rather than empty.
+    await userEvent.clear(screen.getByLabelText('Label'));
+    await userEvent.type(screen.getByLabelText('Label'), 'Prompt');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Multiline' }));
+
+    const written = draftManifestJson(draft()) as {
+      params: readonly { label?: string; multiline?: boolean }[];
+    };
+    expect(written.params[0]?.label).toBe('Prompt');
+    expect(written.params[0]?.multiline).toBe(true);
   });
 });
