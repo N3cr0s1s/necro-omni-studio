@@ -164,6 +164,54 @@ try {
   }
 
   /*
+   * A backend that is not there, and what the panel says about it.
+   *
+   * The mock reports success and names outputs it never writes — right for exercising the queue, and
+   * wrong to leave unexplained in front of someone whose backend has gone down. Pointing the setting
+   * at a dead port is the only way to reach that state deliberately, so it also checks that the
+   * address is honoured without a restart.
+   *
+   * The `userData` here is a temporary directory, so nothing the user has set is touched.
+   */
+  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.waitForTimeout(600);
+  const address = page.getByRole('textbox', { name: 'Backend address' });
+  await address.fill('http://127.0.0.1:1');
+  // Blur, because that is when the field commits — typing it character by character would point the
+  // backend at a different machine for every keystroke.
+  await address.blur();
+  await page.waitForTimeout(800);
+  await page.getByRole('tab', { name: 'generate' }).click();
+
+  let warned = '';
+  for (let waited = 0; waited < 24 && !/unreachable/.test(warned); waited += 1) {
+    await page.waitForTimeout(500);
+    warned = await page
+      .locator('[role="tabpanel"]')
+      .last()
+      .innerText()
+      .catch(() => '');
+  }
+
+  if (/unreachable/.test(warned)) {
+    pass('a backend address that answers nothing is reported');
+    if (/placeholders, not files/.test(warned)) {
+      pass('and the panel says what generating there would produce');
+    } else {
+      fail('the unreachable notice does not say that generating produces nothing real');
+    }
+  } else {
+    fail(`an unreachable backend was never reported — the panel says ${JSON.stringify(warned.slice(0, 160))}`);
+  }
+
+  // Back to the default, so the checks after this one meet the project they expect.
+  await page.getByRole('tab', { name: 'inspector' }).click();
+  await page.waitForTimeout(600);
+  await page.getByRole('textbox', { name: 'Backend address' }).fill('');
+  await page.getByRole('textbox', { name: 'Backend address' }).blur();
+  await page.waitForTimeout(1500);
+
+  /*
    * §5.8's global variant override, which the queue has taken since it was written and nothing set.
    * A setting stored but unreachable is the same as no setting.
    */

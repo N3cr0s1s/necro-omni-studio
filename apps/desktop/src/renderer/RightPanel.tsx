@@ -489,6 +489,10 @@ function GenerateTab({
   if (records.length === 0) {
     return (
       <div className="flex flex-col gap-2 p-4">
+        {/* The backend's state belongs to the *system*, not to whether this project happens to hold a
+            manifest — and it used to render only in the branch below, so a project with no generators
+            never learned its backend was unreachable. */}
+        <BackendLine runtime={runtime} />
         {/* Both folders are read, so both are named. An empty state that mentions only the project's
             teaches the user to copy manifests into every new project, which is the work the shared
             library exists to remove. */}
@@ -513,15 +517,7 @@ function GenerateTab({
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-1 px-3 py-2">
-        <p
-          className={cn(
-            'flex items-center gap-1.5 font-mono text-xs',
-            runtime.mode === 'comfyui' ? 'text-chart-2' : 'text-muted-foreground',
-          )}
-        >
-          <CpuIcon className="size-3.5" />
-          {runtime.detail}
-        </p>
+        <BackendLine runtime={runtime} />
         {runtime.error !== undefined && (
           <p className="flex items-start gap-1.5 font-mono text-xs text-destructive">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -802,4 +798,30 @@ async function readProjectText(path: string): Promise<string> {
   // distinct all the way up to the refusal, which is the distinction the caller acts on.
   if (text === undefined) throw new Error(`${path} could not be read`);
   return text;
+}
+
+/**
+ * What the backend is, and what that means for generating.
+ *
+ * Its own component because it belongs in both branches of the generate panel: the state of the
+ * backend is a fact about the system, and a project that happens to hold no manifests is exactly as
+ * entitled to know its backend has gone down.
+ *
+ * The mock is drawn as a warning rather than as status. It reports success and names outputs under
+ * `generated/` that it never writes — right for exercising the queue, and wrong to leave in muted grey
+ * in front of someone whose backend has simply stopped.
+ */
+function BackendLine({ runtime }: { readonly runtime: GeneratorRuntime }): ReactNode {
+  const live = runtime.mode === 'comfyui';
+  return (
+    <p
+      className={cn(
+        'flex items-center gap-1.5 font-mono text-xs',
+        live ? 'text-chart-2' : 'text-destructive',
+      )}
+    >
+      {live ? <CpuIcon className="size-3.5 shrink-0" /> : <TriangleAlertIcon className="size-3.5 shrink-0" />}
+      {runtime.detail}
+    </p>
+  );
 }

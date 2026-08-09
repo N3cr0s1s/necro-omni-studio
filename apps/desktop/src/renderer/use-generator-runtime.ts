@@ -259,7 +259,16 @@ export function useGeneratorRuntime(options: RuntimeOptions = {}): GeneratorRunt
       } else {
         setMode('mock');
         setCapabilities(undefined);
-        setDetail(`ComfyUI is unreachable at ${endpoint} — running against the mock backend`);
+        /*
+         * What it *means*, not only what it is.
+         *
+         * The mock reports success and names outputs under `generated/` that it never writes, which is
+         * right for exercising the queue and wrong to leave unexplained in front of someone whose
+         * backend has simply gone down: they press Generate, wait, and are handed takes that are not
+         * there. The offline check now names those files afterwards, but being told first is better
+         * than being told second.
+         */
+        setDetail(`ComfyUI is unreachable at ${endpoint} — generating here produces placeholders, not files`);
       }
     });
     return () => {
