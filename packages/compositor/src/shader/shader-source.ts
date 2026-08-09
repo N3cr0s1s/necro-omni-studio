@@ -89,12 +89,26 @@ export function assembleFragmentShader(effect: EffectShaderSource): AssembledSha
     lines.push(`uniform sampler2D ${sampler};`);
   }
 
-  // Parameter declarations, so an author writes `u_amount` in the body without a `uniform` line.
-  // Skipped when the source brings its own — a duplicate declaration is a compile error.
+  /*
+   * Parameter declarations, so an author writes `u_amount` in the body without a `uniform` line.
+   *
+   * Skipped **per uniform**, for any the source already declares. Issue #36: this used to be an
+   * all-or-nothing flag, and nothing but a gl-transitions shader ever set it — so an author who wrote
+   * `uniform float amount;` in their own `.frag`, which is the natural thing to do and what every
+   * GLSL example looks like, got `'amount' : redefinition` and no way to act on it. Declaring a
+   * uniform is not a mistake and the wrapper's job is to fill gaps, not to compete.
+   *
+   * The flag still means "declare nothing", which is what the gl-transitions convention needs: those
+   * shaders are copy-pasted whole and bring every uniform with them.
+   */
   const declaresOwn = effect.declaresOwnUniforms ?? effect.convention === 'gl-transitions';
-  if (!declaresOwn && effect.uniforms.length > 0) {
+  const generated = declaresOwn
+    ? []
+    : effect.uniforms.filter((uniform) => !declaresUniform(effect.source, uniform.name));
+
+  if (generated.length > 0) {
     lines.push('');
-    for (const uniform of effect.uniforms) {
+    for (const uniform of generated) {
       lines.push(`uniform ${uniform.type} ${uniform.name};`);
     }
   }
@@ -304,4 +318,33 @@ export function parseShaderLog(log: string, preambleLines: number): readonly Sha
 function toAuthoredLine(compilerLine: number, preambleLines: number): number {
   const authored = compilerLine - preambleLines;
   return authored > 0 ? authored : 0;
+}
+
+/**
+ * Whether GLSL source already declares a uniform by that name.
+ *
+ * Comments are removed first, so a line someone commented out while debugging does not silently
+ * suppress the declaration the shader now needs — that failure reads as "my parameter stopped
+ * working" and points nowhere.
+ *
+ * The name is matched whole. `amount` must not be found inside `u_amount`, or declaring one
+ * parameter would quietly remove another's declaration and the error would land on a line the author
+ * never touched.
+ */
+export function declaresUniform(source: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  // `uniform`, a type, then the name — followed by end of declaration, an array size, or an
+  // initializer. A qualifier such as `highp` may sit between the two, so the type is "one or more
+  // words".
+  const pattern = new RegExp(`\\buniform\\s+(?:\\w+\\s+)+${escaped}\\s*(?:\\[|;|=)`, 'u');
+  return pattern.test(stripComments(source));
+}
+
+/** GLSL source with `//` and block comments blanked out, keeping every other character in place. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu, (match) =>
+    // Replaced with equivalent whitespace rather than removed, so nothing on either side of a comment
+    // is accidentally joined into a token that was never written.
+    match.replace(/[^\n]/gu, ' '),
+  );
 }

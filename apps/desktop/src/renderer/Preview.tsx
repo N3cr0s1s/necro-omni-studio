@@ -7,6 +7,7 @@ import {
   createGlCompositor,
   createProgramCache,
   createRenderTargetPool,
+  describeShaderError,
 } from '@nos/compositor';
 import type { EffectRegistry } from '@nos/effects';
 import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
@@ -233,9 +234,22 @@ export function Preview({
               </span>
             )}
             {(stats?.passthroughs.length ?? 0) > 0 && (
-              <span className="flex items-center gap-1.5 text-destructive">
-                <CircleAlertIcon className="size-3.5" />
-                {`${stats?.passthroughs.length} effects failed to compile`}
+              <span className="text-destructive flex items-center gap-1.5">
+                <CircleAlertIcon className="size-3.5 shrink-0" />
+                {/*
+                  Issue #36: this said "1 effects failed to compile" and stopped there. The count is
+                  the one thing the user already knows — the picture is wrong — and it withholds the
+                  two things they need: *which* effect, and *why*. The describer that names both
+                  already existed and was used everywhere except here.
+
+                  The first one, in full, plus a count of the rest. Three stacked messages would push
+                  the frame off the top of the strip, and fixing the first is usually what makes the
+                  others make sense.
+                */}
+                {describeShaderError(stats!.passthroughs[0]!)}
+                {(stats?.passthroughs.length ?? 0) > 1
+                  ? ` · and ${(stats?.passthroughs.length ?? 1) - 1} more`
+                  : ''}
               </span>
             )}
           </>

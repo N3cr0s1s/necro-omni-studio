@@ -149,6 +149,74 @@ describe('gl-transitions convention', () => {
     expect(assembled.source).not.toContain('uniform float u_amount;');
   });
 
+  describe('a shader that declares a uniform itself, per issue #36', () => {
+    /*
+     * The reported bug. Writing `uniform float u_amount;` in your own `.frag` is the natural thing to
+     * do and what every GLSL example looks like; the wrapper declared it a second time and the driver
+     * answered `'u_amount' : redefinition`, against a line the author could not act on.
+     */
+    const declaring = {
+      ...filmGrain,
+      source: 'uniform float u_amount;\n\nvoid main() { fragColor = vec4(u_amount); }',
+    };
+
+    it('does not declare it again', () => {
+      const assembled = assembleFragmentShader(declaring);
+      expect(assembled.source.match(/uniform float u_amount;/gu)).toHaveLength(1);
+    });
+
+    it('still declares the ones the author did not', () => {
+      // Per uniform, not all-or-nothing: declaring one parameter must not silently remove the
+      // declaration another parameter still needs.
+      const assembled = assembleFragmentShader({
+        ...declaring,
+        uniforms: [
+          { name: 'u_amount', type: 'float' },
+          { name: 'u_speed', type: 'float' },
+        ],
+      });
+      expect(assembled.source.match(/uniform float u_amount;/gu)).toHaveLength(1);
+      expect(assembled.source).toContain('uniform float u_speed;');
+    });
+
+    it('is not fooled by a declaration that is commented out', () => {
+      // Otherwise a line left commented out while debugging suppresses the declaration the shader now
+      // needs, which reads as "my parameter stopped working" and points nowhere.
+      const assembled = assembleFragmentShader({
+        ...filmGrain,
+        source: '// uniform float u_amount;\nvoid main() { fragColor = vec4(u_amount); }',
+      });
+      expect(assembled.source).toContain('uniform float u_amount;');
+    });
+
+    it('is not fooled by a longer name that contains the one it is looking for', () => {
+      // `u_amount` must not be found inside `u_amount_scale`, or declaring one parameter quietly
+      // removes another's declaration and the error lands on a line nobody wrote.
+      const assembled = assembleFragmentShader({
+        ...filmGrain,
+        source: 'uniform float u_amount_scale;\nvoid main() { fragColor = vec4(u_amount); }',
+      });
+      expect(assembled.source).toContain('uniform float u_amount;');
+    });
+
+    it('recognises a declaration carrying a precision qualifier', () => {
+      const assembled = assembleFragmentShader({
+        ...filmGrain,
+        source: 'uniform highp float u_amount;\nvoid main() { fragColor = vec4(u_amount); }',
+      });
+      expect(assembled.source.match(/uniform (highp )?float u_amount;/gu)).toHaveLength(1);
+    });
+
+    it('recognises an array declaration', () => {
+      const assembled = assembleFragmentShader({
+        ...filmGrain,
+        uniforms: [{ name: 'u_taps', type: 'vec2' }],
+        source: 'uniform vec2 u_taps[4];\nvoid main() { fragColor = vec4(u_taps[0], 0.0, 1.0); }',
+      });
+      expect(assembled.source).not.toContain('uniform vec2 u_taps;');
+    });
+  });
+
   it('declares each uniform with its manifest type', () => {
     const assembled = assembleFragmentShader({
       ...filmGrain,
