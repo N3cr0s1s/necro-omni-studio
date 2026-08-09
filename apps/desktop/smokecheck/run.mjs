@@ -201,7 +201,9 @@ try {
       fail('the unreachable notice does not say that generating produces nothing real');
     }
   } else {
-    fail(`an unreachable backend was never reported — the panel says ${JSON.stringify(warned.slice(0, 160))}`);
+    fail(
+      `an unreachable backend was never reported — the panel says ${JSON.stringify(warned.slice(0, 160))}`,
+    );
   }
 
   // Back to the default, so the checks after this one meet the project they expect.
