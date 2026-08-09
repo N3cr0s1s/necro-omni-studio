@@ -19,6 +19,7 @@ import {
   frameIndex,
   isTrackAudible,
   spanFromBounds,
+  trackGaps,
   trackClips,
 } from '@nos/core';
 import {
@@ -1532,6 +1533,10 @@ function TrackLane({
           <DropIndicator viewport={viewport} frame={dropAt} height={laneHeight(track)} />
         )}
 
+        {/* Before the clips, so a clip's own body paints over the tick's tail rather than the tick
+            cutting across the picture. */}
+        <HairlineGaps track={track} viewport={viewport} height={laneHeight(track)} />
+
         {visible.map((clip) => (
           <ClipBody
             key={clip.id}
@@ -1620,6 +1625,60 @@ export function flushAfter(track: Track, clip: Clip): boolean {
  * `dragleave` and `drop` events the lane is listening for, so an indicator that could be dropped onto
  * would cancel the drop it exists to describe.
  */
+/**
+ * The gaps too narrow to see.
+ *
+ * The other half of the frame-of-black report. One frame at any zoom a person edits at is a fraction
+ * of a pixel: the timeline draws two clips that look joined, and the fault appears for the first time
+ * in the delivered file. A gap wide enough to see needs no marking — the empty lane *is* the marking —
+ * so only the ones that cannot be seen are drawn, and they are drawn at a size that can be.
+ *
+ * A tick above the clips rather than a fill, and `destructive` rather than a chart role: this is not
+ * a kind of material, it is something wrong. It carries a title saying how many frames, because the
+ * next thing a user does is right-click and choose "Close the gap" — which states the same number, so
+ * the two cannot disagree about what was found.
+ */
+function HairlineGaps({
+  track,
+  viewport,
+  height,
+}: {
+  readonly track: Track;
+  readonly viewport: TimelineViewport;
+  readonly height: number;
+}): ReactNode {
+  const gaps = trackGaps(track).filter((gap) => {
+    if (!isSpanVisible(viewport, spanFromBounds(frameIndex(gap.start), frameIndex(gap.start + gap.frames)))) {
+      return false;
+    }
+    return gap.frames / viewport.framesPerPixel < HAIRLINE_GAP_PX;
+  });
+  if (gaps.length === 0) return undefined;
+
+  return (
+    <>
+      {gaps.map((gap) => (
+        <div
+          key={`${gap.after}-${gap.start}`}
+          data-hairline-gap={gap.start}
+          aria-hidden="true"
+          title={`${gap.frames} frame${gap.frames === 1 ? '' : 's'} of nothing — right-click a clip to close the gap`}
+          className="pointer-events-none absolute top-0 w-0.5 bg-destructive/80"
+          style={{ left: frameToPx(viewport, frameIndex(gap.start)) - 1, height }}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Below this many pixels a gap is drawn as a tick rather than left to speak for itself.
+ *
+ * Three: two is within the width of the clip borders on either side, and anything wider is a space a
+ * user can see and left alone on purpose.
+ */
+const HAIRLINE_GAP_PX = 3;
+
 function DropIndicator({
   viewport,
   frame,

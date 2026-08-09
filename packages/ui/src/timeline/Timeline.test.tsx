@@ -1080,6 +1080,44 @@ describe('markers', () => {
   });
 });
 
+/**
+ * The gap you cannot see.
+ *
+ * At four frames per pixel a one-frame gap is a quarter of a pixel: two clips draw as if joined, and
+ * the frame of black appears for the first time in the delivered file. A gap wide enough to see needs
+ * no marking — the empty lane is the marking — so only the invisible ones are drawn.
+ */
+describe('hairline gaps', () => {
+  it('marks a gap too narrow to see', () => {
+    const doc = makeDocument([video('a', 0, 300), video('b', 301, 600)]);
+    renderTimeline({ document: doc });
+
+    const tick = document.querySelector('[data-hairline-gap="300"]');
+    expect(tick).not.toBeNull();
+    expect(tick?.getAttribute('title')).toBe('1 frame of nothing — right-click a clip to close the gap');
+  });
+
+  it('leaves a gap wide enough to see alone', () => {
+    // 100 frames at 4 f/px is 25 px of empty lane, which says it far better than a tick would.
+    const doc = makeDocument([video('a', 0, 300), video('b', 400, 700)]);
+    renderTimeline({ document: doc });
+    expect(document.querySelector('[data-hairline-gap]')).toBeNull();
+  });
+
+  it('marks nothing between clips that meet', () => {
+    renderTimeline({ document: makeDocument([video('a', 0, 300), video('b', 300, 600)]) });
+    expect(document.querySelector('[data-hairline-gap]')).toBeNull();
+  });
+
+  it('says how many frames, in the same words the menu row uses', () => {
+    const doc = makeDocument([video('a', 0, 300), video('b', 305, 600)]);
+    renderTimeline({ document: doc });
+    expect(document.querySelector('[data-hairline-gap="300"]')?.getAttribute('title')).toContain(
+      '5 frames of nothing',
+    );
+  });
+});
+
 describe('trim handles', () => {
   it('renders grab areas at both edges of a wide clip', () => {
     renderTimeline();

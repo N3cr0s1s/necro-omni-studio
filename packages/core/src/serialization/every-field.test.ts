@@ -25,10 +25,10 @@ import { richDocument } from './rich-document.js';
  *
  * ## Why the exemptions name interfaces
  *
- * Two things in `document/` are not document state: a computed render structure and an argument
- * object. Exempting them by *interface* rather than by field name is deliberate — a field-name
- * exemption silently covers any future field that happens to share the name, which is exactly how an
- * exemption list stops being trustworthy.
+ * Three things in `document/` are not document state: a computed render structure, an argument object
+ * and a query result. Exempting them by *interface* rather than by field name is deliberate — a
+ * field-name exemption silently covers any future field that happens to share the name, which is
+ * exactly how an exemption list stops being trustworthy.
  */
 
 /**
@@ -43,6 +43,10 @@ const NOT_DOCUMENT_STATE: ReadonlySet<string> = new Set([
   'TypewriterCut',
   // The arguments `createDocument` takes. It describes how to build a document, not what one holds.
   'CreateDocumentOptions',
+  // The empty runs between a track's clips. Derived from where the clips are, and stored nowhere — a
+  // gap has no existence beyond the two clips that bound it, which is exactly why the timeline has to
+  // compute one to draw it.
+  'TrackGap',
 ]);
 
 /** Every `readonly` property declared by a document interface, minus the exempt ones. */

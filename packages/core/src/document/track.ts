@@ -173,3 +173,56 @@ export function isTrackAudible(track: Track, anySoloed: boolean): boolean {
   if (track.muted) return false;
   return anySoloed ? track.solo : true;
 }
+
+/** A run of empty frames between two clips on one track. */
+export interface TrackGap {
+  readonly start: number;
+  readonly frames: number;
+  /** The clip before it, absent when the gap is the start of the timeline. */
+  readonly before?: ClipId;
+  /** The clip after it. Always present — a gap is bounded by material on its right. */
+  readonly after: ClipId;
+}
+
+/**
+ * Every gap on a track, in timeline order.
+ *
+ * The other half of the frame-of-black report, and the half that matters more: a gap the user cannot
+ * *see* is one they will not think to close. At any zoom a person edits at, one frame is a fraction of
+ * a pixel — the timeline draws two clips that look joined, and the fault appears for the first time in
+ * the delivered file.
+ *
+ * Leading space is deliberately **not** a gap. A sequence that starts at frame forty is a decision
+ * about where the cut begins, not an accident between two shots; flagging it would put a warning on
+ * every project whose first clip is not at zero, which is most of them.
+ *
+ * Overlaps are not gaps either — that is a crossfade — and a clip that overlaps its neighbour clips
+ * the run to nothing rather than being skipped, for the same reason `gapBefore` does.
+ */
+export function trackGaps(track: Track): readonly TrackGap[] {
+  const sorted = [...trackClips(track)].sort((a, b) => a.span.start - b.span.start);
+  const gaps: TrackGap[] = [];
+
+  let reach: number | undefined;
+  let previous: Clip | undefined;
+
+  for (const clip of sorted) {
+    if (reach !== undefined && clip.span.start > reach) {
+      gaps.push({
+        start: reach,
+        frames: clip.span.start - reach,
+        ...(previous === undefined ? {} : { before: previous.id }),
+        after: clip.id,
+      });
+    }
+    // The furthest any clip so far extends, so a long clip covering several short ones does not
+    // produce a gap where there is material.
+    const end = endExclusive(clip.span);
+    if (reach === undefined || end > reach) {
+      reach = end;
+      previous = clip;
+    }
+  }
+
+  return gaps;
+}
