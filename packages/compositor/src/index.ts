@@ -9,3 +9,4 @@ export * from './contracts/index.js';
 export * from './plan/build-plan.js';
 export * from './shader/shader-source.js';
 export * from './gl/index.js';
+export * from './shader/compile-check.js';
