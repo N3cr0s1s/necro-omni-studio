@@ -131,6 +131,18 @@ export function CodeEditor({
   // the caret, the selection and the undo stack with it.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  /*
+   * The text a *new* model is seeded with.
+   *
+   * In a ref, because it must not be a dependency of the effect that builds the editor. It was, and
+   * the consequence was severe enough to be worth naming: `onChange` sets the value, the value is a
+   * dependency, so every keystroke disposed the editor and built a new one. The text survived — the
+   * model outlives the editor — so it looked almost right, while the caret jumped, the scroll reset,
+   * and any widget that was open closed before it could be read. A suggestion list cannot survive its
+   * editor being rebuilt underneath it.
+   */
+  const seedRef = useRef(value);
+  seedRef.current = value;
 
   useEffect(() => {
     const element = host.current;
@@ -140,7 +152,7 @@ export function CodeEditor({
     monaco.editor.defineTheme(MONACO_THEME_ID, buildMonacoTheme());
 
     const uri = monaco.Uri.parse(`nos:///${path}`);
-    const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(value, language, uri);
+    const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(seedRef.current, language, uri);
 
     const editor = monaco.editor.create(element, {
       model,
@@ -188,7 +200,6 @@ export function CodeEditor({
        * a fair proxy for what a screen reader would have made of it.
        */
       editContext: false,
-      ariaLabel,
     });
 
     instance.current = editor;
@@ -202,7 +213,20 @@ export function CodeEditor({
       instance.current = undefined;
       // The model outlives the editor deliberately: reopening the same file restores its undo stack.
     };
-  }, [ariaLabel, language, path, readOnly, value]);
+    /*
+     * Only what genuinely needs a different editor.
+     *
+     * A new file is a new model, and a new language is a new tokenizer — both are rebuilds. Everything
+     * else about an editor can be changed on the living instance, and doing it that way is what keeps
+     * the caret, the selection, the scroll position and the undo stack where the user left them.
+     */
+  }, [language, path]);
+
+  // Options that can change without rebuilding. `ariaLabel` is here rather than in `create` for the
+  // same reason: an effect being renamed must not cost the author their undo history.
+  useEffect(() => {
+    instance.current?.updateOptions({ readOnly, ariaLabel });
+  }, [ariaLabel, readOnly]);
 
   // Re-measured when the palette changes. Monaco holds themes by name, so redefining restyles every
   // open editor at once.
