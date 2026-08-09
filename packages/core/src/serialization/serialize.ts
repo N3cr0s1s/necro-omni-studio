@@ -200,6 +200,18 @@ export function serializeFade(fade: ClipFade | undefined): JsonObject | undefine
   return compact({
     inFrames: unlessDefault(fade.inFrames, 0),
     outFrames: unlessDefault(fade.outFrames, 0),
+    shape: fade.shape,
+    // Written whenever it exists, like a keyframe's, so trying another shape and coming back does not
+    // throw away a curve somebody drew.
+    shapeBezier:
+      fade.shapeBezier === undefined
+        ? undefined
+        : {
+            x1: fade.shapeBezier.x1,
+            y1: fade.shapeBezier.y1,
+            x2: fade.shapeBezier.x2,
+            y2: fade.shapeBezier.y2,
+          },
   });
 }
 

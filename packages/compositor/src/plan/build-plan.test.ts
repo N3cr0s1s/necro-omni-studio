@@ -363,6 +363,15 @@ describe('transform evaluation', () => {
     expect(planLayers(plan(document, 40))[0]!.transform.opacity).toBeCloseTo(0.5, 6);
   });
 
+  it('follows a chosen curve instead of the linear default', () => {
+    const clip = video('a', 0, 100, {
+      fade: { inFrames: 100, outFrames: 0, shape: 'ease-in' },
+    } as Partial<Clip>);
+    const opacity = planLayers(plan(makeDocument({ v1: [clip] }), 50))[0]!.transform.opacity;
+    // `ease-in` is cubic, so halfway through it is an eighth rather than a half.
+    expect(opacity).toBeCloseTo(0.125, 6);
+  });
+
   it('is linear, where the mixer’s is equal power', () => {
     // Two pictures dissolving on a sine pair are each at ~0.71 in the middle and composite to a
     // visibly brighter frame — light adds where uncorrelated sound does not.

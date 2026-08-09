@@ -1,7 +1,9 @@
 import {
+  type BezierEase,
   type Clip,
   type ClipFade,
   type ClipId,
+  type Easing,
   type FrameSpan,
   type Result,
   type TimelineDocument,
@@ -160,8 +162,27 @@ export function applyCrossfade(
   return setClipFade(withIncoming.value, plan.outgoing, { outFrames: frames });
 }
 
-/** One or both ends of a clip's ramp. An omitted end is left as it was. */
-export type FadeChange = Partial<ClipFade>;
+/**
+ * One or both ends of a clip's ramp, and the curve it follows.
+ *
+ * `Partial<ClipFade>`, so a caller states only what it is changing — an omitted field is left as it
+ * was, which is what lets the two length fields, the two drag handles and the shape picker all go
+ * through one operation without any of them clobbering the others.
+ */
+export interface FadeChange {
+  readonly inFrames?: number;
+  readonly outFrames?: number;
+  /**
+   * The curve, or `undefined` to go back to each renderer's default.
+   *
+   * Read with `in` rather than `??`, so **mentioning** the key and **omitting** it are different
+   * gestures: omitted leaves the curve alone, and mentioned-as-undefined clears it. Under
+   * `exactOptionalPropertyTypes` there is no other way to express "set this back to absent" — and
+   * without the distinction the `default` button could not be pressed, because its value *is* absence.
+   */
+  readonly shape?: Easing | undefined;
+  readonly shapeBezier?: BezierEase | undefined;
+}
 
 /**
  * Sets a clip's edge ramps.
@@ -186,12 +207,26 @@ export function setClipFade(
   const { track, clip } = located.value;
   const current = clipFade(clip);
   const limit = clip.span.duration;
+  const shape = 'shape' in change ? change.shape : current.shape;
+  // Kept through a change of shape, like a keyframe's, so trying `ease-out` for a moment and coming
+  // back does not throw away a curve somebody drew.
+  const shapeBezier =
+    'shapeBezier' in change && change.shapeBezier !== undefined ? change.shapeBezier : current.shapeBezier;
   const next: ClipFade = {
     inFrames: clampFade(change.inFrames ?? current.inFrames, limit),
     outFrames: clampFade(change.outFrames ?? current.outFrames, limit),
+    ...(shape === undefined ? {} : { shape }),
+    ...(shapeBezier === undefined ? {} : { shapeBezier }),
   };
 
-  if (next.inFrames === current.inFrames && next.outFrames === current.outFrames) return ok(document);
+  if (
+    next.inFrames === current.inFrames &&
+    next.outFrames === current.outFrames &&
+    next.shape === current.shape &&
+    next.shapeBezier === current.shapeBezier
+  ) {
+    return ok(document);
+  }
 
   return ok(replaceTrack(document, replaceClip(track, withFade(clip, next))));
 }
@@ -248,6 +283,8 @@ function clampFade(frames: number, limit: number): number {
 }
 
 function withFade(clip: Clip, fade: ClipFade): Clip {
+  // A shape on a clip with no ramp describes nothing, so clearing the lengths clears the whole field
+  // — otherwise a clip with no fade would still differ from one that never had one.
   if (fade.inFrames === 0 && fade.outFrames === 0) {
     const { fade: _dropped, ...rest } = clip;
     return rest as Clip;

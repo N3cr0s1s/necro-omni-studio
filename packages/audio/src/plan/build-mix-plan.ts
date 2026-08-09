@@ -11,11 +11,14 @@ import {
   framesToSecondsNumber,
   intersection,
   isAnimated,
+  clipFade,
+  fadeAmountAt,
+  hasFade,
   isTrackAudible,
   overlaps,
+  shapedFadeAmount,
   spanFromBounds,
 } from '@nos/core';
-import { fadeAmountAt, hasFade } from '@nos/core';
 import type { GainPoint, MixPlan, MixSource } from '../contracts/mix-plan.js';
 
 /**
@@ -136,7 +139,12 @@ function buildSource(
 function clipGainAt(clip: AudioClip, clipRelativeFrame: FrameIndex): number {
   const authored = evaluateAt(clip.gain, clipRelativeFrame);
   if (!hasFade(clip)) return authored;
-  return authored * Math.sin((Math.PI / 2) * fadeAmountAt(clip, clipRelativeFrame));
+
+  const amount = fadeAmountAt(clip, clipRelativeFrame);
+  // A chosen curve replaces the default rather than compounding with it: asking for `linear` has to
+  // give a linear ramp, and a sine applied to it would give something that is neither.
+  const shaped = shapedFadeAmount(clipFade(clip), amount);
+  return authored * (shaped ?? Math.sin((Math.PI / 2) * amount));
 }
 
 /**

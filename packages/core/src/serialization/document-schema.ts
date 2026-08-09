@@ -283,6 +283,10 @@ export const vFadeFrames: Validator<number> = vMap(vNumber, (value) =>
 export const vClipFade: Validator<ClipFade> = vObject<ClipFade>({
   inFrames: vWithDefault(vFadeFrames, 0),
   outFrames: vWithDefault(vFadeFrames, 0),
+  // Degrades to the renderer's default rather than failing the load, exactly as a keyframe's easing
+  // does: a project written by a later build must still open.
+  shape: vOptional(vFallback(vEnum(EASINGS), 'linear')),
+  shapeBezier: vOptional(vBezierEase),
 });
 
 const vClipBaseShape = {

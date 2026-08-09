@@ -293,6 +293,40 @@ describe('edge ramps', () => {
     expect(gainNear(document, 0)).toBeCloseTo(0, 6);
   });
 
+  it('follows a chosen curve instead of the equal-power default', () => {
+    // Asking for `linear` has to give a linear ramp: a sine applied on top would give something that
+    // is neither, and the control would be a lie about what it does.
+    const document = makeDocument({
+      a1: [audioClip('a', 0, 100, { fade: { inFrames: 20, outFrames: 0, shape: 'linear' } })],
+    });
+    expect(gainNear(document, 10)).toBeCloseTo(0.5, 2);
+  });
+
+  it('keeps the equal-power default when no curve is chosen', () => {
+    const document = makeDocument({
+      a1: [audioClip('a', 0, 100, { fade: { inFrames: 20, outFrames: 0 } })],
+    });
+    expect(gainNear(document, 10)).toBeCloseTo(Math.SQRT1_2, 2);
+  });
+
+  it('follows a hand-drawn curve', () => {
+    // cubic-bezier(0.42, 0, 0.58, 1) is exactly half at the midpoint, like `ease-in-out`.
+    const document = makeDocument({
+      a1: [
+        audioClip('a', 0, 100, {
+          fade: {
+            inFrames: 20,
+            outFrames: 0,
+            shape: 'bezier',
+            shapeBezier: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },
+          },
+        }),
+      ],
+    });
+    expect(gainNear(document, 10)).toBeCloseTo(0.5, 2);
+    expect(gainNear(document, 5)).toBeLessThan(0.25);
+  });
+
   it('leaves a clip with no fade exactly as it was', () => {
     const document = makeDocument({ a1: [audioClip('a', 0, 100)] });
     const source = plan(document, 0, 100).sources[0]!;

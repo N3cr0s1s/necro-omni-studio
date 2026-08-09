@@ -11,7 +11,15 @@ import {
   type MaskId,
   type PresetId,
 } from './ids.js';
-import { type AnimatableNumber, type RgbaColor, type StaticValue, isAnimated } from './params.js';
+import {
+  type AnimatableNumber,
+  type BezierEase,
+  type Easing,
+  type RgbaColor,
+  type StaticValue,
+  applyEasing,
+  isAnimated,
+} from './params.js';
 
 /**
  * Where a clip's pixels or samples come from.
@@ -112,6 +120,22 @@ export interface ClipFade {
   readonly inFrames: number;
   /** Frames before the clip's out-point over which it ramps down to nothing. */
   readonly outFrames: number;
+  /**
+   * The curve the ramp follows, when the default is not wanted.
+   *
+   * The **same** `Easing` a keyframe uses, deliberately, rather than a fade-shaped vocabulary of its
+   * own. A ramp and a keyframe segment are the same question — how does a value get from one place to
+   * another over a span — and two answers to it would mean two evaluators, two serializations and two
+   * editors, of which the second would be the one missing `bezier`.
+   *
+   * Absent means each renderer's own default, and the defaults are not the same: sound crossfades
+   * equal-power and picture crossfades linear, because the two sum differently. Those are the right
+   * answers for the overwhelmingly common case, so they are what you get without asking — and a
+   * stored shape overrides them, which is what a fade curve control is *for*.
+   */
+  readonly shape?: Easing;
+  /** Control points, read only when `shape` is `bezier`. Kept when the shape changes away and back. */
+  readonly shapeBezier?: BezierEase;
 }
 
 /** No ramp at either edge — what a clip has unless something asked otherwise. */
@@ -317,7 +341,29 @@ export function clipTransform(clip: Clip): ClipTransform | undefined {
 export function clipFade(clip: Clip): ClipFade {
   const fade = clip.fade;
   if (fade === undefined) return NO_FADE;
-  return { inFrames: Math.max(0, fade.inFrames), outFrames: Math.max(0, fade.outFrames) };
+  return {
+    inFrames: Math.max(0, fade.inFrames),
+    outFrames: Math.max(0, fade.outFrames),
+    ...(fade.shape === undefined ? {} : { shape: fade.shape }),
+    ...(fade.shapeBezier === undefined ? {} : { shapeBezier: fade.shapeBezier }),
+  };
+}
+
+/**
+ * The ramp's position after its chosen curve, or unshaped when it has none.
+ *
+ * The seam every renderer of a fade goes through. `fadeAmountAt` answers *where* in the ramp a frame
+ * falls, linearly; this answers what the curve does with that — and returns the position untouched
+ * when no shape was chosen, so each renderer keeps applying its own default. Sound and picture have
+ * different right answers there, which is exactly why the default is not decided here.
+ *
+ * Reusing `applyEasing` rather than a fade-specific curve table is the point: a ramp and a keyframe
+ * segment are the same question, and one evaluator means `bezier` works in both without being built
+ * twice.
+ */
+export function shapedFadeAmount(fade: ClipFade, amount: number): number | undefined {
+  if (fade.shape === undefined) return undefined;
+  return applyEasing(fade.shape, amount, fade.shapeBezier);
 }
 
 /** Whether a clip ramps at either edge. */

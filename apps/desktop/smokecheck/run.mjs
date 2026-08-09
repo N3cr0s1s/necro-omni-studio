@@ -530,14 +530,25 @@ try {
       const named = await undo.first().getAttribute('aria-label');
       pass(`undo names the edit it would take back (${String(named)})`);
 
-      // And it actually undoes. The fade from the section above is the most recent edit, so taking it
-      // back has to remove the ramp from the clip.
+      /*
+       * And it actually undoes — counted, not named.
+       *
+       * The first version of this asserted that undoing removed *the* ramp, on the assumption that the
+       * fade set two sections earlier was still the top of the history. It was not: the crossfade drop
+       * came after it, so undo correctly took that back and left the earlier fade in place, and the
+       * check reported a working undo as broken. Counting the ramps says the same thing without
+       * assuming which edit is on top, which is what makes it survive a section being added above.
+       */
+      const ramps = () => page.locator('[data-fade-ramp]').count();
+      const before = await ramps();
+
       await undo.first().click();
       await page.waitForTimeout(700);
-      if ((await page.locator('[data-fade-ramp="in"]').count()) === 0) {
-        pass('and pressing it takes the edit back');
+      const afterUndo = await ramps();
+      if (afterUndo < before) {
+        pass(`and pressing it takes the edit back (${before} ramps → ${afterUndo})`);
       } else {
-        fail('undo left the edit in place');
+        fail(`undo left the edit in place (${before} ramps → ${afterUndo})`);
       }
 
       const redo = page.getByLabel(/^Redo /);
@@ -546,10 +557,10 @@ try {
       } else {
         await redo.first().click();
         await page.waitForTimeout(700);
-        if ((await page.locator('[data-fade-ramp="in"]').count()) > 0) {
+        if ((await ramps()) === before) {
           pass('and redo puts it back');
         } else {
-          fail('redo did not restore the edit');
+          fail(`redo did not restore the edit (${await ramps()} ramps, expected ${before})`);
         }
       }
     }

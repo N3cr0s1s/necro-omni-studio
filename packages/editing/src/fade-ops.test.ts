@@ -360,3 +360,71 @@ describe('setting a fade on a linked pair', () => {
     expect(fadeOf(result.value, 'a').inFrames).toBe(0);
   });
 });
+
+/**
+ * The curve a ramp follows.
+ *
+ * Reuses the keyframe easings on purpose — a ramp and a keyframe segment are the same question — so
+ * what needs pinning here is the part that is *not* shared: that absence means "each renderer's own
+ * default", and that saying so is expressible.
+ */
+describe('choosing a fade curve', () => {
+  const faded = () => documentWith({ a1: [audio('a', 0, 100, { fade: { inFrames: 10, outFrames: 0 } })] });
+
+  it('sets a shape and keeps the lengths', () => {
+    const result = setClipFade(faded(), clipId('a'), { shape: 'ease-in' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(fadeOf(result.value, 'a')).toMatchObject({ inFrames: 10, outFrames: 0, shape: 'ease-in' });
+  });
+
+  it('clears the shape back to the renderer default when it is named as undefined', () => {
+    // Mentioning the key and omitting it are different gestures: without that, the `default` button
+    // could not be pressed, because its value *is* absence.
+    const shaped = setClipFade(faded(), clipId('a'), { shape: 'ease-in' });
+    expect(shaped.ok).toBe(true);
+    if (!shaped.ok) return;
+
+    const cleared = setClipFade(shaped.value, clipId('a'), { shape: undefined });
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    expect(fadeOf(cleared.value, 'a').shape).toBeUndefined();
+  });
+
+  it('leaves the shape alone when the key is not mentioned', () => {
+    const shaped = setClipFade(faded(), clipId('a'), { shape: 'ease-in' });
+    expect(shaped.ok).toBe(true);
+    if (!shaped.ok) return;
+
+    const longer = setClipFade(shaped.value, clipId('a'), { inFrames: 20 });
+    expect(longer.ok).toBe(true);
+    if (!longer.ok) return;
+    expect(fadeOf(longer.value, 'a')).toMatchObject({ inFrames: 20, shape: 'ease-in' });
+  });
+
+  it('keeps hand-drawn points through a change of shape and back', () => {
+    const points = { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9 };
+    const drawn = setClipFade(faded(), clipId('a'), { shape: 'bezier', shapeBezier: points });
+    expect(drawn.ok).toBe(true);
+    if (!drawn.ok) return;
+
+    const away = setClipFade(drawn.value, clipId('a'), { shape: 'hold' });
+    expect(away.ok).toBe(true);
+    if (!away.ok) return;
+    // Trying another shape for a moment must not throw away a curve somebody drew.
+    expect(fadeOf(away.value, 'a').shapeBezier).toEqual(points);
+  });
+
+  it('drops the whole field when the ramps go, shape and all', () => {
+    // A curve on a clip with no ramp describes nothing, and a clip with no fade must compare equal to
+    // one that never had one.
+    const shaped = setClipFade(faded(), clipId('a'), { shape: 'ease-in' });
+    expect(shaped.ok).toBe(true);
+    if (!shaped.ok) return;
+
+    const cleared = setClipFade(shaped.value, clipId('a'), { inFrames: 0, outFrames: 0 });
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    expect(locateClip(cleared.value, clipId('a'))!.clip.fade).toBeUndefined();
+  });
+});

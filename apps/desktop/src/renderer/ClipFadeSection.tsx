@@ -1,9 +1,19 @@
 import type { ReactNode } from 'react';
 import { TrendingDownIcon, TrendingUpIcon } from 'lucide-react';
-import { type Clip, type TimelineDocument, clipFade, formatFrames, frameIndex } from '@nos/core';
+import {
+  type Clip,
+  type Easing,
+  type TimelineDocument,
+  DEFAULT_BEZIER,
+  clipFade,
+  formatFrames,
+  frameIndex,
+} from '@nos/core';
 import { describeEditError, maxFadeFrames, setGroupFade } from '@nos/editing';
 import { NumberField } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
+import { cn } from '@nos/ui/lib/utils';
+import { BezierEditor } from './BezierEditor.js';
 
 /**
  * A clip's edge ramps, as numbers.
@@ -22,6 +32,31 @@ import { Button } from '@nos/ui/components/ui/button';
  * shot on any other. Offering the two as separate choices would be claiming a distinction the
  * compositor does not have.
  */
+
+/**
+ * The curves a ramp can follow.
+ *
+ * `default` first and unlabelled by any easing name, because it is not one: it is *each renderer's
+ * own* answer, and they differ — sound crossfades equal-power and picture crossfades linear, because
+ * the two sum differently. Naming it `linear` would be a lie on the audio side, and offering only the
+ * easings would make the right answer unreachable.
+ *
+ * The rest are the same names a keyframe uses, deliberately. A ramp and a keyframe segment are the
+ * same question, and a second vocabulary for it would be a second thing to learn and a second
+ * evaluator to keep honest.
+ */
+const FADE_SHAPES: readonly {
+  readonly id: Easing | undefined;
+  readonly label: string;
+  readonly help: string;
+}[] = [
+  { id: undefined, label: 'default', help: 'equal power for sound, linear for picture' },
+  { id: 'linear', label: 'linear', help: 'a constant rate across the ramp' },
+  { id: 'ease-in', label: 'ease-in', help: 'starts slowly' },
+  { id: 'ease-out', label: 'ease-out', help: 'arrives slowly' },
+  { id: 'ease-in-out', label: 'ease-io', help: 'slow at both ends' },
+  { id: 'bezier', label: 'curve', help: 'a curve you draw yourself' },
+];
 
 export interface ClipFadeSectionProps {
   readonly document: TimelineDocument;
@@ -75,6 +110,51 @@ export function ClipFadeSection({ document, clip, onChange, onReject }: ClipFade
         rate={document.frameRate}
         onCommit={(next) => commit('set fade out', setGroupFade(document, clip.id, { outFrames: next }))}
       />
+
+      {/* Offered only once there is a ramp: a curve for a fade that does not exist describes nothing,
+          and a control that cannot change what you see teaches you to ignore the panel. */}
+      {(fade.inFrames > 0 || fade.outFrames > 0) && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">curve</span>
+          <div role="radiogroup" aria-label="fade curve" className="flex flex-wrap gap-1">
+            {FADE_SHAPES.map(({ id, label, help }) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={(fade.shape ?? undefined) === id}
+                title={help}
+                onClick={() =>
+                  commit(
+                    'set fade curve',
+                    setGroupFade(document, clip.id, {
+                      ...(id === undefined ? { shape: undefined } : { shape: id }),
+                      ...(id === 'bezier' ? { shapeBezier: fade.shapeBezier ?? DEFAULT_BEZIER } : {}),
+                    }),
+                  )
+                }
+                className={cn(
+                  'rounded border px-1.5 py-0.5 font-mono text-[10px]',
+                  (fade.shape ?? undefined) === id
+                    ? 'border-primary bg-primary/20 text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {fade.shape === 'bezier' && (
+            <BezierEditor
+              points={fade.shapeBezier ?? DEFAULT_BEZIER}
+              onChange={(points) =>
+                commit('set fade curve', setGroupFade(document, clip.id, { shapeBezier: points }))
+              }
+            />
+          )}
+        </div>
+      )}
     </section>
   );
 }

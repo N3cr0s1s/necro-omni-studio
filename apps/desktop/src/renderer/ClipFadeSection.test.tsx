@@ -35,7 +35,7 @@ afterEach(cleanup);
 
 const TRACKS = { video: trackId('V1'), audio: trackId('A1'), text: trackId('T1') };
 
-function videoClip(fade?: { inFrames: number; outFrames: number }): VideoClip {
+function videoClip(fade?: NonNullable<VideoClip['fade']>): VideoClip {
   return {
     kind: 'video',
     id: clipId('c1'),
@@ -176,5 +176,61 @@ describe('what it changes', () => {
     const { onChange } = mount(videoClip({ inFrames: 10, outFrames: 0 }));
     await type('fade in', '10');
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The curve a ramp follows.
+ *
+ * Offered only once there is a ramp, because a curve for a fade that does not exist describes
+ * nothing — and a control that cannot change what you see teaches you to ignore the panel.
+ */
+describe('the curve', () => {
+  it('is not offered until there is a ramp to shape', () => {
+    mount();
+    expect(screen.queryByRole('radiogroup', { name: 'fade curve' })).toBeNull();
+  });
+
+  it('offers the renderer default alongside the easings', () => {
+    // `default` is not an easing: it is each renderer's own answer, and they differ. Naming it
+    // `linear` would be a lie on the audio side.
+    mount(videoClip({ inFrames: 10, outFrames: 0 }));
+    expect(screen.getByRole('radio', { name: 'default' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'linear' })).toBeDefined();
+    expect(screen.getByRole('radio', { name: 'curve' })).toBeDefined();
+  });
+
+  it('marks the chosen curve', () => {
+    mount(videoClip({ inFrames: 10, outFrames: 0, shape: 'ease-in' }));
+    expect(screen.getByRole('radio', { name: 'ease-in' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'default' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('writes a chosen curve', async () => {
+    const { onChange } = mount(videoClip({ inFrames: 10, outFrames: 0 }));
+    await userEvent.click(screen.getByRole('radio', { name: 'ease-out' }));
+    expect(committedFade(onChange).shape).toBe('ease-out');
+  });
+
+  it('goes back to the default, which is absence', async () => {
+    const { onChange } = mount(videoClip({ inFrames: 10, outFrames: 0, shape: 'ease-in' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'default' }));
+    expect(committedFade(onChange).shape).toBeUndefined();
+  });
+
+  it('gives a hand-drawn curve something to draw', async () => {
+    const { onChange } = mount(videoClip({ inFrames: 10, outFrames: 0 }));
+    await userEvent.click(screen.getByRole('radio', { name: 'curve' }));
+    // Chosen *with* its points, so a marker can never be in that mode with nothing to draw.
+    expect(committedFade(onChange).shape).toBe('bezier');
+    expect(committedFade(onChange).shapeBezier).toBeDefined();
+  });
+
+  it('shows the editor only while the curve is the one in use', () => {
+    mount(videoClip({ inFrames: 10, outFrames: 0, shape: 'ease-in' }));
+    expect(screen.queryByRole('group', { name: 'easing curve' })).toBeNull();
+    cleanup();
+    mount(videoClip({ inFrames: 10, outFrames: 0, shape: 'bezier' }));
+    expect(screen.getByRole('group', { name: 'easing curve' })).toBeDefined();
   });
 });

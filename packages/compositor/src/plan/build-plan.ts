@@ -8,11 +8,13 @@ import {
   type TimelineDocument,
   type Track,
   type Transition,
+  clipFade,
   containsFrame,
   endExclusive,
   evaluateAt,
   fadeAmountAt,
   frameIndex,
+  shapedFadeAmount,
   framesToSecondsNumber,
   isTrackAudible,
   secondsToFrames,
@@ -227,8 +229,10 @@ function resolveSource(
 
 function resolveTransform(clip: Clip, clipRelative: FrameIndex): ResolvedTransform {
   const transform: ClipTransform | undefined = clip.kind === 'audio' ? undefined : clip.transform;
-  // A clip with no transform can still ramp, so the fade is read before the early return.
-  const fade = fadeAmountAt(clip, clipRelative);
+  // A clip with no transform can still ramp, so the fade is read before the early return. A chosen
+  // curve replaces the linear default rather than compounding with it.
+  const amount = fadeAmountAt(clip, clipRelative);
+  const fade = shapedFadeAmount(clipFade(clip), amount) ?? amount;
   if (transform === undefined) {
     return { x: 0, y: 0, scale: 1, rotation: 0, opacity: fade };
   }

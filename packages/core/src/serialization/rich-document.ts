@@ -204,7 +204,14 @@ export function richDocument(): TimelineDocument {
         effects: [],
         // Both ramps set, and to different lengths: a fixture where they matched would round-trip
         // identically with the two fields swapped.
-        fade: { inFrames: 12, outFrames: 30 },
+        // A hand-drawn fade curve, so the shape *and* its control points are exercised rather than
+        // merely declared — the same reason the keyframe above carries one.
+        fade: {
+          inFrames: 12,
+          outFrames: 30,
+          shape: 'bezier',
+          shapeBezier: { x1: 0.1, y1: 0.3, x2: 0.7, y2: 0.9 },
+        },
         linkedVideo: clipId('c1'),
       },
     ],
