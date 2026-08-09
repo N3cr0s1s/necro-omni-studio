@@ -42,7 +42,6 @@ import {
   linkablePair,
   linkClips,
   canMoveTrack,
-  moveClip,
   moveTrack,
   nextTrackId,
   removeMarker,
@@ -53,6 +52,9 @@ import {
   toggleTrackFlag,
   closeAllGaps,
   closeGapBefore,
+  eligibleTracksFor,
+  moveWithCrossfades,
+  withLinkedClips,
   trimClipEnd,
   trimClipStart,
   unlinkClips,
@@ -542,21 +544,33 @@ export function App(): ReactNode {
         const located = locateClip(current, target as ClipId);
         if (located === undefined) return current;
 
-        // Onto the clip's *own* track. Nudging used to force everything to the first video track,
-        // so nudging an audio clip was rejected for the wrong kind and nudging anything on a second
-        // video track silently moved it up one.
-        const result = moveClip(
-          current,
-          target as ClipId,
-          located.track.id,
-          frameIndex(Math.max(0, located.clip.span.start + delta)),
-        );
+        /*
+         * The same operation the drag uses, on the clip's own track.
+         *
+         * Two rules meet here and only one of them used to. Nudging once forced everything onto the
+         * first video track, so an audio clip was rejected for the wrong kind and anything on a
+         * second video row silently moved up one — hence the clip's own track.
+         *
+         * And it goes through the crossfade path because a drag does. Without that, a clip that is
+         * *already* crossfaded with its neighbour cannot be nudged at all: it overlaps, every move is
+         * a collision, and the arrow keys stop working on exactly the clips a user has just finished
+         * joining. Found by the smoke harness, which nudges a clip after the crossfade section and
+         * got nothing — a keyboard that refuses what the pointer allows is two behaviours for one
+         * edit.
+         */
+        const result = moveWithCrossfades({
+          document: current,
+          ids: withLinkedClips(current, [target as ClipId]),
+          deltaFrames: delta,
+          deltaRows: 0,
+          eligibleTracks: (clip) => eligibleTracksFor(current.sequence.tracks, clip),
+        });
         if (!result.ok) {
           setError(describeEditError(result.error));
           return current;
         }
         setError(undefined);
-        return result.value;
+        return result.value.document;
       });
     },
     [selected, store],
