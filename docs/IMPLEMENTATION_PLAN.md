@@ -1786,6 +1786,11 @@ cd apps/sidecar && .venv/bin/ruff check src tests
 
 Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
 
+`npm run check:gl` starts the GL harness's own server on a free port, runs the check and stops it.
+The two-shell dance it replaces has a trap: served from the wrong directory the check still reaches a
+page and reports **24 of 27 failing**, which reads as a compositor in ruins rather than a harness
+pointed at the wrong application. Pairing them in code removes the chance rather than documenting it.
+
 ### Sidecar rules (keep these)
 
 - Every path from the renderer is untrusted. `resolve_in_project` checks

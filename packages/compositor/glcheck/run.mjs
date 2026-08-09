@@ -17,7 +17,16 @@ const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
-await page.goto('http://localhost:5200/', { waitUntil: 'networkidle' });
+/*
+ * The address the harness page is served at.
+ *
+ * Taken from the environment when `serve-and-run` started the server, so the port is one nothing else
+ * holds and the server is provably *this* package's. The literal remains for the documented two-shell
+ * dance — which has a trap in it: served from the wrong directory, the check still reaches a page and
+ * reports 24 of 27 failing, which reads as a compositor in ruins rather than a harness pointed at the
+ * wrong application.
+ */
+await page.goto(process.env.NOS_GLCHECK_URL ?? 'http://localhost:5200/', { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__glcheck !== undefined, { timeout: 20000 }).catch(() => {});
 const r = await page.evaluate(() => window.__glcheck ?? null);
 
