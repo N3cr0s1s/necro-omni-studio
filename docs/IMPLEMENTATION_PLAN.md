@@ -3746,3 +3746,20 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Also this round: the delivered file is asked whether the fade *happened* — two windows of the same
   tone, −37.2 dB rising to −24.1 dB — because the mixer has exactly the seam that once hid every title
   from every export, and a ramp that plays and does not export is invisible to every unit test here.
+
+- 2026-08-10: Undo, where every edit can reach it.
+
+  §6.1 asks for undo and redo on *everything*. The only visible pair sat inside the clip actions — on
+  one tab, and only while a clip was selected — so the control for taking back a mistake disappeared
+  exactly when the mistake was made somewhere other than a clip: a track deleted, a project setting
+  changed, a manifest saved. The keyboard worked throughout, which is what kept it invisible.
+  **Everyone who tests this application knows the chord, and that is why nobody noticed.**
+
+  They are in the title bar now — the workspace-tab rule puts the editor's own actions there, and a
+  control that moves depending on which tab is open is one you look for rather than reach for.
+
+  And they **say what they will take back**. Every commit here already carries a label; the store has
+  recorded one since M1 and `StoreSnapshot` has exposed `undoLabel` and `redoLabel` just as long, and
+  nothing had ever read them. "Undo" is a promise with no content; "Undo close the gap" is one you can
+  act on. This is the same shape as every other gap this ledger records — a field with no reader —
+  and it was found the same way.

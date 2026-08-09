@@ -515,6 +515,47 @@ try {
   }
 
   /*
+   * Undo, and what it says it will undo.
+   *
+   * §6.1 asks for undo on everything, and the visible control used to appear only on one tab with a
+   * clip selected — so the thing that takes back a mistake vanished exactly when the mistake was made
+   * elsewhere. What only the running window can show is that the label the store recorded reaches the
+   * button: every layer under that is a field on a snapshot nothing read.
+   */
+  {
+    const undo = page.getByLabel(/^Undo /);
+    if ((await undo.count()) === 0) {
+      fail('the title bar offers no undo, or it does not name the edit');
+    } else {
+      const named = await undo.first().getAttribute('aria-label');
+      pass(`undo names the edit it would take back (${String(named)})`);
+
+      // And it actually undoes. The fade from the section above is the most recent edit, so taking it
+      // back has to remove the ramp from the clip.
+      await undo.first().click();
+      await page.waitForTimeout(700);
+      if ((await page.locator('[data-fade-ramp="in"]').count()) === 0) {
+        pass('and pressing it takes the edit back');
+      } else {
+        fail('undo left the edit in place');
+      }
+
+      const redo = page.getByLabel(/^Redo /);
+      if ((await redo.count()) === 0) {
+        fail('undoing offered no redo');
+      } else {
+        await redo.first().click();
+        await page.waitForTimeout(700);
+        if ((await page.locator('[data-fade-ramp="in"]').count()) > 0) {
+          pass('and redo puts it back');
+        } else {
+          fail('redo did not restore the edit');
+        }
+      }
+    }
+  }
+
+  /*
    * Keyframe lanes, per issue #37.
    *
    * The two symptoms the report gives are both about the *header column*, which no component test
