@@ -909,6 +909,13 @@ synthesizing the tone made at runtime, and it looked for the status bar as a `re
 is `contentinfo`. Check the harness before filing a defect — and take the failures as proof the checks
 can fail, which is worth having.
 
+**The offline marker costs ~2 ms of the 16 at 200 offline clips**, measured by A/B against a build
+with the check disabled: 12.8 ms off, 14.9 ms on. Perfcheck's fixture points every clip at
+`media/absent.mp4`, so it draws two hundred markers — the drawing *is* the work, and restructuring the
+props does not remove it. Bounded, inside budget, and only in a case where the media has genuinely
+gone. Three prop and memoization changes came out of chasing it; all are better design and **none**
+moved the number, which is what their comments now say.
+
 **Measured, so it does not have to be argued about again:** a pointer move costs ~12 ms of the 16 ms
 budget at 200 clips fully zoomed out, with **zero long tasks**. The timeline meets §8.
 
