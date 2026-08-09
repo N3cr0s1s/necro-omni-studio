@@ -3791,3 +3791,23 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   `exactOptionalPropertyTypes` there is no other way to say "set this back to absent", and without the
   distinction the `default` button could not be pressed — its value *is* absence. Worth remembering the
   next time an optional field grows a control.
+
+- 2026-08-10: Two ways of watching a harness that both lie.
+
+  Worth writing down because each cost real time tonight and neither is about the application.
+
+  **`pgrep -f "smokecheck/run.mjs"` matches the shell that is polling for it.** A wait loop written
+  that way never ends: it finds its own command line, reports the harness as still running, and does so
+  for as long as you leave it. Several of those accumulated, each insisting a run was in flight after it
+  had died. Wait on a **marker written by the run itself** — a last line, a file — not on a process
+  whose name your own command contains.
+
+  **`npm run verify` builds `apps/desktop`.** `tsconfig.build.json` references it, so running verify
+  while the smoke harness is up rewrites the main bundle underneath it. Nothing observably broke, but a
+  run overlapped by a build is not evidence, and calling it evidence is the mistake. One thing touches
+  the tree at a time.
+
+  Also this round: the bezier editor committed on **every pointer move**, so a drag across the curve box
+  buried whatever came before it under an entry per move. Its `onCommit` seam existed and neither caller
+  used it — the same shape as every other gap here, found this time in code three hours old. `onCommit`
+  is required now and `onChange` optional, which makes the cheap wiring the correct one.
