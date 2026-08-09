@@ -17,6 +17,7 @@ import {
   clearWorkRange,
   closeGapBefore,
   crossfadeAtCut,
+  crossfadeSideFor,
   defaultCrossfadeFrames,
   maxCrossfadeAtCut,
   copyAttributes,
@@ -238,11 +239,17 @@ export function useClipEdits(options: ClipEditOptions): ClipEdits {
         store.commit('crossfade at the cut', (current) => {
           // The length is recomputed here rather than passed in, so the keyboard and the menu row
           // cannot disagree about what this cut can carry.
+          const side = crossfadeSideFor(current, target);
           const frames = Math.min(
             defaultCrossfadeFrames(current.frameRate),
-            maxCrossfadeAtCut(current, target),
+            maxCrossfadeAtCut(current, target, side),
           );
-          const made = crossfadeAtCut({ document: current, clip: target, frames });
+          const made = crossfadeAtCut({
+            document: current,
+            clip: target,
+            frames,
+            ...(side === undefined ? {} : { side }),
+          });
           if (!made.ok) {
             onReject(describeEditError(made.error));
             return current;

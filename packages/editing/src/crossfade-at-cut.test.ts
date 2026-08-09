@@ -19,7 +19,7 @@ import {
   trackId,
 } from '@nos/core';
 import type { SourceBoundsResolver } from './clip-ops.js';
-import { crossfadeAtCut, cutPairFor, maxCrossfadeAtCut } from './crossfade-at-cut.js';
+import { crossfadeAtCut, crossfadeSideFor, cutPairFor, maxCrossfadeAtCut } from './crossfade-at-cut.js';
 
 /**
  * A crossfade made at a cut.
@@ -274,5 +274,39 @@ describe('a clip with no source timeline', () => {
   it('lets a still carry a fade as long as the clips allow', () => {
     const document = documentWith([image('a', 0, 100), image('b', 100, 200)]);
     expect(maxCrossfadeAtCut(document, clipId('a'))).toBe(99);
+  });
+});
+
+/**
+ * Which cut a selection means.
+ *
+ * `side` existed and every caller passed the default, so selecting the *second* clip of a pair and
+ * asking for a crossfade did nothing at all, with no reason given — which reads as a broken command
+ * rather than as a preference about sides. The parameter was reachable and the behaviour was not.
+ */
+describe('choosing the side', () => {
+  it('prefers the cut after the clip, which is the one a selection usually means', () => {
+    const document = documentWith([video('a', 0, 100), video('b', 100, 200), video('c', 200, 300)]);
+    expect(crossfadeSideFor(document, clipId('b'))).toBe('after');
+  });
+
+  it('falls back to the cut before it, so the last clip of a pair works too', () => {
+    const document = documentWith([video('a', 0, 100), video('b', 100, 200)]);
+    expect(crossfadeSideFor(document, clipId('b'))).toBe('before');
+  });
+
+  it('is nothing for an isolated clip', () => {
+    expect(crossfadeSideFor(documentWith([video('a', 0, 100)]), clipId('a'))).toBeUndefined();
+  });
+
+  it('makes the fade the chosen side implies', () => {
+    // Selecting the second clip fades the cut to its left, which is the only cut it has.
+    const document = documentWith([video('a', 0, 100), video('b', 100, 200)]);
+    const side = crossfadeSideFor(document, clipId('b'))!;
+    const result = crossfadeAtCut({ document, clip: clipId('b'), side, frames: 20, options: { sources } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(spanOf(result.value, 'a')).toEqual([0, 110]);
+    expect(spanOf(result.value, 'b')).toEqual([90, 200]);
   });
 });

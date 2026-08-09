@@ -84,6 +84,25 @@ export function cutPairFor(
 }
 
 /**
+ * Which cut a command should use for a clip: the one after it, or the one before.
+ *
+ * A user selects a clip and asks for a crossfade. If it has a neighbour on its right that is
+ * unambiguously the cut they mean; if it only has one on its left, that is. Reading `after` alone —
+ * which is what the parameter's default does, and what every caller passed — meant selecting the
+ * *second* clip of a pair and pressing the key did nothing at all, with no reason given, which reads
+ * as a broken command rather than as a preference about sides.
+ *
+ * `undefined` when the clip is isolated. Deliberately silent about which side it chose: the answer is
+ * visible on the timeline, and a menu row explaining "the cut to the left of the selection" would be
+ * a sentence where a verb belongs.
+ */
+export function crossfadeSideFor(document: TimelineDocument, clip: ClipId): 'before' | 'after' | undefined {
+  if (cutPairFor(document, clip, 'after') !== undefined) return 'after';
+  if (cutPairFor(document, clip, 'before') !== undefined) return 'before';
+  return undefined;
+}
+
+/**
  * Makes a crossfade at a cut, consuming the handles either side of it.
  *
  * All or nothing: if either clip cannot supply its half, nothing moves. A crossfade with one side

@@ -53,6 +53,7 @@ import {
   closeAllGaps,
   closeGapBefore,
   crossfadeAtCut,
+  crossfadeSideFor,
   defaultCrossfadeFrames,
   maxCrossfadeAtCut,
   eligibleTracksFor,
@@ -1548,11 +1549,17 @@ export function App(): ReactNode {
             const current = store.getDocument();
             // The length the menu offered, recomputed from the same function the row used so the two
             // cannot disagree about what this cut can carry.
+            const side = crossfadeSideFor(current, target.clip);
             const frames = Math.min(
               defaultCrossfadeFrames(current.frameRate),
-              maxCrossfadeAtCut(current, target.clip),
+              maxCrossfadeAtCut(current, target.clip, side),
             );
-            const made = crossfadeAtCut({ document: current, clip: target.clip, frames });
+            const made = crossfadeAtCut({
+              document: current,
+              clip: target.clip,
+              frames,
+              ...(side === undefined ? {} : { side }),
+            });
             if (made.ok) commitDocument('crossfade at the cut', made.value);
             else setError(describeEditError(made.error));
           }
@@ -1623,7 +1630,9 @@ export function App(): ReactNode {
           // being offered without a length rather than vanishing.
           ...(target.clip !== undefined
             ? (() => {
-                const room = maxCrossfadeAtCut(document, target.clip);
+                const side = crossfadeSideFor(document, target.clip);
+                if (side === undefined) return {};
+                const room = maxCrossfadeAtCut(document, target.clip, side);
                 const frames = Math.min(defaultCrossfadeFrames(document.frameRate), room);
                 return frames >= 2 ? { crossfadeFrames: frames } : {};
               })()
