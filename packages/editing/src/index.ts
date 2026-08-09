@@ -25,3 +25,4 @@ export * from './project-settings.js';
 export * from './attributes.js';
 export * from './linking.js';
 export * from './clip-transform.js';
+export * from './story-ops.js';

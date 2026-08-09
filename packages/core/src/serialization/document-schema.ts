@@ -44,6 +44,7 @@ import {
   type PresetId,
   type ProjectId,
   type SequenceId,
+  type StoryBeatId,
   type TrackId,
   assetPath,
   clipId,
@@ -56,6 +57,7 @@ import {
   presetId,
   projectId,
   sequenceId,
+  storyBeatId,
   trackId,
 } from '../document/ids.js';
 import {
@@ -75,6 +77,7 @@ import {
   type VideoClip,
 } from '../document/clip.js';
 import { type AudioTrack, type TextTrack, type Track, type VideoTrack } from '../document/track.js';
+import { STORY_ACCENTS, type StoryAccent, type StoryBeat, type StoryReference } from '../document/story.js';
 import {
   type MaskDefinition,
   type MaskPoint,
@@ -117,6 +120,7 @@ export const vClipId: Validator<ClipId> = vId(clipId, 'clip id');
 export const vEffectInstanceId: Validator<EffectInstanceId> = vId(effectInstanceId, 'effect instance id');
 export const vKeyframeId: Validator<KeyframeId> = vId(keyframeId, 'keyframe id');
 export const vMaskId: Validator<MaskId> = vId(maskId, 'mask id');
+export const vStoryBeatId: Validator<StoryBeatId> = vId(storyBeatId, 'story beat id');
 export const vEffectId: Validator<EffectId> = vId(effectId, 'effect id');
 export const vGeneratorId: Validator<GeneratorId> = vId(generatorId, 'generator id');
 export const vPresetId: Validator<PresetId> = vId(presetId, 'preset id');
@@ -399,6 +403,47 @@ export const vMaskDefinition: Validator<MaskDefinition> = vObject<MaskDefinition
   points: vWithDefault(vArray(vMaskPoint), []),
 });
 
+/**
+ * One of the five categorical roles, as a number.
+ *
+ * Written out rather than `vEnum`, which is for strings. Refusing an accent outside the range matters:
+ * it is an index into the palette, and a sixth would render as no colour at all — a beat that draws
+ * as nothing, in a file that loaded without complaint.
+ */
+const vStoryAccent: Validator<StoryAccent> = vRefine(
+  vNumber as Validator<StoryAccent>,
+  (value) => (STORY_ACCENTS as readonly number[]).includes(value),
+  `expected one of ${STORY_ACCENTS.join(', ')}`,
+);
+
+/**
+ * A beat's reference. The note is optional because the file is usually enough on its own.
+ */
+export const vStoryReference: Validator<StoryReference> = vObject<StoryReference>({
+  asset: vAssetPath,
+  note: vOptional(vString),
+});
+
+/**
+ * A story beat, per issue #33.
+ *
+ * `title` and `notes` default to empty rather than being required: a beat is dropped on the timeline
+ * first and written afterwards, and a schema that refused an unwritten one would make the board
+ * unusable in exactly the moment it is most useful.
+ *
+ * `accent` is an index into the categorical roles, validated as one of five — a stored colour would be
+ * the one place in this application naming a colour outside the palette, and unreadable in a theme it
+ * was not chosen for.
+ */
+export const vStoryBeat: Validator<StoryBeat> = vObject<StoryBeat>({
+  id: vStoryBeatId,
+  span: vFrameSpan,
+  title: vWithDefault(vString, ''),
+  notes: vWithDefault(vString, ''),
+  references: vWithDefault(vArray(vStoryReference), []),
+  accent: vOptional(vStoryAccent),
+});
+
 export const vSequence: Validator<Sequence> = vObject<Sequence>({
   id: vSequenceId,
   tracks: vWithDefault(vArray(vTrack), []),
@@ -414,4 +459,7 @@ export const vTimelineDocument: Validator<TimelineDocument> = vObject<TimelineDo
   resolution: vResolution,
   sequence: vSequence,
   masks: vWithDefault(vArray(vMaskDefinition), []),
+  // Defaulted, so every project written before the board existed opens with an empty one rather than
+  // failing to load.
+  story: vWithDefault(vArray(vStoryBeat), []),
 });

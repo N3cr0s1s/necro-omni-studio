@@ -11,3 +11,4 @@ export * from './keyframe-edits.js';
 export * from './clip.js';
 export * from './track.js';
 export * from './document.js';
+export * from './story.js';

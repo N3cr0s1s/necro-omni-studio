@@ -22,6 +22,7 @@ import {
   type VideoClip,
 } from '../document/clip.js';
 import { type Track } from '../document/track.js';
+import { type StoryBeat } from '../document/story.js';
 import {
   type MaskDefinition,
   type Marker,
@@ -375,6 +376,33 @@ export function serializeDocument(document: TimelineDocument): JsonObject {
     resolution: { width: document.resolution.width, height: document.resolution.height },
     sequence: serializeSequence(document.sequence),
     masks: document.masks.length === 0 ? undefined : document.masks.map(serializeMask),
+    // Omitted entirely when there is no board, like every other empty collection here: a project that
+    // never used the feature reads the same as it did before the feature existed.
+    story: document.story.length === 0 ? undefined : document.story.map(serializeStoryBeat),
+  });
+}
+
+/**
+ * A story beat, per issue #33.
+ *
+ * `title` and `notes` are written even when empty, unlike most fields here. A beat *is* its text, and
+ * omitting an empty one would make a freshly dropped beat and a beat someone deliberately blanked
+ * indistinguishable on disk — the schema fills both back in as empty, so nothing breaks, but the file
+ * stops describing what the user actually did.
+ */
+export function serializeStoryBeat(beat: StoryBeat): JsonObject {
+  return compact({
+    id: beat.id as string,
+    span: serializeFrameSpan(beat.span),
+    title: beat.title,
+    notes: beat.notes,
+    references:
+      beat.references.length === 0
+        ? undefined
+        : beat.references.map((reference) =>
+            compact({ asset: reference.asset as string, note: reference.note }),
+          ),
+    accent: beat.accent,
   });
 }
 

@@ -15,6 +15,7 @@ import {
   presetId,
   projectId,
   sequenceId,
+  storyBeatId,
   trackId,
 } from '../document/ids.js';
 import { animatedNumber, staticNumber } from '../document/params.js';
@@ -267,6 +268,28 @@ export function richDocument(): TimelineDocument {
           { frame: frameIndex(12), x: 0.5, y: 0.4, include: true },
           { frame: frameIndex(12), x: 0.1, y: 0.1, include: false },
         ],
+      },
+    ],
+    // Two beats, per issue #33: one carrying every field and one carrying only what a freshly dropped
+    // beat has, because both shapes have to survive a save and the second is the common one.
+    story: [
+      {
+        id: storyBeatId('b1'),
+        span: spanFromBounds(frameIndex(0), frameIndex(90)),
+        title: 'Wide establishing shot',
+        notes: '# The dune\n\nThe rider crests it, engine roaring.',
+        references: [
+          { asset: assetPath('media/frame.png'), note: 'the light in this' },
+          { asset: assetPath('media/interview_a.mp4') },
+        ],
+        accent: 3,
+      },
+      {
+        id: storyBeatId('b2'),
+        span: spanFromBounds(frameIndex(90), frameIndex(180)),
+        title: '',
+        notes: '',
+        references: [],
       },
     ],
   };

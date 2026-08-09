@@ -1,6 +1,7 @@
 import { type FrameRate } from '../time/frame-rate.js';
 import { type FrameCount, type FrameIndex, frameCount, frameIndex } from '../time/frame-time.js';
 import { type FrameSpan } from '../time/frame-span.js';
+import type { StoryBeat } from './story.js';
 import { type Clip, type Transition } from './clip.js';
 import {
   type AssetPath,
@@ -87,6 +88,14 @@ export interface TimelineDocument {
   readonly resolution: Resolution;
   readonly sequence: Sequence;
   readonly masks: readonly MaskDefinition[];
+  /**
+   * The story board: what is meant to happen, on the same clock as the cut.
+   *
+   * Issue #33. In the document rather than beside it, because intent that lives outside the project
+   * goes stale the first time the folder moves — and because undo, autosave and crash recovery are
+   * already uniform here and a plan stored anywhere else would need its own answer to all three.
+   */
+  readonly story: readonly StoryBeat[];
 }
 
 /** Current on-disk schema version. */
@@ -211,6 +220,8 @@ export function createDocument(options: CreateDocumentOptions): TimelineDocument
     frameRate: options.frameRate,
     resolution: options.resolution,
     masks: [],
+    // No plan yet, which is a different thing from no story: a board is written, not derived.
+    story: [],
     sequence: {
       id: options.sequenceId,
       markers: [],

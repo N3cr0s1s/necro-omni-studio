@@ -583,6 +583,48 @@ second value could never be entered. It holds the typed text and writes the draf
 re-seeding only when the stored list is not what the field spells. Only driving the control found this
 — the pure functions under it were all correct.
 
+### Story board rules (keep these)
+
+Issue #33: a plan on the same clock as the cut. A beat says *when* something should happen, *what* it
+is in prose, and *what it should look and sound like* by pointing at material already in the project.
+A plan, not a render — nothing here is composited, exported or mixed.
+
+**In the document, not beside it.** Intent that lives outside the project goes stale the first time the
+folder moves, and §4 promises that zipping the folder moves the whole project. It also means undo,
+autosave and crash recovery are already answered: a plan stored anywhere else would be the only part of
+the editor where a mistake could not be taken back.
+
+**A span, not a point.** A marker says "here"; a beat says "through here", which is what describing a
+shot that runs three seconds needs.
+
+**An accent index, never a colour.** A stored `#3b82f6` would be the one place naming a colour outside
+the palette — unreadable in a theme it was not chosen for, and exactly what the theme audit exists to
+catch. An accent indexes the categorical roles, so a board coloured under one theme stays legible under
+all six. Validated as one of five, because a sixth renders as no colour at all: a beat that draws as
+nothing, in a file that loaded without complaint.
+
+**Markdown, not a form.** This is the text a generator prompt is later written *from*, and fields for
+camera, subject and mood would decide in advance what a shot is allowed to be about.
+
+**No `Result` on the operations.** Beats may overlap — two ideas about the same three seconds is a
+normal state for a plan — so there is no collision to report, and an error branch that never happens is
+one readers learn to ignore.
+
+**Sorted on read, not on write.** A beat being dragged passes through every position between where it
+was and where it lands, and a list that reordered itself under the pointer is the one behaviour a
+timeline must not have.
+
+**Ids carry the frame they were made at.** A random id would make an unchanged project serialize
+differently on every run, which is unreadable in version control.
+
+`beatReferences` is deliberately named apart from the document's own `referencedAssets`: a beat's
+references are material the *cut* may never touch — that is the point of a reference — and conflating
+them would make "unused" mean different things depending on which a caller reached for.
+
+The `every-field` guard caught the new fields the moment they existed, which is what it is for: the
+rich fixture carries two beats, one with every field and one with only what a freshly dropped beat has,
+because both shapes have to survive a save and the second is the common one.
+
 ### Panel tab rules (keep these)
 
 Issue #29: the right column had one `inspector` tab holding a clip's name, its timing, its framing,

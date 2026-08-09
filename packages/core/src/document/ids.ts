@@ -16,6 +16,8 @@ export type TransitionId = Brand<string, 'TransitionId'>;
 export type EffectInstanceId = Brand<string, 'EffectInstanceId'>;
 export type KeyframeId = Brand<string, 'KeyframeId'>;
 export type MaskId = Brand<string, 'MaskId'>;
+/** A beat on the story board, per issue #33. Its own brand: a beat is not a clip and not a marker. */
+export type StoryBeatId = Brand<string, 'StoryBeatId'>;
 
 /**
  * A path relative to the project folder, using `/` separators on every platform.
@@ -66,6 +68,8 @@ export const effectInstanceId = (value: string): EffectInstanceId =>
 export const keyframeId = (value: string): KeyframeId =>
   unsafeBrand<KeyframeId>(requireNonEmpty(value, 'KeyframeId'));
 export const maskId = (value: string): MaskId => unsafeBrand<MaskId>(requireNonEmpty(value, 'MaskId'));
+export const storyBeatId = (value: string): StoryBeatId =>
+  unsafeBrand<StoryBeatId>(requireNonEmpty(value, 'StoryBeatId'));
 export const contentHash = (value: string): ContentHash =>
   unsafeBrand<ContentHash>(requireNonEmpty(value, 'ContentHash'));
 export const generatorId = (value: string): GeneratorId =>
