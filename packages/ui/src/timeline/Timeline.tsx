@@ -901,7 +901,9 @@ function SnapLine({ px, kind }: { readonly px: number; readonly kind: string }):
       className="pointer-events-none absolute inset-y-0 z-3 w-0 border-l border-dashed border-chart-3"
       style={{ left: px }}
     >
-      <span className="absolute top-0.5 left-1 font-mono text-[9px] whitespace-nowrap text-chart-3">
+      {/* The line is drawn in `chart-3`; its label is not. Nine-pixel text in a fill colour is the
+          worst case of the rule in the theme notes — 2.29:1 under zinc. */}
+      <span className="text-foreground absolute top-0.5 left-1 font-mono text-[9px] whitespace-nowrap">
         {kind.replace(/-/g, ' ')}
       </span>
     </div>

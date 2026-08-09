@@ -2033,10 +2033,12 @@ function TitleBar({
           said about generation, and there was no way to learn which three. */}
       <Badge
         variant={sidecar?.available === true ? 'secondary' : 'outline'}
-        className={cn('ml-auto font-mono', sidecar?.available === true && 'text-chart-2')}
+        className="ml-auto font-mono"
         title={sidecar?.detail ?? ''}
       >
-        <ServerIcon />
+        {/* Colour on the glyph, never on the words — no chart role clears AA as text in any of the
+            shipped themes. See the theme rules in the plan. */}
+        <ServerIcon className={cn(sidecar?.available === true && 'text-chart-2')} />
         {sidecar === undefined ? 'sidecar idle' : sidecar.available ? 'sidecar ready' : 'sidecar unavailable'}
       </Badge>
       {project !== undefined && <AutosaveChip status={autosaveStatus} />}

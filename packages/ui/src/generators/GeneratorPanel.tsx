@@ -31,6 +31,7 @@ import {
   ArrowRightIcon,
   CameraIcon,
   CircleAlertIcon,
+  CircleCheckIcon,
   LockIcon,
   LockOpenIcon,
   SparklesIcon,
@@ -321,7 +322,8 @@ function StatusBadge({ record }: { readonly record: RegistryRecord }): ReactNode
   switch (record.status) {
     case 'available':
       return (
-        <Badge variant="secondary" className="ml-auto text-chart-2">
+        <Badge variant="secondary" className="ml-auto">
+          <CircleCheckIcon className="text-chart-2" />
           ready
         </Badge>
       );
@@ -358,7 +360,8 @@ function CapabilityBadges({ manifest }: { readonly manifest: GeneratorManifest }
       {manifest.consumes.length > 0 && (
         <ArrowRightIcon aria-hidden="true" className="size-3 text-muted-foreground" />
       )}
-      <Badge variant="secondary" className="text-chart-4">
+      <Badge variant="secondary">
+        <SparklesIcon className="text-chart-4" />
         {manifest.produces}
       </Badge>
       <Badge variant={manifest.duration === 'discovered' ? 'outline' : 'secondary'}>

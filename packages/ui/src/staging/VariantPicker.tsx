@@ -1,5 +1,13 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { ChevronLeftIcon, ChevronRightIcon, CircleXIcon, PlayIcon, SquareIcon, XIcon } from 'lucide-react';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CircleXIcon,
+  PlayIcon,
+  SparklesIcon,
+  SquareIcon,
+  XIcon,
+} from 'lucide-react';
 import {
   type VariantCandidate,
   type VariantSelection,
@@ -110,7 +118,12 @@ export function VariantPicker({
         <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Variants
         </CardTitle>
-        <span className="ml-auto font-mono text-xs text-chart-4">{describeSelection(selection)}</span>
+        {/*
+          The count reads at full contrast; the card's `chart-4` edge already says a generator made
+          this. Drawn in `chart-4` it was 2.46:1 on this surface in the default appearance and 1.42:1
+          under zinc — see the theme rules: those roles are fills, never words.
+        */}
+        <span className="text-foreground ml-auto font-mono text-xs">{describeSelection(selection)}</span>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3 px-3">
@@ -186,8 +199,12 @@ export function VariantPicker({
           // The seed is provenance: it is what makes a variant reproducible later, so it is shown rather
           // than kept in the job record only.
           <div className="flex items-center gap-2 font-mono text-xs">
+            {/* An icon in the categorical colour, the number at full contrast — the rule the track
+                header arrived at first, and the reason it is a rule: the seed is the one thing on
+                this card someone copies out by hand. */}
+            <SparklesIcon aria-hidden="true" className="text-chart-4 size-3 shrink-0" />
             <span className="text-muted-foreground">seed</span>
-            <span className="text-chart-4">{current.seed}</span>
+            <span className="text-foreground">{current.seed}</span>
           </div>
         )}
 
@@ -298,7 +315,10 @@ export function VariantPlaceholder({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        'absolute top-0 justify-start gap-2 overflow-hidden border bg-chart-4/10 px-2 text-xs whitespace-nowrap text-chart-4',
+        // The tint and the edge carry the colour; the label does not. `chart-4` on a 10% wash of
+        // itself is the same contrast as on the bare surface, which is below AA in four of the six
+        // themes.
+        'text-foreground absolute top-0 justify-start gap-2 overflow-hidden border bg-chart-4/10 px-2 text-xs whitespace-nowrap',
         // Dashed while the length is provisional: a solid edge would claim a precision the manifest does
         // not have, and the clip is about to change length.
         provisional ? 'border-dashed' : 'border-solid',

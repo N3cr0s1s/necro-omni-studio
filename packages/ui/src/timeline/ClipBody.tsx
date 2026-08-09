@@ -211,9 +211,11 @@ export function ClipBody({
             {clip.effects.some((effect) => effect.mask !== undefined) && (
               <Badge
                 variant="secondary"
-                className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px] text-chart-4"
+                // Colour on the glyph, the word at the badge's own contrast. `chart-4` on a
+                // secondary surface is 1.42:1 under zinc — see the theme rules.
+                className="h-3.5 flex-none gap-0.5 px-1 font-mono text-[8.5px]"
               >
-                <SquareDashedIcon className="size-2" />
+                <SquareDashedIcon className="text-chart-4 size-2" />
                 mask
               </Badge>
             )}
@@ -231,7 +233,9 @@ export function ClipBody({
         )}
 
         {!compact && clip.provenance?.seed !== undefined && geometry.widthPx > 90 && (
-          <div className="absolute bottom-1 left-1.5 font-mono text-[9px] text-chart-4">
+          // The seed is provenance and the smallest text on the clip, which makes it the worst
+          // possible place for a fill colour. The sparkle above already says a generator made this.
+          <div className="text-foreground absolute bottom-1 left-1.5 font-mono text-[9px]">
             seed {clip.provenance.seed}
           </div>
         )}

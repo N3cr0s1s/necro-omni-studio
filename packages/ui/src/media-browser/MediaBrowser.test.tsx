@@ -269,8 +269,15 @@ describe('watcher status', () => {
 });
 
 /** The classes on the artifact row named `label`, which is where its readiness is expressed. */
+/**
+ * The class on the readiness *glyph*, which is where the colour lives.
+ *
+ * On the row until the theme audit showed that no chart role clears AA as text in any shipped
+ * palette — `chart-2` on a card is 3.66:1 at its worst. The colour moved to the icon and the word
+ * stayed legible, so this reads the icon.
+ */
 function readinessOf(label: string): string {
-  return screen.getByText(label).className;
+  return screen.getByText(label).querySelector('svg')?.getAttribute('class') ?? '';
 }
 
 describe('AssetDetail', () => {

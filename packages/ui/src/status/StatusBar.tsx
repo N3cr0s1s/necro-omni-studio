@@ -277,8 +277,10 @@ function StateBadge({ state }: { readonly state: Activity['state'] }): ReactNode
     );
   }
   return (
-    <Badge variant="secondary" className="gap-1 text-chart-2">
-      <CircleCheckIcon />
+    // Colour on the tick, the word at the badge's own contrast — the rule in the theme notes: the
+    // chart roles are fills, and no palette here clears AA with one of them as text.
+    <Badge variant="secondary" className="gap-1">
+      <CircleCheckIcon className="text-chart-2" />
       done
     </Badge>
   );

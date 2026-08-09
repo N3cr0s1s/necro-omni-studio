@@ -814,13 +814,15 @@ async function readProjectText(path: string): Promise<string> {
 function BackendLine({ runtime }: { readonly runtime: GeneratorRuntime }): ReactNode {
   const live = runtime.mode === 'comfyui';
   return (
-    <p
-      className={cn(
-        'flex items-center gap-1.5 font-mono text-xs',
-        live ? 'text-chart-2' : 'text-destructive',
+    // The warning keeps `text-destructive`, which is a role every theme is measured on and which is
+    // meant to be loud. The healthy line does not: `chart-2` is a fill colour, so it goes on the chip
+    // and the sentence reads at the panel's own contrast.
+    <p className={cn('flex items-center gap-1.5 font-mono text-xs', !live && 'text-destructive')}>
+      {live ? (
+        <CpuIcon className="text-chart-2 size-3.5 shrink-0" />
+      ) : (
+        <TriangleAlertIcon className="size-3.5 shrink-0" />
       )}
-    >
-      {live ? <CpuIcon className="size-3.5 shrink-0" /> : <TriangleAlertIcon className="size-3.5 shrink-0" />}
       {runtime.detail}
     </p>
   );

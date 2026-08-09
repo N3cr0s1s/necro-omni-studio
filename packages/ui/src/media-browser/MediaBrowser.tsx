@@ -17,6 +17,7 @@ import {
   RadioIcon,
   RefreshCwIcon,
   SearchIcon,
+  SparklesIcon,
   TriangleAlertIcon,
   XIcon,
 } from 'lucide-react';
@@ -738,9 +739,13 @@ export function AssetDetail({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className={cn('truncate text-sm font-medium', isGenerated && 'text-chart-4')}>{name}</span>
+        {/* The name stays at full contrast whatever made the file: the icon beside it is already
+            drawn in the generated colour, and a filename is the one thing in this row a user reads
+            character by character. */}
+        <span className="truncate text-sm font-medium">{name}</span>
         {isGenerated && (
-          <Badge variant="secondary" className="text-chart-4">
+          <Badge variant="secondary">
+            <SparklesIcon className="text-chart-4" />
             generated
           </Badge>
         )}
@@ -767,8 +772,10 @@ function DerivedState({
   if (ready === undefined) return null;
   const Icon = ready ? CircleCheckIcon : CircleDashedIcon;
   return (
-    <span className={cn('flex items-center gap-1', ready && 'text-chart-2')}>
-      <Icon className="size-3" />
+    // The tick carries the state; the word stays where `muted-foreground` put it. `chart-2` on a card
+    // is 3.66:1 at its worst across the shipped themes, which is under the bar for text this small.
+    <span className="flex items-center gap-1">
+      <Icon className={cn('size-3', ready && 'text-chart-2')} />
       {label}
     </span>
   );

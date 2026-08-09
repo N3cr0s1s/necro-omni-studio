@@ -256,7 +256,9 @@ export function KeyframeLane({
                 <Badge
                   variant="secondary"
                   className={cn(
-                    'cursor-pointer font-mono whitespace-nowrap text-chart-2',
+                    // The badge's own foreground: this is a *number the user reads and edits*, and
+                    // `chart-2` on a secondary surface is 3.08:1 at its worst across the themes.
+                    'cursor-pointer font-mono whitespace-nowrap',
                     isSelected ? 'h-5 px-1.5 text-[10px]' : 'h-3.5 px-1 text-[8.5px]',
                   )}
                 >

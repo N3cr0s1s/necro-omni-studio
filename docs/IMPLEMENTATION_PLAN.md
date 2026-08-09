@@ -1223,14 +1223,19 @@ broken. Categories are compared by OKLab distance instead.
   `relativeLuminance` linearized it again, so every dark colour scored far darker than it is. A
   conversion wrong by a gamma curve returns a plausible colour for every input; only a number from an
   outside source catches it — here, that `oklch(0.5 0 0)` is `#636363`.
-- **`chart-*` is drawn as text in a dozen places and it is not a text palette.** Measured against the
-  surface it sits on it runs from 10.5:1 down to 1.7:1 across shadcn's own palettes, and in the
-  application's default dark appearance the variant picker's seed sits at 2.90:1 — below AA today,
-  before any theme was added. The timeline already found this once and wrote it down: "those roles are
+- **`chart-*` was drawn as text in a dozen places and it is not a text palette.** Measured against the
+  surface it sits on it runs from 10.5:1 down to **1.42:1** across the six palettes, and in the
+  application's default dark appearance the variant picker's seed sat at 2.90:1 — below AA before any
+  theme was added. The timeline had already found this once and written it down: "those roles are
   chosen to be legible as a fill behind something, and `chart-1` on a light background is barely
-  there." The fix it applied there — colour on the icon, the words at full contrast — is the rule, and
-  it has not yet been applied everywhere else. **This is the next thing to do**, and it is a legibility
-  fix rather than a theme one.
+  there." Now fixed everywhere: colour on the glyph, words at full contrast.
+
+**The rule is mechanical, so it is checked mechanically.** `chart-tone.test.ts` scans every `.tsx` in
+`packages/ui` and `apps/desktop` and fails a `text-chart-*` that sits on anything but a self-closing
+element — an icon has no words of its own; a container will hold some. A tone written as a *value*
+(`glyphs.ts` per asset type, the timeline per track kind) is not a paint and is not matched, and
+`bg-chart-*` / `border-chart-*` are left alone because a fill is what these roles are for. Verified by
+putting one back.
 
 **Never revert a mutant with `git checkout` on a file holding uncommitted work.** Doing so here
 discarded the whole setting the mutant was testing, not just the mutant. Copy the file aside first, or

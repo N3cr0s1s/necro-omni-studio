@@ -72,9 +72,9 @@ function Provenance({
             >
               <span className="text-muted-foreground">{row.label}</span>
               <span
-                className={cn(
-                  row.long === true ? 'break-words whitespace-pre-wrap text-chart-4' : 'truncate',
-                )}
+                // A prompt is the longest thing on this panel and the most read; it belongs at full
+                // contrast. The generated colour is already on the row's glyph.
+                className={cn(row.long === true ? 'break-words whitespace-pre-wrap' : 'truncate')}
               >
                 {row.value}
               </span>
