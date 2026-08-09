@@ -8,10 +8,18 @@ import type { TextContent } from '@nos/core';
  * `rotation`, `opacity`) apply as a transform. Without that rule a text clip with a moving position would
  * re-rasterize every frame, which at 1080p is far too slow to hold the spec's 16 ms budget.
  *
- * `letterSpacing` and `lineHeight` are the awkward pair: the spec lists them as keyframable, but both
- * change glyph *layout*, so animating either genuinely does require re-rasterization. They are therefore
- * part of the cache key, and animating them is honestly slower — documented rather than silently
- * degraded.
+ * `letterSpacing` and `lineHeight` are the awkward pair. `interfaces.md` §5.1 lists them as
+ * keyframable while §5.4 leaves them out of the cache key, and the two cannot both hold: either changes
+ * glyph *layout*, so animating one genuinely requires re-rasterizing every frame it changes on.
+ *
+ * The document model resolves this by making them **static**, and they are part of the cache key
+ * accordingly. That is a real divergence from §5.1 rather than an oversight, and the reason is the
+ * spec's own 16 ms budget: a 1080p title re-rasterized per frame does not fit in it, so the choice is
+ * between an animation that stutters and one that is not offered. Animating position, scale, rotation
+ * and opacity — which are transforms and cost nothing — covers what the presets in §5.2 actually need.
+ *
+ * If it is wanted later, the honest shape is an explicit opt-in on the clip, so the cost is chosen
+ * rather than discovered.
  */
 
 /** The layout produced by rasterizing, used by the typewriter mechanism. */
