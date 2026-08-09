@@ -756,6 +756,13 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
   reads nothing the renderer did not already hand over.
 - Two routes to the same effect share one routine. The chooser and the drag differ only in how the
   paths were picked, and separate copiers would eventually name files by different rules.
+- Settings that belong to the **installation** live beside `session.json` in `userData`, never in
+  `project.json`: a cap on how much work a machine takes on follows the machine, not the cut. §5.8's
+  global variant override was declared in the queue and unreachable for want of anywhere to put it.
+- Settings are read **tolerantly, per field**, so one hand-edited mistake does not cost the rest — and
+  so a file from an older build simply has defaults for what it does not mention.
+- A number out of range is **clamped, not discarded**; something that is not a number is. The first
+  says what the user wanted, the second says nothing.
 - The **main process may import types from the workspace packages, never values**. It is loaded as
   source rather than bundled, so a value import fails to resolve and the application does not start at
   all. Put the rule in the renderer and leave the privileged parts — dialogs, filesystem — to main.
