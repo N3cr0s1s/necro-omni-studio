@@ -220,6 +220,36 @@ describe('markSaved and reset', () => {
     expect(store.getSnapshot().dirty).toBe(true);
   });
 
+  it('reset can leave the document unsaved, for work recovered after a crash', () => {
+    /*
+     * The bug this exists for. Restoring a recovery reset the store, which marked the recovered
+     * document as *saved* — so the editor believed unwritten work was safe: nothing to autosave, no
+     * prompt on close, and the recovered work gone on the next quit. It is unwritten by definition;
+     * that is why it was in a recovery file.
+     */
+    const store = createDocumentStore(makeDocument('first'));
+    store.reset(makeDocument('recovered'), { saved: false });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.document.name).toBe('recovered');
+    expect(snapshot.dirty).toBe(true);
+    // Still a starting point: stacking it on a history the user never saw would make undo nonsense.
+    expect(snapshot.canUndo).toBe(false);
+  });
+
+  it('an unsaved reset becomes clean once it is written', () => {
+    const store = createDocumentStore(makeDocument('first'));
+    store.reset(makeDocument('recovered'), { saved: false });
+    store.markSaved();
+    expect(store.getSnapshot().dirty).toBe(false);
+  });
+
+  it('reset takes its history label from the options', () => {
+    const store = createDocumentStore(makeDocument('first'));
+    store.reset(makeDocument('second'), { label: 'Recover' });
+    expect(store.getSnapshot().document.name).toBe('second');
+  });
+
   it('reset replaces the document and drops history', () => {
     const store = createDocumentStore(makeDocument('first'));
     store.commit('Rename', rename('changed'));

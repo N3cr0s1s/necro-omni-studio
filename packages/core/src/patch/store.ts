@@ -51,6 +51,14 @@ export interface StoreSnapshot {
  * An interface rather than a class so tests and the manifest inspector can substitute a
  * store that records commits without persisting them.
  */
+/** How a reset should be recorded. */
+export interface ResetOptions {
+  /** History label for the new starting point. */
+  readonly label?: string;
+  /** Whether the document is what is on disk. `false` leaves it dirty, for recovered work. */
+  readonly saved?: boolean;
+}
+
 export interface DocumentStore {
   getSnapshot(): StoreSnapshot;
   getDocument(): TimelineDocument;
@@ -87,7 +95,15 @@ export interface DocumentStore {
   markSaved(): void;
 
   /** Replaces the document and drops history. For opening a project or reverting. */
-  reset(document: TimelineDocument, label?: string): void;
+  /**
+   * Replaces the document and its history, as opening a project does.
+   *
+   * `saved` says whether the new document is what is on disk, and it is not always: recovered work is
+   * a starting point the *history* should forget, but it is emphatically not what `project.json`
+   * holds. Marking it saved makes the editor believe an unwritten document is safe — no prompt on
+   * close, nothing to autosave — which loses precisely the work that was just recovered.
+   */
+  reset(document: TimelineDocument, options?: ResetOptions): void;
 }
 
 export interface DocumentStoreOptions {
@@ -168,13 +184,23 @@ export function createDocumentStore(
       publish();
     },
 
-    reset(document, label = 'Open project') {
-      history = clearHistory(createHistory(document, label));
-      savedDocument = document;
+    reset(document, options = {}) {
+      history = clearHistory(createHistory(document, options.label ?? 'Open project'));
+      // `saved` defaults to true because the usual reset *is* an open, and a document just read from
+      // disk is by definition what is on disk. The exception has to say so.
+      savedDocument = options.saved === false ? UNSAVED : document;
       publish();
     },
   };
 }
+
+/**
+ * A document no real document can equal, so `dirty` is true until something is written.
+ *
+ * A sentinel rather than a boolean flag beside `savedDocument`, because `dirty` is derived by identity
+ * from one place — adding a second source of truth is how the two eventually disagree.
+ */
+const UNSAVED = {} as TimelineDocument;
 
 function buildSnapshot(history: HistoryState<TimelineDocument>, saved: TimelineDocument): StoreSnapshot {
   return {

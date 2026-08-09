@@ -121,9 +121,16 @@ export function useAutosave(options: AutosaveOptions): Autosave {
 
   const accept = useCallback(() => {
     if (decision.kind !== 'offer') return;
-    // Reset rather than commit: the recovered document *is* the session's starting point, and
-    // stacking it on the history of a document the user never saw would make undo nonsense.
-    store.reset(decision.recovered);
+    /*
+     * Reset rather than commit: the recovered document *is* the session's starting point, and stacking
+     * it on the history of a document the user never saw would make undo nonsense.
+     *
+     * But **not saved**. It is unwritten work by definition — that is why it was in a recovery file —
+     * and marking it saved told the editor an unwritten document was safe: nothing to autosave, no
+     * prompt on close, and the recovered work lost on the next quit. Restoring it has to leave the
+     * project dirty, exactly as the edits that produced it did.
+     */
+    store.reset(decision.recovered, { saved: false });
     setDecision({ kind: 'none' });
   }, [decision, store]);
 

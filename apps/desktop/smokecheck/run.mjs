@@ -349,6 +349,25 @@ try {
   if (/was recovered/i.test(body)) pass('unsaved work is offered back after a hard kill');
   else fail('a hard kill lost unsaved work — nothing was offered back');
 
+  /*
+   * Restoring it must leave the project **dirty**. Recovered work is unwritten by definition — that is
+   * why it was in a recovery file — and marking it saved told the editor an unwritten document was
+   * safe: nothing to autosave, no prompt on close, and the work gone on the next quit.
+   *
+   * The unsaved marker beside the project name is the observable — a bullet after it — which is what
+   * the user reads too.
+   */
+  const restore = recovered.getByRole('button', { name: 'Restore it' });
+  if ((await restore.count()) > 0) {
+    await restore.click();
+    await recovered.waitForTimeout(1500);
+    const header = await recovered.locator('body').innerText();
+    if (/smokecheck\s*•/.test(header)) pass('recovered work is still unsaved until it is written');
+    else fail('recovered work was marked saved, so quitting would lose it again');
+  } else {
+    fail('the recovery offer had no way to restore the work');
+  }
+
   await after.browser.close().catch(() => undefined);
   stop(after.child);
 } finally {
