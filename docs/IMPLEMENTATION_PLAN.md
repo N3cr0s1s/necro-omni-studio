@@ -521,6 +521,14 @@ ONE_MINUS_SRC_ALPHA)`. Using the colour factors for alpha too yields a wrong
 
 ### Generator framework rules (keep these)
 
+- Parameters that are **alternatives** are declared, never inferred. §2.3's voice is an enum or a
+  sample, one of the two; guessing the pairing from types or roles would silently group parameters
+  nobody meant to group, and a manifest that declares nothing must behave exactly as it did.
+- Choosing an alternative **clears the others**. A submit carries whatever the parameters hold, so a
+  leftover value reaches the graph beside the one the user actually picked.
+- A required either/or that nobody answered **refuses the run**. Submitting neither leaves the graph to
+  decide, which is the ambiguity the group exists to remove.
+
 - A round trip through the inspector must **lose nothing**. `fromManifest` dropped `also`,
   `defaultFrom` and `durationFrom`, so opening one of the project's own MiniMax manifests and saving it
   deleted the `fps` length expression — silent corruption of a file the user already relies on.
