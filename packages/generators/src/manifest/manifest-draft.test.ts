@@ -364,6 +364,7 @@ describe('round tripping an authored manifest', () => {
       { key: 'seed', type: 'seed', bind: '/105:15/inputs/noise_seed' },
     ],
     presets: [],
+    exclusive: [{ members: ['fps', 'width'], label: 'Timing', required: true }],
   };
 
   it('reaches the same manifest again, so editing does not degrade a file', () => {
@@ -388,6 +389,15 @@ describe('round tripping an authored manifest', () => {
       param: 'duration_s',
       unit: 'seconds',
     });
+  });
+
+  it('keeps the parameters that are alternatives to one another', () => {
+    // Added in the same session that fixed three other fields being dropped here, and dropped by the
+    // same omission until this fixture carried it. A field the inspector does not carry is a field it
+    // deletes from every manifest it opens.
+    expect(toManifest(fromManifest(authored)).exclusive).toEqual([
+      { members: ['fps', 'width'], label: 'Timing', required: true },
+    ]);
   });
 
   it('keeps a default that is derived rather than fixed', () => {

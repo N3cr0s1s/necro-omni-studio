@@ -3,6 +3,7 @@ import { generatorId } from '@nos/core';
 import type { GraphLiteral } from '../contracts/introspection.js';
 import type {
   AlsoBinding,
+  ExclusiveGroupDescriptor,
   DurationMode,
   GeneratorManifest,
   GeneratorParam,
@@ -81,6 +82,13 @@ export interface ManifestDraft {
   readonly outputs: readonly OutputDescriptor[];
   readonly params: readonly DraftParam[];
   readonly presets: GeneratorManifest['presets'];
+  /**
+   * Parameters that are alternatives to one another.
+   *
+   * Carried through the draft for the reason every optional field here is: the inspector round trips,
+   * and a field it does not carry is a field it deletes from any manifest it opens.
+   */
+  readonly exclusive?: readonly ExclusiveGroupDescriptor[];
 }
 
 /** An empty draft, for a graph that has just been loaded. */
@@ -327,6 +335,7 @@ export function draftManifestJson(draft: ManifestDraft): Readonly<Record<string,
     outputs: draft.outputs,
     params: draft.params.map(toParam),
     presets: draft.presets,
+    ...(draft.exclusive !== undefined ? { exclusive: draft.exclusive } : {}),
     // Declared rather than inferred: a manifest whose pointers are still empty must land in the registry as
     // `unbound`, which is what greys it with "graph not connected" instead of reporting it as broken.
     ...(draft.graph === null || draft.params.some((param) => (param.pointer ?? '').trim() === '')
@@ -401,6 +410,7 @@ export function fromManifest(manifest: GeneratorManifest): ManifestDraft {
       ...(param.defaultFrom !== undefined ? { defaultFrom: param.defaultFrom } : {}),
     })),
     presets: manifest.presets,
+    ...(manifest.exclusive !== undefined ? { exclusive: manifest.exclusive } : {}),
   };
 }
 
