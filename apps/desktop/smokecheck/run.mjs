@@ -451,6 +451,22 @@ try {
    * the operation at all, and that the ramps it writes survive to the file. The clip is duplicated
    * first because the fixture has one clip per track and a crossfade needs two.
    */
+  /*
+   * A head handle first, so the cut the duplicate makes can actually carry a crossfade.
+   *
+   * The fixture's tone starts at source frame zero, which means there is nothing *before* its in-point
+   * to fade through — so a crossfade at that cut is correctly refused, and a check written against it
+   * would only ever confirm the refusal. Slipping the clip six frames in gives it a handle, through
+   * the `source in` field a user would use, which is also the only control that can create this
+   * precondition at all.
+   */
+  const sourceIn = page.getByLabel('source in');
+  if ((await sourceIn.count()) > 0) {
+    await sourceIn.fill('6');
+    await sourceIn.press('Enter');
+    await page.waitForTimeout(600);
+  }
+
   await page.keyboard.press('Control+d');
   await page.waitForTimeout(900);
 
@@ -459,6 +475,58 @@ try {
     fail('duplicating a clip did not produce a second one to overlap');
   } else {
     pass('a clip can be duplicated, giving something to overlap');
+
+    /*
+     * The crossfade at the cut, driven on the pair the duplicate just made — they are flush, which is
+     * exactly the state this edit is for.
+     *
+     * What only the assembled window can show is that the menu row's offered length and the edit's own
+     * limit agree. They are two derivations of "what can this cut carry", computed in different files
+     * from the same function, and a row that promises a fade the edit then refuses is the shape this
+     * codebase's drifts take.
+     */
+    await audioClips.nth(0).click({ button: 'right', force: true });
+    await page.waitForTimeout(600);
+    const cutRow = page.getByRole('menuitem', { name: /Crossfade at the cut/ });
+
+    if ((await cutRow.count()) === 0) {
+      fail('the clip menu offers no crossfade at the cut');
+    } else if (!(await cutRow.first().isEnabled())) {
+      fail(`the cut was offered no crossfade — ${String(await cutRow.first().textContent()).trim()}`);
+    } else {
+      const offered = String(await cutRow.first().textContent()).trim();
+      await cutRow.first().click();
+      await page.waitForTimeout(900);
+
+      const saved = () => JSON.parse(readFileSync(join(project, 'project.json'), 'utf8'));
+      await page.keyboard.press('Control+s');
+      let joined;
+      for (let attempt = 0; attempt < 20 && joined === undefined; attempt += 1) {
+        await page.waitForTimeout(500);
+        const track = saved().sequence.tracks.find((entry) => entry.id === 'A1');
+        const clips = [...(track?.clips ?? [])].sort((a, b) => a.span.start - b.span.start);
+        const [out, incoming] = clips;
+        if (
+          clips.length === 2 &&
+          out.span.start + out.span.duration > incoming.span.start &&
+          (out.fade?.outFrames ?? 0) > 0 &&
+          (incoming.fade?.inFrames ?? 0) > 0
+        ) {
+          joined = out.span.start + out.span.duration - incoming.span.start;
+        }
+      }
+
+      if (joined === undefined) {
+        fail(`the cut offered "${offered}" and made no crossfade`);
+      } else {
+        pass(`a crossfade can be made at a cut (${offered} → ${joined} f overlap, both sides ramped)`);
+      }
+
+      // Back to the flush cut, so the drag below starts from adjacency and proves its own gesture
+      // rather than inheriting an overlap this section made.
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(800);
+    }
 
     const first = await audioClips.nth(0).boundingBox();
     const second = await audioClips.nth(1).boundingBox();
@@ -521,29 +589,6 @@ try {
    * offered length and the edit's own limit agree — two derivations of "what can this cut carry",
    * computed in different files, which is exactly the shape this codebase's drifts take.
    */
-  {
-    await page
-      .locator('[data-clip-id]')
-      .first()
-      .click({ force: true })
-      .catch(() => undefined);
-    await page.locator('[data-clip-id]').first().click({ button: 'right', force: true });
-    await page.waitForTimeout(600);
-
-    const row = page.getByRole('menuitem', { name: /Crossfade at the cut/ });
-    if ((await row.count()) === 0) {
-      fail('the clip menu offers no crossfade at the cut');
-    } else {
-      const label = await row.first().textContent();
-      // Disabled where the cut cannot carry one, which the fixture's single clip per track is: the
-      // row is still *there*, because one that vanishes is one nobody learns exists.
-      const enabled = await row.first().isEnabled();
-      pass(`the cut offers a crossfade (${String(label).trim()}, ${enabled ? 'enabled' : 'disabled'})`);
-    }
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(400);
-  }
-
   /*
    * Undo, and what it says it will undo.
    *
