@@ -84,7 +84,11 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Ctrl', 'Z'], action: 'Undo' },
       { keys: ['Ctrl', 'Shift', 'Z'], action: 'Redo' },
       { keys: ['Ctrl', 'Y'], action: 'Redo', note: 'the other spelling' },
-      { keys: ['F'], action: 'Fit the sequence in the window' },
+      {
+        keys: ['F'],
+        action: 'Fit in the window',
+        note: 'the selection, or the marked range, or everything',
+      },
       { keys: ['='], action: 'Zoom in', note: 'about the middle of the view' },
       { keys: ['-'], action: 'Zoom out' },
       { keys: ['?'], action: 'Show this list' },

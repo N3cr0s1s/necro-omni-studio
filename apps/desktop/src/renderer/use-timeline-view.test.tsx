@@ -82,7 +82,9 @@ interface Harness {
   setPlaying: (playing: boolean) => void;
 }
 
-function mount(options: { document?: TimelineDocument; widthPx?: number } = {}): Harness {
+function mount(
+  options: { document?: TimelineDocument; widthPx?: number; selected?: ReadonlySet<string> } = {},
+): Harness {
   const document = options.document ?? documentWith([clip('a', 0, 3000)]);
   const store = createDocumentStore(document);
   let latest: TimelineView | undefined;
@@ -99,6 +101,7 @@ function mount(options: { document?: TimelineDocument; widthPx?: number } = {}):
       document,
       store,
       widthPx: options.widthPx ?? 1000,
+      selected: options.selected ?? new Set<string>(),
       playhead,
       playing,
     });
@@ -251,6 +254,39 @@ describe('fitting', () => {
     const { scrollFrame, framesPerPixel } = harness.view().viewport;
     expect(scrollFrame).toBeGreaterThan(900);
     expect(300 / framesPerPixel).toBeGreaterThan(500);
+  });
+
+  it('frames the selection first of all, which is the narrowest thing pointed at', () => {
+    // Having selected a clip and pressed Fit, the answer nobody means is "the whole programme".
+    const harness = mount({
+      document: documentWith([clip('a', 0, 3000), clip('b', 2000, 2300)]),
+      selected: new Set(['b']),
+    });
+    act(() => harness.view().fit());
+
+    const { scrollFrame, framesPerPixel } = harness.view().viewport;
+    expect(scrollFrame).toBeGreaterThan(1900);
+    expect(300 / framesPerPixel).toBeGreaterThan(500);
+  });
+
+  it('prefers the selection over the marked range, since it is the later statement of interest', () => {
+    const harness = mount({
+      document: documentWith([clip('a', 0, 3000), clip('b', 2000, 2300)], [100, 400]),
+      selected: new Set(['b']),
+    });
+    act(() => harness.view().fit());
+    expect(harness.view().viewport.scrollFrame).toBeGreaterThan(1900);
+  });
+
+  it('falls back to the marked range when the selection names nothing that exists', () => {
+    // A selection can outlive its clips — an undo removes them — and framing nothing would leave the
+    // view somewhere the user never asked for.
+    const harness = mount({
+      document: documentWith([clip('a', 0, 3000)], [1000, 1300]),
+      selected: new Set(['vanished']),
+    });
+    act(() => harness.view().fit());
+    expect(harness.view().viewport.scrollFrame).toBeGreaterThan(900);
   });
 
   it('survives an empty sequence rather than dividing by nothing', () => {

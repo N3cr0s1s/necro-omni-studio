@@ -15,7 +15,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { allClips, clipsInRegion, combineSelection, withLinkedClips } from './selection.js';
+import { allClips, clipsInRegion, combineSelection, spanOfClips, withLinkedClips } from './selection.js';
 
 /**
  * Which clips a gesture selects.
@@ -192,5 +192,45 @@ describe('linked clips', () => {
     );
 
     expect(withLinkedClips(document, [clipId('v'), clipId('a')])).toHaveLength(2);
+  });
+});
+
+/**
+ * The stretch a selection covers.
+ *
+ * A span rather than a list of spans, because what a caller wants it for is framing: two clips ten
+ * seconds apart are a ten-second selection, however little material lies between them.
+ */
+describe('the span a selection covers', () => {
+  it('reaches from the earliest start to the latest end', () => {
+    const document = documentWith([video('a', 0, 100), video('b', 400, 500), video('c', 200, 260)]);
+    expect(spanOfClips(document, [clipId('a'), clipId('b')])).toEqual(
+      spanFromBounds(frameIndex(0), frameIndex(500)),
+    );
+  });
+
+  it('includes the gap between two distant clips, which is part of the stretch', () => {
+    const document = documentWith([video('a', 0, 10), video('b', 900, 910)]);
+    expect(spanOfClips(document, [clipId('a'), clipId('b')])?.duration).toBe(910);
+  });
+
+  it('spans a single clip exactly', () => {
+    const document = documentWith([video('a', 30, 90)]);
+    expect(spanOfClips(document, [clipId('a')])).toEqual(spanFromBounds(frameIndex(30), frameIndex(90)));
+  });
+
+  it('reaches across tracks, because a selection can', () => {
+    const document = documentWith([video('v', 0, 50)], [audio('a', 200, 300)]);
+    expect(spanOfClips(document, [clipId('v'), clipId('a')])?.duration).toBe(300);
+  });
+
+  it('is nothing for an empty selection, so a caller can fall back rather than special-case zero', () => {
+    const document = documentWith([video('a', 0, 100)]);
+    expect(spanOfClips(document, [])).toBeUndefined();
+  });
+
+  it('is nothing when the selection names clips that are gone', () => {
+    const document = documentWith([video('a', 0, 100)]);
+    expect(spanOfClips(document, [clipId('vanished')])).toBeUndefined();
   });
 });

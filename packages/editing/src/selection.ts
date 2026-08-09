@@ -1,9 +1,13 @@
 import {
   type ClipId,
+  type FrameSpan,
   type SelectionRegion,
   type TimelineDocument,
+  endExclusive,
+  frameIndex,
   linkedPartner,
   overlaps,
+  spanFromBounds,
   trackClips,
 } from '@nos/core';
 
@@ -83,4 +87,34 @@ export function withLinkedClips(document: TimelineDocument, selected: readonly C
     }
   }
   return [...result] as ClipId[];
+}
+
+/**
+ * The stretch of timeline a set of clips covers, from the earliest start to the latest end.
+ *
+ * A *span*, not a list of spans: what a caller wants this for is framing — zooming to what is
+ * selected, or reporting how long a scene runs — and the gaps inside the set are part of that stretch
+ * rather than holes in it. Two clips ten seconds apart are a ten-second selection, however little
+ * material is between them.
+ *
+ * `undefined` for an empty or unknown selection, so a caller can fall back to whatever it fits
+ * otherwise rather than being handed a zero-length span it has to special-case.
+ */
+export function spanOfClips(document: TimelineDocument, selected: readonly ClipId[]): FrameSpan | undefined {
+  const wanted = new Set<string>(selected as readonly string[]);
+  if (wanted.size === 0) return undefined;
+
+  let start = Number.POSITIVE_INFINITY;
+  let end = Number.NEGATIVE_INFINITY;
+
+  for (const track of document.sequence.tracks) {
+    for (const clip of trackClips(track)) {
+      if (!wanted.has(clip.id)) continue;
+      start = Math.min(start, clip.span.start);
+      end = Math.max(end, endExclusive(clip.span));
+    }
+  }
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return undefined;
+  return spanFromBounds(frameIndex(start), frameIndex(end));
 }

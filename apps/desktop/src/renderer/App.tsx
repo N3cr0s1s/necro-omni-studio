@@ -365,6 +365,7 @@ export function App(): ReactNode {
     document,
     store,
     widthPx,
+    selected,
     playhead,
     playing: transport.playing,
   });

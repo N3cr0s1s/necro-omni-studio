@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type ClipId,
   type DocumentStore,
   type FrameIndex,
   type TimelineDocument,
@@ -7,6 +8,7 @@ import {
   frameIndex,
   spanFromBounds,
 } from '@nos/core';
+import { spanOfClips } from '@nos/editing';
 import {
   type TimelineViewport,
   clampZoom,
@@ -50,10 +52,17 @@ export interface TimelineViewOptions {
   readonly playhead: FrameIndex;
   /** True while the transport is running, which is when the view should follow. */
   readonly playing: boolean;
+  /**
+   * What is selected, so Fit can frame it.
+   *
+   * Passed in rather than read from the document: a selection is a property of the session, not of
+   * the project, and the view is the only part of the shell that needs it for this.
+   */
+  readonly selected: ReadonlySet<string>;
 }
 
 export function useTimelineView(options: TimelineViewOptions): TimelineView {
-  const { document, store, widthPx, playhead, playing } = options;
+  const { document, store, widthPx, playhead, playing, selected } = options;
   const [framesPerPixel, setFramesPerPixel] = useState(1);
   const [scrollFrame, setScrollFrame] = useState<FrameIndex>(frameIndex(0));
 
@@ -62,8 +71,8 @@ export function useTimelineView(options: TimelineViewOptions): TimelineView {
     [framesPerPixel, scrollFrame, widthPx, document.frameRate],
   );
 
-  const latest = useRef({ viewport, document });
-  latest.current = { viewport, document };
+  const latest = useRef({ viewport, document, selected });
+  latest.current = { viewport, document, selected };
 
   /**
    * Follows the playhead while the transport runs.
@@ -114,10 +123,21 @@ export function useTimelineView(options: TimelineViewOptions): TimelineView {
   }, []);
 
   const fit = useCallback(() => {
-    const { viewport: current, document: doc } = latest.current;
-    // The marked range when there is one: a user who marked a section and asked to fit means that
-    // section, not the whole programme it sits in.
-    const span = doc.sequence.workRange ?? spanFromBounds(frameIndex(0), documentEnd(doc));
+    const { viewport: current, document: doc, selected: chosen } = latest.current;
+    /*
+     * The narrowest thing the user has pointed at.
+     *
+     * A **selection** first: having selected two clips and pressed Fit, the answer nobody means is
+     * "the whole programme". Then the **marked range**, for the same reason it already won over the
+     * sequence — a marked section is a stated interest in part of it. Then everything.
+     *
+     * Ordered rather than combined, because these are three ways of saying "this bit" and a union of
+     * them would frame a stretch the user never indicated.
+     */
+    const span =
+      spanOfClips(doc, [...chosen] as ClipId[]) ??
+      doc.sequence.workRange ??
+      spanFromBounds(frameIndex(0), documentEnd(doc));
     const fitted = zoomToFit(
       current,
       span.duration > 0 ? span : spanFromBounds(frameIndex(0), frameIndex(1)),
