@@ -96,6 +96,30 @@ const synth = spawnSync('ffmpeg', [
 ]);
 if (synth.status !== 0) fail('the fixture tone could not be synthesized — is ffmpeg installed?');
 
+/*
+ * A ramp on the tone, so the delivered audio can be asked whether it faded.
+ *
+ * Written into the fixture *copy* rather than committed, for the same reason the tone is synthesized:
+ * the file on disk stays the plain case, and the property under test is stated here where the
+ * assertion that reads it can be seen beside it.
+ *
+ * This is the audio half of the bug this harness was built for. Every title was once silently absent
+ * from every delivered file because the export prepared its plan differently from the preview — and
+ * the mixer has exactly the same shape of seam. A fade that plays and does not export would be
+ * invisible to every test in the repository, because each half is correct on its own.
+ */
+const FADE_IN_FRAMES = 15;
+{
+  const file = join(project, 'project.json');
+  const parsed = JSON.parse(readFileSync(file, 'utf8'));
+  for (const track of parsed.sequence.tracks) {
+    for (const clip of track.clips ?? []) {
+      if (clip.kind === 'audio') clip.fade = { inFrames: FADE_IN_FRAMES };
+    }
+  }
+  writeFileSync(file, JSON.stringify(parsed, null, 2));
+}
+
 const port = await freePort();
 /*
  * Hidden unless someone asks to watch. The harnesses drive a real shell over the debugging port
@@ -381,6 +405,47 @@ try {
         if (level === undefined) fail('the delivered audio could not be measured');
         else if (level < -60) fail(`the delivered audio is silent at ${level} dB`);
         else console.log(`✓ the mix reached the delivered file (mean ${level} dB)`);
+
+        /*
+         * And that it *ramped*.
+         *
+         * A fade that plays and does not export is invisible to every unit test here: the model, the
+         * mix plan and the offline renderer are each correct on their own, and only the pair of paths
+         * can be wrong. Measured as two windows rather than one number — the first half of the ramp
+         * against a stretch well past it — because absolute levels depend on the tone and the codec
+         * while the *difference* between two windows of the same tone does not.
+         */
+        const windowLevel = (from, duration) => {
+          const measured = spawnSync(
+            'ffmpeg',
+            [
+              ...['-v', 'info', '-nostats'],
+              ...['-ss', String(from), '-t', String(duration), '-i', delivered],
+              ...['-map', '0:a', '-af', 'volumedetect', '-f', 'null', '-'],
+            ],
+            { encoding: 'utf8' },
+          );
+          const found = /mean_volume:\s*(-?\d+(?:\.\d+)?) dB/.exec(measured.stderr ?? '');
+          return found === null ? undefined : Number(found[1]);
+        };
+
+        // The first quarter of the ramp against a window well clear of it, both inside the tone.
+        const rampSeconds = FADE_IN_FRAMES / 30;
+        const early = windowLevel(0, rampSeconds / 4);
+        const later = windowLevel(rampSeconds, rampSeconds);
+
+        if (early === undefined || later === undefined) {
+          fail('the delivered audio could not be windowed to check the fade');
+        } else if (early >= later - 6) {
+          fail(
+            `the fade did not reach the delivered file — ${early.toFixed(1)} dB at the start against ` +
+              `${later.toFixed(1)} dB past the ramp`,
+          );
+        } else {
+          console.log(
+            `✓ the fade reached the delivered file (${early.toFixed(1)} dB rising to ${later.toFixed(1)} dB)`,
+          );
+        }
       }
 
       /*
