@@ -25,3 +25,4 @@ export * from './backends/mock-backend.js';
 export * from './manifest/choices.js';
 export * from './manifest/param-fields.js';
 export * from './manifest/preset-draft.js';
+export * from './manifest/save-target.js';

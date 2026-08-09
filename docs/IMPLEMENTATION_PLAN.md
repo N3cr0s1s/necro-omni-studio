@@ -585,6 +585,36 @@ re-seeding only when the stored list is not what the field spells. Only driving 
 
 ### Manifest authoring rules (keep these)
 
+**Saying what a save would replace.** A manifest is written to `generators/<id>.manifest.json`, so the
+id *is* the filename and two generators cannot share one. The screen wrote that path unchecked: typing
+an id the library already had replaced a working generator — including one that ships with the project
+— silently and completely. An id is a short slug with nothing on screen to say what is taken, so it is
+not an exotic mistake.
+
+A warning and not a refusal, for the same reason as the export dialog: replacing on purpose is exactly
+what saving a manifest you opened *is*. The screen names what would go and offers a free id in one
+click. Ids are suffixed `_2`, not ` (2)` — an id appears in a filename and in a clip's provenance, and
+a space or a bracket in one is a difference every consumer has to think about.
+
+**`editing` is the id, not a flag.** Reopening a manifest and saving it must not warn. Reopening one
+and *renaming* it onto another must, because that is authoring a new manifest under a taken name — a
+boolean cannot express the difference.
+
+**Absent means "not known".** A screen that has not read the library does not claim an id is free.
+
+**Assert the path that is written, not only the warning.** Nothing in the type system connects "the id
+this warned about" to "the path this wrote", so the two can drift into a screen that warns about one
+manifest and replaces another. `manifestFileName` is the one home for the name, and the test asserts
+what reaches the bridge.
+
+Two notes from getting there. The first drift mutant was **equivalent** under the fixtures —
+`editingId ?? draft.id` is `draft.id` when nothing was opened — and passed while proving nothing; the
+mutant has to differ in a case the tests actually cover. And the first version of the write test
+clicked a *disabled* Save and read an empty list: `draftHasErrors` gates it, and an empty draft has
+three errors, so a test that means to save has to complete the draft first.
+
+
+
 §5.9 says a new generative capability is a JSON file authored from inside the application, with no
 code. It now is. Every field of `GeneratorManifest` has a control, and the claim is checked rather
 than asserted: `ManifestInspector.test.tsx` holds a `Record<keyof GeneratorManifest, …>` mapping each

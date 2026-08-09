@@ -1667,6 +1667,9 @@ export function App(): ReactNode {
       {authoring && (
         <ManifestAuthoring
           graphs={library.graphs}
+          // Every id the library holds, so saving cannot silently replace a generator the user did not
+          // open — the id is the filename, and two manifests cannot share one.
+          takenIds={new Set(library.manifests.map((manifest) => manifest.id as string))}
           onClose={() => setAuthoring(false)}
           onSaved={library.reload}
         />

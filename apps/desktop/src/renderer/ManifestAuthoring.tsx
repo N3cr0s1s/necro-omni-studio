@@ -10,6 +10,7 @@ import {
   fromManifest,
   graphNodeIds,
   promote,
+  saveTarget,
 } from '@nos/generators';
 import { collectLiterals } from '@nos/backend-comfyui';
 import { FileJsonIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
@@ -36,12 +37,33 @@ import { bridge } from './bridge.js';
 export interface ManifestAuthoringProps {
   /** Graph filenames already loaded, so the picker needs no second directory read. */
   readonly graphs: ReadonlyMap<string, unknown>;
+  /**
+   * Every generator id the library already has.
+   *
+   * A manifest is written to `generators/<id>.manifest.json`, so the id is the filename and two
+   * cannot share one. Without this the screen wrote that path unchecked, and typing an id the library
+   * already had replaced a working generator — including one that ships with the project.
+   */
+  readonly takenIds?: ReadonlySet<string>;
+  /**
+   * The id this screen was opened on, absent for a new manifest.
+   *
+   * The id rather than a flag, so that reopening a manifest and *renaming* it onto another still
+   * warns: that is authoring a new one under a taken name, not editing the one you opened.
+   */
+  readonly editingId?: string;
   readonly onClose: () => void;
   /** Called after a successful write, so the library reloads and the registry revalidates. */
   readonly onSaved: () => void;
 }
 
-export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthoringProps): ReactNode {
+export function ManifestAuthoring({
+  graphs,
+  takenIds,
+  editingId,
+  onClose,
+  onSaved,
+}: ManifestAuthoringProps): ReactNode {
   const [graph, setGraph] = useState<string | undefined>(undefined);
   const [draft, setDraft] = useState<ManifestDraft>(() => emptyDraft());
   const [saving, setSaving] = useState(false);
@@ -68,6 +90,17 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
     setError(undefined);
   }, []);
 
+  /*
+   * What saving would cost, recomputed as the id is typed.
+   *
+   * An empty set when the library has not been read: absent means "not known", not "nothing is
+   * taken", and a screen that has not seen the library must not claim an id is free.
+   */
+  const target = useMemo(
+    () => saveTarget(draft.id, takenIds ?? new Set(), editingId),
+    [draft.id, takenIds, editingId],
+  );
+
   const save = useCallback(async () => {
     const api = bridge();
     if (api === undefined) {
@@ -77,7 +110,9 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
 
     setSaving(true);
     try {
-      const file = `${GENERATORS_FOLDER}/${draft.id}.manifest.json`;
+      // Named by the same rule that decided whether anything would be replaced, so the check and the
+      // write cannot drift.
+      const file = `${GENERATORS_FOLDER}/${target.file}`;
       // Two-space JSON, like the manifests that ship with the project: these files are read, diffed and
       // hand-edited, and a single line of minified JSON would end that.
       await api.writeTextFile(file, `${JSON.stringify(draftToFile(draft), null, 2)}\n`);
@@ -88,7 +123,7 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
     } finally {
       setSaving(false);
     }
-  }, [draft, onClose, onSaved]);
+  }, [draft, onClose, onSaved, target.file]);
 
   return (
     <div
@@ -124,6 +159,24 @@ export function ManifestAuthoring({ graphs, onClose, onSaved }: ManifestAuthorin
           <p className="flex items-center gap-1.5 font-mono text-xs text-destructive">
             <TriangleAlertIcon className="size-3.5" />
             {error}
+          </p>
+        )}
+
+        {/* A warning and not a refusal: replacing a manifest on purpose is exactly what saving one you
+            opened is. What was missing is the word — so it names what would go and offers a free id in
+            one click, which is the shape every other destructive action here has. */}
+        {target.replaces !== undefined && (
+          <p className="text-destructive flex items-center gap-2 font-mono text-xs">
+            <TriangleAlertIcon className="size-3.5 shrink-0" />
+            {`saving replaces the ${target.replaces} manifest`}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => setDraft((current) => ({ ...current, id: target.free ?? current.id }))}
+            >
+              {`Save as ${target.free ?? ''}`}
+            </Button>
           </p>
         )}
 
