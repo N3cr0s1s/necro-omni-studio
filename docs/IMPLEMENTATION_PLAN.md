@@ -3717,3 +3717,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   rule the linked trim follows, and more obvious when broken because you can hear it. `G` closes the
   gap before the selection. And two exports nothing reached (`hasGapBefore`, `clearClipFade`) were
   removed by the project's own sweep, which is the shape every gap in this codebase has had.
+
+- 2026-08-10: A locked track that protected nothing in two panels.
+
+  Found by the sweep this file already recommends — **count how many times a function name is
+  defined**. Three hand-rolled copies of "write this clip back into the document" existed, in the
+  keyframe lanes, the text inspector and the speed section, while `updateClip` — which does it
+  properly — had no caller outside its own package. That combination is the whole story: the helper
+  nobody used was the only one that was right.
+
+  Each copy was missing something, and both omissions are invisible until someone looks for them.
+
+  They **rebuilt every track**, so one keyframe edit copied all three tracks and every clip array on
+  them. The rule is that only the changed root-to-leaf path is rebuilt and untouched tracks stay by
+  reference, which is what makes snapshot undo cost pointers rather than a copy of the project. A test
+  asserts it for a split; nothing asserted it for a keyframe, and it was not true there.
+
+  And neither **checked the lock**. Locking a track stopped every gesture on the timeline and none of
+  the ones in a keyframe lane or the text panel — markers still dragged, the value field still wrote,
+  the font still changed. A lock that stops a drag and not a number field is a lock nobody can rely
+  on.
+
+  Two sweeps were run alongside it and came back clean, which is worth recording so they are not
+  repeated blind: no document field lacks a writer outside the serializer, and the remaining duplicate
+  names are test fixtures and same-name-different-domain helpers (`clamp` over a range and `clamp` over
+  a clip duration).
+
+  Also this round: the delivered file is asked whether the fade *happened* — two windows of the same
+  tone, −37.2 dB rising to −24.1 dB — because the mixer has exactly the seam that once hid every title
+  from every export, and a ramp that plays and does not export is invisible to every unit test here.
