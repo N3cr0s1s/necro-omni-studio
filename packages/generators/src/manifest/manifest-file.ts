@@ -257,6 +257,11 @@ interface ManifestFileShape {
   outputs: readonly OutputDescriptor[];
   params: readonly GeneratorParam[];
   presets: readonly GeneratorPreset[];
+  exclusive?: readonly {
+    members: readonly string[];
+    label: string | undefined;
+    required: boolean | undefined;
+  }[];
 }
 
 const vManifestFile = vObject<ManifestFileShape>({
@@ -283,6 +288,15 @@ const vManifestFile = vObject<ManifestFileShape>({
   outputs: vWithDefault(vArray(parseOutput), []),
   params: vWithDefault(vArray(parseParam), []),
   presets: vWithDefault(vArray(parsePreset), []),
+  exclusive: vOptional(
+    vArray(
+      vObject({
+        members: vArray(vString),
+        label: vOptional(vString),
+        required: vOptional(vBoolean),
+      }),
+    ),
+  ),
 });
 
 /**
@@ -317,6 +331,17 @@ export function parseManifestFile(value: unknown): Validated<GeneratorManifest> 
     outputs: file.outputs,
     params: file.params,
     presets: file.presets,
+    // Rebuilt rather than passed through: the validator produces `label: undefined` for an absent
+    // field, and `exactOptionalPropertyTypes` distinguishes that from the key being missing.
+    ...(file.exclusive !== undefined
+      ? {
+          exclusive: file.exclusive.map((group) => ({
+            members: group.members,
+            ...(group.label !== undefined ? { label: group.label } : {}),
+            ...(group.required !== undefined ? { required: group.required } : {}),
+          })),
+        }
+      : {}),
   });
 }
 

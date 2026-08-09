@@ -14,6 +14,7 @@ export * from './queue/gpu-semaphore.js';
 export * from './queue/job-queue.js';
 export * from './panel/asset-inputs.js';
 export * from './panel/text-inputs.js';
+export * from './panel/exclusive-groups.js';
 export * from './manifest/consumes-draft.js';
 export * from './panel/derived-defaults.js';
 export * from './provenance/asset-provenance.js';

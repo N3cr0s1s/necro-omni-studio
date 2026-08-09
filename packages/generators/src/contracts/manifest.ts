@@ -107,6 +107,19 @@ export interface ConsumesDescriptor {
 /** Surfaces where a generator's action appears. Derived from consumes/produces, listed explicitly. */
 export type SurfaceId = string;
 
+/**
+ * Parameters that are alternatives to one another.
+ *
+ * §2.3's voice: either an enum the backend knows or an audio sample to clone, one of the two. Declared
+ * rather than inferred — a manifest that says nothing keeps every parameter independent, which is what
+ * every manifest written before this did.
+ */
+export interface ExclusiveGroupDescriptor {
+  readonly members: readonly string[];
+  readonly label?: string;
+  readonly required?: boolean;
+}
+
 /** An output the graph produces. */
 export interface OutputDescriptor {
   readonly key: string;
@@ -192,6 +205,8 @@ export interface GeneratorManifest {
   readonly outputs: readonly OutputDescriptor[];
   readonly params: readonly GeneratorParam[];
   readonly presets: readonly GeneratorPreset[];
+  /** Parameters that are alternatives to one another, per §2.3. Absent means none are. */
+  readonly exclusive?: readonly ExclusiveGroupDescriptor[];
 }
 
 /** The parameter that drives variant generation, if the manifest has one. */

@@ -503,3 +503,60 @@ describe('parameter changes', () => {
     expect(onRun).toHaveBeenCalled();
   });
 });
+
+describe('parameters that are alternatives', () => {
+  /** A manifest offering two ways to give the same thing, per `interfaces.md` §2.3. */
+  const withVoice = (): RegistryRecord => {
+    const base = manifest({
+      params: [
+        { key: 'voice', label: 'Voice', type: 'enum', options: ['alto', 'tenor'], bind: '/v' },
+        { key: 'voice_reference', label: 'Sample', type: 'audio', bind: '/r' },
+        { key: 'seed', type: 'seed', bind: '/e' },
+      ],
+      exclusive: [{ members: ['voice', 'voice_reference'], label: 'Voice', required: true }],
+    });
+    return { manifest: base, status: 'available', reasons: [], entries: entriesFor(base) };
+  };
+
+  it('draws one chooser rather than two independent controls', () => {
+    // Two controls side by side invite both to be filled in, and a submit carries whatever the
+    // parameters hold — leaving what the graph does with the pair undefined.
+    render(<GeneratorPanel record={withVoice()} params={{}} />);
+    expect(screen.getByRole('radiogroup', { name: 'Voice' })).toBeDefined();
+  });
+
+  it('offers every alternative by its own label', () => {
+    render(<GeneratorPanel record={withVoice()} params={{}} />);
+    expect(screen.getByRole('radio', { name: 'Voice' })).toBeDefined();
+    expect(screen.getByRole('radio', { name: 'Sample' })).toBeDefined();
+  });
+
+  it('opens on whichever one is actually set', () => {
+    render(<GeneratorPanel record={withVoice()} params={{ voice_reference: 'media/her.wav' }} />);
+    expect(screen.getByRole('radio', { name: 'Sample' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('leaves ungrouped parameters alone', () => {
+    render(<GeneratorPanel record={withVoice()} params={{}} />);
+    // The seed keeps its own control outside the chooser; only grouped parameters move into it.
+    expect(screen.getByRole('button', { name: 'Lock the seed' })).toBeDefined();
+  });
+
+  it('reports the switch, so the caller can clear the alternatives', () => {
+    // Choosing removes the others, which is a change to several parameters at once and not something
+    // a per-parameter callback can express.
+    const onSelectAlternative = vi.fn();
+    render(<GeneratorPanel record={withVoice()} params={{}} onSelectAlternative={onSelectAlternative} />);
+
+    void userEvent.click(screen.getByRole('radio', { name: 'Sample' }));
+
+    return vi.waitFor(() => {
+      expect(onSelectAlternative.mock.calls.at(-1)?.[1]).toBe('voice_reference');
+    });
+  });
+
+  it('draws nothing special for a manifest that declares no alternatives', () => {
+    renderPanel();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
+});

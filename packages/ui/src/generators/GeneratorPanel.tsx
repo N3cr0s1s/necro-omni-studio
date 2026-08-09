@@ -4,10 +4,15 @@ import {
   type AssetChoice,
   type GeneratorManifest,
   type GeneratorParam,
+  type ExclusiveGroup,
   type TextChoice,
   type TextSource,
   choicesForSource,
+  exclusiveGroupsOf,
+  groupLabel,
   inputFor,
+  isGrouped,
+  activeMember,
   textSourcesFor,
   type RegistryRecord,
   choicesFor,
@@ -38,6 +43,8 @@ import { Input } from '@nos/ui/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-select';
 import { Slider } from '@nos/ui/components/ui/slider';
 import { Switch } from '@nos/ui/components/ui/switch';
+import { Label } from '@nos/ui/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@nos/ui/components/ui/radio-group';
 import { Textarea } from '@nos/ui/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@nos/ui/components/ui/toggle-group';
 import { cn } from '@nos/ui/lib/utils';
@@ -98,6 +105,13 @@ export interface GeneratorPanelProps {
   readonly onChangeParam?: (key: string, value: string | number | boolean) => void;
   /** Binds a text parameter to a note or a clip. `undefined` returns it to being typed. */
   readonly onBindText?: (key: string, choice: TextChoice | undefined) => void;
+  /**
+   * Switches which alternative of an exclusive group is in use.
+   *
+   * Separate from `onChangeParam` because choosing an alternative *clears* the others, which is a
+   * change to several parameters at once and not something a per-parameter callback can express.
+   */
+  readonly onSelectAlternative?: (group: ExclusiveGroup, chosen: string) => void;
   readonly onChangePreset?: (preset: PresetId | undefined) => void;
   readonly onChangeVariantCount?: (count: number) => void;
   readonly onToggleSeedLock?: () => void;
@@ -131,6 +145,7 @@ export function GeneratorPanel({
   projectShape,
   onChangeParam,
   onBindText,
+  onSelectAlternative,
   textChoices,
   boundText,
   onChangePreset,
@@ -141,6 +156,7 @@ export function GeneratorPanel({
   const manifest = record.manifest;
   const runnable = record.status === 'available';
   const shown = useMemo(() => visibleParams(manifest, preset), [manifest, preset]);
+  const groups = useMemo(() => exclusiveGroupsOf(manifest), [manifest]);
   const defaults = useMemo(() => effectiveDefaults(manifest, preset), [manifest, preset]);
 
   // The plan drives the variant control, so the panel and the queue cannot disagree about how many runs a
@@ -224,29 +240,51 @@ export function GeneratorPanel({
       )}
 
       <div className="flex flex-col gap-4 overflow-auto">
-        {shown.map((param) => (
-          <ParamControl
-            key={param.key}
-            param={param}
-            value={values[param.key]}
+        {/*
+         * Alternatives first, and drawn once. §2.3's voice is either an enum the backend knows or a
+         * sample to clone; two independent controls invite both to be filled in, and a submit carries
+         * whatever the parameters hold.
+         */}
+        {groups.map((group) => (
+          <ExclusiveChoice
+            key={group.members.join('|')}
+            group={group}
+            params={shown}
+            values={values}
             disabled={!runnable}
-            missing={blocked.has(param.key)}
+            record={record}
             {...(capabilityOptions !== undefined ? { capabilityOptions } : {})}
-            {...(isAssetParam(param) ? { choices: choicesFor(param, assetChoices ?? []) } : {})}
-            {...(frameGrab !== undefined && param.type === 'image' ? { frameGrab } : {})}
-            {...(param.type === 'seed' ? { seedLocked: lockedSeed !== undefined } : {})}
-            {...(param.type === 'text'
-              ? {
-                  textSources: textSourcesFor(inputFor(record.manifest, param)),
-                  textChoices: textChoices ?? [],
-                  boundTextChoice: boundText?.[param.key],
-                }
-              : {})}
+            assetChoices={assetChoices ?? []}
+            textChoices={textChoices ?? []}
             {...(onChangeParam !== undefined ? { onChange: onChangeParam } : {})}
-            {...(onBindText !== undefined ? { onBindText } : {})}
-            {...(onToggleSeedLock !== undefined ? { onToggleSeedLock } : {})}
+            {...(onSelectAlternative !== undefined ? { onSelect: onSelectAlternative } : {})}
           />
         ))}
+        {shown
+          .filter((param) => !isGrouped(groups, param))
+          .map((param) => (
+            <ParamControl
+              key={param.key}
+              param={param}
+              value={values[param.key]}
+              disabled={!runnable}
+              missing={blocked.has(param.key)}
+              {...(capabilityOptions !== undefined ? { capabilityOptions } : {})}
+              {...(isAssetParam(param) ? { choices: choicesFor(param, assetChoices ?? []) } : {})}
+              {...(frameGrab !== undefined && param.type === 'image' ? { frameGrab } : {})}
+              {...(param.type === 'seed' ? { seedLocked: lockedSeed !== undefined } : {})}
+              {...(param.type === 'text'
+                ? {
+                    textSources: textSourcesFor(inputFor(record.manifest, param)),
+                    textChoices: textChoices ?? [],
+                    boundTextChoice: boundText?.[param.key],
+                  }
+                : {})}
+              {...(onChangeParam !== undefined ? { onChange: onChangeParam } : {})}
+              {...(onBindText !== undefined ? { onBindText } : {})}
+              {...(onToggleSeedLock !== undefined ? { onToggleSeedLock } : {})}
+            />
+          ))}
       </div>
 
       <VariantControl
@@ -823,3 +861,94 @@ const SOURCE_LABELS: Readonly<Record<TextSource, string>> = {
   notes_file: 'from notes',
   text_clip: 'from a text clip',
 };
+
+/**
+ * One either/or choice, drawn as a chooser and the chosen alternative's own control.
+ *
+ * `interfaces.md` §2.3: a voice is given either as an enum the backend knows or as a sample to clone,
+ * and one of the two must be given. Rendering both controls side by side lets a user fill in both and
+ * submits both, which leaves what the graph does with the pair undefined — so the alternatives share
+ * one slot and picking one clears the rest.
+ *
+ * The chooser is a radio group rather than a dropdown: with two or three alternatives the options are
+ * worth seeing at once, and each carries a label explaining what that route *is* rather than only
+ * naming a parameter.
+ */
+function ExclusiveChoice({
+  group,
+  params,
+  values,
+  disabled,
+  record,
+  capabilityOptions,
+  assetChoices,
+  textChoices,
+  onChange,
+  onSelect,
+}: {
+  readonly group: ExclusiveGroup;
+  readonly params: readonly GeneratorParam[];
+  readonly values: Readonly<Record<string, string | number | boolean>>;
+  readonly disabled: boolean;
+  readonly record: RegistryRecord;
+  readonly capabilityOptions?: ReadonlyMap<string, readonly string[]>;
+  readonly assetChoices: readonly AssetChoice[];
+  readonly textChoices: readonly TextChoice[];
+  readonly onChange?: ((key: string, value: string | number | boolean) => void) | undefined;
+  readonly onSelect?: ((group: ExclusiveGroup, chosen: string) => void) | undefined;
+}): ReactNode {
+  // Falls back to the first member so the panel always has a control to draw: a group nobody has
+  // answered still has to offer the way in.
+  const active = activeMember(group, values) ?? group.members[0];
+  const chosen = params.find((param) => param.key === active);
+
+  return (
+    <Field className="gap-2">
+      <FieldLabel className="text-xs">
+        {groupLabel(group, params)}
+        {group.required === true && (
+          <span aria-hidden="true" className="text-destructive">
+            {' *'}
+          </span>
+        )}
+      </FieldLabel>
+
+      <RadioGroup
+        aria-label={groupLabel(group, params)}
+        disabled={disabled}
+        value={active ?? ''}
+        onValueChange={(next) => {
+          if (typeof next === 'string' && next !== active) onSelect?.(group, next);
+        }}
+        className="flex flex-wrap gap-4"
+      >
+        {group.members.map((member) => {
+          const param = params.find((entry) => entry.key === member);
+          return (
+            <Label key={member} className="flex items-center gap-1.5 text-xs font-normal">
+              <RadioGroupItem value={member} />
+              {param?.label ?? member}
+            </Label>
+          );
+        })}
+      </RadioGroup>
+
+      {chosen !== undefined && (
+        <ParamControl
+          param={chosen}
+          value={values[chosen.key]}
+          disabled={disabled}
+          {...(capabilityOptions !== undefined ? { capabilityOptions } : {})}
+          {...(isAssetParam(chosen) ? { choices: choicesFor(chosen, assetChoices) } : {})}
+          {...(chosen.type === 'text'
+            ? {
+                textSources: textSourcesFor(inputFor(record.manifest, chosen)),
+                textChoices,
+              }
+            : {})}
+          {...(onChange !== undefined ? { onChange } : {})}
+        />
+      )}
+    </Field>
+  );
+}

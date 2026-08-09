@@ -9,7 +9,15 @@ import type {
   RegistryRecord,
   SelectionOutcome,
 } from '@nos/generators';
-import { type TextChoice, acceptSelection, buildSelection, previewOf } from '@nos/generators';
+import {
+  type TextChoice,
+  acceptSelection,
+  buildSelection,
+  exclusiveGroupsOf,
+  previewOf,
+  selectMember,
+  unansweredGroups,
+} from '@nos/generators';
 import { bridge } from './bridge.js';
 import { noteChoicesFrom, resolveTextChoice, textChoicesFrom } from './generator-text.js';
 import type { MaskWorkspace } from './use-mask-workspace.js';
@@ -588,6 +596,12 @@ function GenerateTab({
             },
           }}
           onChangeParam={(key, value) => setParams((current) => ({ ...current, [key]: value }))}
+          onSelectAlternative={(group, chosen) =>
+            // Through `selectMember`, which removes the alternatives rather than leaving them set: a
+            // submit carries whatever the parameters hold, and a leftover voice sample would reach the
+            // graph beside the enum the user has since chosen.
+            setParams((current) => selectMember(group, current, chosen))
+          }
           onChangePreset={setPreset}
           onChangeVariantCount={setVariantCount}
           onToggleSeedLock={() =>
@@ -602,6 +616,18 @@ function GenerateTab({
              * once at binding time is how a tool ends up confidently producing yesterday's script.
              */
             void (async () => {
+              /*
+               * A required either/or that nobody answered is refused here rather than submitted. §2.3
+               * says one of the two must be given; sending neither leaves the graph to decide, which
+               * is the ambiguity the group exists to remove.
+               */
+              const missing = unansweredGroups(exclusiveGroupsOf(record.manifest), params);
+              const first = missing[0];
+              if (first !== undefined) {
+                onReject(`choose one of ${first.members.join(' or ')} before generating`);
+                return;
+              }
+
               const resolved: Record<string, string | number | boolean> = { ...params };
               for (const [key, choice] of Object.entries(boundText)) {
                 if (choice === undefined) continue;
