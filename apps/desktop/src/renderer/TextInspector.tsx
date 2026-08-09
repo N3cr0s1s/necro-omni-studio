@@ -4,13 +4,14 @@ import {
   type TextClip,
   type TextContent,
   type TimelineDocument,
-  type Track,
   clipId,
   frameIndex,
   locateClip,
+  ok,
   spanFromBounds,
   staticNumber,
 } from '@nos/core';
+import { updateClip } from '@nos/editing';
 import {
   DEFAULT_REST,
   SLIDE_DIRECTIONS,
@@ -585,19 +586,15 @@ function fromHex(hex: string): TextContent['color'] {
   return { r: part(0), g: part(2), b: part(4), a: 1 };
 }
 
+/**
+ * Writes a title back into the document.
+ *
+ * Through `@nos/editing`'s own `updateClip`, for the two reasons the keyframe lanes' copy of this was
+ * changed: it rebuilds only the track the clip is on rather than every text track, and it **checks the
+ * lock**, which this did not — so a locked track protected its titles from every gesture on the
+ * timeline and from none of the fields in this panel.
+ */
 function replaceClip(document: TimelineDocument, clip: TextClip): TimelineDocument {
-  return {
-    ...document,
-    sequence: {
-      ...document.sequence,
-      tracks: document.sequence.tracks.map((track) =>
-        track.kind !== 'text'
-          ? track
-          : ({
-              ...track,
-              clips: track.clips.map((entry) => (entry.id === clip.id ? clip : entry)),
-            } as Track),
-      ),
-    },
-  };
+  const updated = updateClip(document, clip.id, () => ok(clip));
+  return updated.ok ? updated.value : document;
 }

@@ -536,3 +536,52 @@ describe('the rows the hook produces', () => {
     expect(result().rows).toEqual([]);
   });
 });
+
+/**
+ * What a shared helper keeps you from forgetting.
+ *
+ * The lanes wrote clips back through a hand-rolled copy of `updateClip` that was missing two things,
+ * and both are invisible until someone looks for them: it rebuilt every track, and it did not check
+ * the lock. Found by counting how many times a function name is defined — the sweep this codebase's
+ * real bugs keep coming from.
+ */
+describe('writing a clip back', () => {
+  const animated = () =>
+    documentWith(videoClip({ transform: { ...videoClip().transform, opacity: curve(0, 1) } }));
+
+  it('keeps untouched tracks by reference, which is what makes undo cost pointers', async () => {
+    const before = animated();
+    const { onChange, result } = mountLanes(before);
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    result().edit({ value: 0.25 });
+
+    const after = onChange.mock.calls.at(-1)![1] as TimelineDocument;
+    const untouched = after.sequence.tracks.filter((track, index) => track === before.sequence.tracks[index]);
+    // Every track but the one holding the clip must be the *same object*.
+    expect(untouched.length).toBe(before.sequence.tracks.length - 1);
+  });
+
+  it('refuses on a locked track, which the timeline already enforced everywhere else', async () => {
+    const locked = {
+      ...animated(),
+      sequence: {
+        ...animated().sequence,
+        tracks: animated().sequence.tracks.map((track) =>
+          track.kind === 'video' ? { ...track, locked: true } : track,
+        ) as TimelineDocument['sequence']['tracks'],
+      },
+    };
+    const { onChange, result } = mountLanes(locked);
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    result().edit({ value: 0.25 });
+
+    // The document is handed back unchanged rather than the edit landing: a lock that stops a drag
+    // and not a number field is a lock nobody can rely on.
+    const after = onChange.mock.calls.at(-1)?.[1] as TimelineDocument | undefined;
+    const opacity =
+      after === undefined
+        ? undefined
+        : (locateClip(after, clipId('c1'))!.clip as VideoClip).transform.opacity;
+    expect(opacity === undefined || (isAnimated(opacity) && opacity.keyframes[0]!.value === 0)).toBe(true);
+  });
+});

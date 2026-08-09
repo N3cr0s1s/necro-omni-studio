@@ -3,6 +3,7 @@ import {
   type AnimatableNumber,
   type BezierEase,
   type Clip,
+  type ClipId,
   type ClipTransform,
   type Easing,
   type FrameIndex,
@@ -15,8 +16,10 @@ import {
   frameIndex,
   isAnimated,
   locateClip,
+  ok,
   removeKeyframe,
 } from '@nos/core';
+import { updateClip } from '@nos/editing';
 import { type EffectRegistry } from '@nos/effects';
 import {
   type TimelineLaneRow,
@@ -409,21 +412,28 @@ function clipTransformOf(clip: Clip): ClipTransform | undefined {
   return clip.kind === 'audio' ? undefined : clip.transform;
 }
 
+/**
+ * Writes one clip back into the document.
+ *
+ * Through `@nos/editing`'s own `updateClip`, which is what this used to hand-roll — and the hand-rolled
+ * version was missing two things that only a shared helper keeps you from missing.
+ *
+ * It **rebuilt every track**, so a keyframe edit copied all three tracks and every clip array on them.
+ * The editing layer's rule is that only the changed root-to-leaf path is rebuilt and untouched tracks
+ * stay by reference, which is precisely what makes snapshot undo cost pointers rather than a copy of
+ * the project. A test asserts it for a split; nothing asserted it here, and it was not true.
+ *
+ * And it **did not check the lock**, so a locked track protected its clips from every gesture on the
+ * timeline and none of the ones in a keyframe lane. A refusal returns the document unchanged, which
+ * is what a locked track means — the marker snaps back, because the lane is drawn from the document.
+ */
 function mapClip(
   document: TimelineDocument,
   clipKey: string,
   change: (clip: Clip) => Clip,
 ): TimelineDocument {
-  return {
-    ...document,
-    sequence: {
-      ...document.sequence,
-      tracks: document.sequence.tracks.map((track) => ({
-        ...track,
-        clips: track.clips.map((entry) => (entry.id === clipKey ? change(entry as Clip) : entry)),
-      })) as TimelineDocument['sequence']['tracks'],
-    },
-  };
+  const updated = updateClip(document, clipKey as ClipId, (clip) => ok(change(clip)));
+  return updated.ok ? updated.value : document;
 }
 
 function writeTransform(
