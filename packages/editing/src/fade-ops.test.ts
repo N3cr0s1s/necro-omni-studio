@@ -20,7 +20,6 @@ import {
 import {
   MIN_CROSSFADE_FRAMES,
   applyCrossfade,
-  clearClipFade,
   crossfadeForPlacement,
   maxFadeFrames,
   setClipFade,
@@ -253,7 +252,7 @@ describe('setting a fade by hand', () => {
     const faded = setClipFade(one(), clipId('a'), { inFrames: 10, outFrames: 10 });
     expect(faded.ok).toBe(true);
     if (!faded.ok) return;
-    const cleared = clearClipFade(faded.value, clipId('a'));
+    const cleared = setClipFade(faded.value, clipId('a'), { inFrames: 0, outFrames: 0 });
     expect(cleared.ok).toBe(true);
     if (!cleared.ok) return;
     expect(locateClip(cleared.value, clipId('a'))!.clip.fade).toBeUndefined();

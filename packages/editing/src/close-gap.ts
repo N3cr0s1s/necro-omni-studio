@@ -113,11 +113,6 @@ export function closeGapBefore(
   return ok(moved.value.document);
 }
 
-/** Whether a clip has something to close, for a menu deciding whether to offer the row. */
-export function hasGapBefore(document: TimelineDocument, clip: ClipId): boolean {
-  return gapBefore(document, clip) !== undefined;
-}
-
 /** Every clip on a track that a gap precedes, so a whole track can be closed up in one pass. */
 export function closeAllGaps(
   document: TimelineDocument,

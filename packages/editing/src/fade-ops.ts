@@ -232,14 +232,6 @@ export function setGroupFade(
   return firstRefusal ?? ok(current);
 }
 
-/** Removes both ramps. */
-export function clearClipFade(
-  document: TimelineDocument,
-  clipId: ClipId,
-): Result<TimelineDocument, EditError> {
-  return setClipFade(document, clipId, { inFrames: 0, outFrames: 0 });
-}
-
 /**
  * The longest ramp a clip could carry at one of its edges.
  *

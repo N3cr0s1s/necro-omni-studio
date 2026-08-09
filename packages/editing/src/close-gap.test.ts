@@ -17,7 +17,7 @@ import {
   staticNumber,
   trackId,
 } from '@nos/core';
-import { closeAllGaps, closeGapBefore, gapBefore, hasGapBefore } from './close-gap.js';
+import { closeAllGaps, closeGapBefore, gapBefore } from './close-gap.js';
 
 /**
  * Closing a gap.
@@ -113,7 +113,6 @@ describe('finding a gap', () => {
   it('is nothing when the clips already meet', () => {
     const document = documentWith([video('a', 0, 100), video('b', 100, 200)]);
     expect(gapBefore(document, clipId('b'))).toBeUndefined();
-    expect(hasGapBefore(document, clipId('b'))).toBe(false);
   });
 
   it('is nothing when the clips overlap, which is a crossfade rather than a gap', () => {
