@@ -1873,6 +1873,97 @@ Next: the FastAPI app exposing the sidecar routes, then the media browser UI.
   adjacency unambiguous.
 - Comments explain _why_, not _what_. Tests name the behaviour and its rationale.
 
+### Crossfade and fade rules (keep these)
+
+Issue #38. The editor was hard to use for one structural reason: **an overlap was refused**. Every move
+clamped flush against its neighbour, so the only route to a dissolve was a dialog asking for two clips
+that already met exactly at a cut, an effect name, a length, and handles on both sides. The gesture
+every editor uses — drag one clip onto the one before it — did nothing at all.
+
+**Sound sums and picture occludes, and a crossfade means something different in each.** Two overlapping
+sounds are both heard, so both ramp and the pair is equal-power: linear ramps put each side at half
+amplitude at the join, which for uncorrelated material — two different takes always are — is about
+−3 dB, an audible hole exactly where the join is meant to be inaudible. Two overlapping pictures are not
+both seen: the later covers the earlier, so a dissolve is the incoming clip ramping *in* over an outgoing
+one that stays whole, linearly. Fading the outgoing too would let the empty frame behind them show
+through in the middle, which reads as a flash of black. That asymmetry is physics, not an inconsistency
+to be papered over, and modelling it as one symmetric object would make one of the two wrong.
+
+**A fade is a clip property, not keyframes.** A ramp written as automation is destroyed by the next curve
+the user authors, cannot be recognized afterwards without pattern-matching a shape, and cannot be
+removed without it. `ClipFade` sits on `ClipBase` because a ramp means the same thing in both domains and
+only the quantity differs.
+
+**The permission to overlap is narrow and named.** `moveClips` takes the clips a move may land on, and
+everything else still refuses — an overlap touching two clips at once, or swallowing one whole, is a
+collision as it always was. The timeline's rule that material is never displaced silently survives
+everywhere else.
+
+**Which clip is "incoming" is decided by which starts later, never by which the pointer is on.** Dropping
+a clip just *before* a stationary one makes the moving clip the outgoing half. A permission list keyed on
+`outgoing` therefore named a clip that was moving anyway, and every leftward dissolve was refused as a
+collision — while the rightward case passed its test.
+
+**The ramp is written for where the clips landed, not where they were asked to go.** A group meeting frame
+zero is clamped by its earliest member, so the predicted overlap and the real one differ.
+
+**The compositor sorts a track's live clips by start.** Two clips can be live at one frame — that is what
+an overlap is — and insertion order decided which was on top, so the same overlap dissolved one way in a
+fresh project and the other way after a reload.
+
+**Trimming reaches everything linked, and snaps.** Cutting the head off an imported video moved only the
+clip under the pointer, so the picture got shorter and its own sound did not — a success that half
+happened, which is worse than a refusal because nothing on screen says anything went wrong. And trimming
+was the one gesture that did not snap, which is how a single black frame survives between two clips that
+look adjacent at any working zoom.
+
+**A group trim travels as far as it can rather than refusing.** `reachableTrimDelta` binary-searches the
+limit *through the operation itself*, because "how far can this go" is the composition of every check the
+two trims perform — collisions, source handles, locks, emptiness — and restating them is how a limit and
+its operation drift apart.
+
+### Keyframe rules (keep these)
+
+Issue #37, and its first two symptoms were one cause. The lanes were injected into the clip column as an
+opaque `ReactNode`, so the header column beside them had nothing to put in the same space: creating a
+keyframe made a lane appear with no name against it *and* pushed every row below out of step with its own
+header.
+
+**A lane is a row of the timeline.** `TimelineLaneRow` carries an id, a label and a height, and the header
+column and the clip column each draw from the same number. Alignment between two columns cannot be
+maintained by two components that each decide it. The hint line under the lanes is a row for the same
+reason: anything down there that is not a row has nothing opposite it.
+
+**Markers sit at their own value.** A lane that drew every marker on one baseline said nothing about the
+shape of the animation, which is the thing a curve exists to show. The curve between them is sampled
+through `evaluateAt` — the function the compositor and the mixer call — so it cannot flatter a shape the
+picture does not have.
+
+**A drag writes both axes in one edit.** Two edits per pointer move would be two history entries once the
+gesture commits, and the second would be applied to a document the first had already re-sorted.
+
+**`bezier` is a sixth easing with four numbers beside it, and it is outside the badge's cycle.** A preset
+list can never hold the curve someone actually wants, so the curve is the control — nobody knows what
+`0.42, 0, 0.58, 1` looks like. Landing on it by clicking a badge would put the user in a mode whose
+controls are elsewhere, on a first curve indistinguishable from linear.
+
+**Time is clamped, value is not.** A control point outside the segment makes the curve non-monotonic in
+time, so the value would run backwards, which no evaluator here can express. Overshoot past the endpoint
+*is* a legitimate curve and is one of the two reasons to want a custom one.
+
+**The solver falls back to bisection where Newton stalls**, which is exactly `cubic-bezier(1, 0, 0, 1)` —
+the hardest ease a user can ask for, and the one where a naive solver silently returns its last guess.
+
+**The vertical zoom is the lane's height, per lane.** On 34 pixels a value of 0.51 and one of 0.55 are the
+same pixel however carefully the marker is dragged. Per lane because a user magnifies the *one* curve they
+are shaping; growing every lane at once would push the tracks below off the screen. Not in the document —
+it is how closely someone is looking right now, not a property of the animation.
+
+**A marker's settings belong in the right column too.** A marker is eleven pixels wide and the lane can
+only afford a value field and an easing badge; everything else about it had nowhere to be. The frame is
+shown as a *timeline* position, because keyframes are stored clip-relative and every other number in that
+column is absolute.
+
 ## Log
 
 - 2026-08-08: Ledger created. Spec + interface contracts read, Claude Design
@@ -3532,3 +3623,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Probe hygiene: the scratchpad demo project now holds the user's own edit, so
   probes run against a fixture under the job directory instead. Earlier runs this
   session imported clips into that project and dismissed its recovery snapshot.
+
+- 2026-08-09: Issues #38 and #37 — the editor's two worst surfaces.
+
+  **#38, the crossfade.** Three separate faults reported as one experience. Trimming a linked pair moved
+  only the half under the pointer. Trimming was the one gesture that did not snap, so two clips could not
+  be landed flush and a single black frame survived between them. And an overlap was refused outright, so
+  the gesture every editor uses to make a dissolve did nothing.
+
+  `trimGroup` and `snapEdgeDelta` close the first two. `ClipFade`, `crossfadeForPlacement`,
+  `applyCrossfade` and `moveWithCrossfades` close the third, with the rules above. The fade is drawn as a
+  wedge and dragged from a grip at each top corner — a control that appears only once the thing it
+  controls exists can be found only by someone who already knows it is there, which is what "making a
+  crossfade is bloody hard" costs.
+
+  One bug found by writing the mirror of a passing test: dropping a clip just *before* a stationary one
+  makes the **moving** clip the outgoing half, so a permission list keyed on `outgoing` named a clip that
+  was moving anyway and refused every leftward dissolve.
+
+  **#37, the keyframes.** The lane had no header, so a new lane named nothing and knocked the two columns
+  out of alignment; markers sat on a shared baseline, so the curve was invisible and its shape
+  unadjustable except through a number field; and clicking a marker put nothing in the right column.
+
+  `TimelineLaneRow`, markers placed at their value, the sampled curve, a two-axis drag, `bezier` with a
+  draggable editor, a per-lane vertical zoom, and `KeyframeInspector`.
+
+  3652 tests green; `tsc --build` clean.

@@ -385,6 +385,132 @@ try {
     await page.waitForTimeout(600);
   }
 
+  /*
+   * Fades and the crossfade an overlap makes, per issue #38.
+   *
+   * The whole of what the report is about is invisible to a unit test in one specific way: the ramp
+   * has to reach `project.json`. Every layer under this is covered — the model, the mixer, the
+   * compositor, the operations — and the fault the report describes is that no gesture in the running
+   * application could write one.
+   */
+  const fadeIn = page.getByLabel('fade in');
+  if ((await fadeIn.count()) === 0) {
+    fail('a clip offers no way to fade');
+  } else {
+    pass('a clip can be faded');
+
+    await fadeIn.fill('8');
+    await fadeIn.press('Enter');
+    await page.waitForTimeout(700);
+
+    // On the clip, not only in the field. A ramp that exists in the inspector and is not drawn is the
+    // one that makes a drop-created crossfade indistinguishable from a collision allowed by mistake.
+    if ((await page.locator('[data-fade-ramp="in"]').count()) > 0) {
+      pass('and the ramp is drawn on the clip');
+    } else {
+      fail('a fade never reached the clip on the timeline');
+    }
+
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(2000);
+    if (/"fade"\s*:/.test(readFileSync(join(project, 'project.json'), 'utf8'))) {
+      pass('and it is saved into the project');
+    } else {
+      fail('a fade never reached project.json');
+    }
+  }
+
+  /*
+   * Keyframe lanes, per issue #37.
+   *
+   * The two symptoms the report gives are both about the *header column*, which no component test
+   * sees: a lane appeared with nothing beside it, so it named no parameter and every row below it came
+   * apart from its own header. Both are questions about the assembled window.
+   */
+  const disclosure = page.locator('[data-clip-disclosure]').first();
+  if ((await disclosure.count()) === 0) {
+    fail('no clip on the fixture offers its parameter lanes');
+  } else {
+    await disclosure.click({ force: true });
+    await page.waitForTimeout(900);
+
+    const laneHeader = page.locator('[data-lane-header]').first();
+    if ((await laneHeader.count()) === 0) {
+      fail('a lane opened with no header beside it — the two columns are out of step');
+    } else {
+      pass('a lane names the parameter it animates');
+
+      // The alignment itself, measured. Two components each deciding a height is exactly how the
+      // columns drifted, so the check is that they agree rather than that both look plausible.
+      const laneId = await laneHeader.getAttribute('data-lane-header');
+      const body = page.locator(`[data-clip-lane="${laneId}"]`);
+      const headerBox = await laneHeader.boundingBox();
+      const bodyBox = await body.boundingBox();
+      if (headerBox !== null && bodyBox !== null && Math.abs(headerBox.height - bodyBox.height) < 1) {
+        pass(`the header and the lane are the same height (${Math.round(headerBox.height)} px)`);
+      } else {
+        fail(`a lane header is ${headerBox?.height} px against a lane of ${bodyBox?.height}`);
+      }
+
+      // The vertical zoom: more pixels per unit of value is the whole of what makes a curve precise.
+      const magnify = page.getByLabel(/^Magnify the /).first();
+      if ((await magnify.count()) === 0) {
+        fail('a lane offers no way to magnify it');
+      } else {
+        await magnify.click();
+        await page.waitForTimeout(500);
+        const taller = await laneHeader.boundingBox();
+        if (taller !== null && headerBox !== null && taller.height > headerBox.height) {
+          pass(
+            `magnifying makes the lane taller (${Math.round(headerBox.height)} → ${Math.round(taller.height)} px)`,
+          );
+        } else {
+          fail('magnifying a lane changed nothing');
+        }
+      }
+
+      // The curve, which needs a real layout: it is sampled across the viewport's own width.
+      if ((await page.locator('[data-value-curve] polyline').count()) > 0) {
+        pass('the lane draws the value curve');
+      } else {
+        fail('a lane of markers draws no curve between them');
+      }
+
+      /*
+       * Clicking a marker has to reach the right column. Before this it selected the marker and the
+       * panel went on describing the clip, so every property of a keyframe except its value and its
+       * easing was unreachable.
+       */
+      await page.getByRole('tab', { name: 'Clip' }).click();
+      await page.waitForTimeout(600);
+      await page.locator('[data-keyframe]').first().click({ force: true });
+      await page.waitForTimeout(700);
+
+      if ((await page.getByRole('region', { name: 'Keyframe' }).count()) === 0) {
+        fail('clicking a marker put nothing in the inspector');
+      } else {
+        pass('a selected marker opens in the right column');
+
+        const curve = page.getByRole('radio', { name: 'bezier' });
+        if ((await curve.count()) === 0) {
+          fail('a marker cannot be given a hand-drawn curve');
+        } else {
+          await curve.click();
+          await page.waitForTimeout(600);
+          if ((await page.getByRole('group', { name: 'easing curve' }).count()) > 0) {
+            pass('and choosing a curve gives it a curve to draw');
+          } else {
+            fail('choosing bezier showed no editor');
+          }
+        }
+      }
+    }
+
+    // Put the lanes away: the checks after this expect the tracks where they were.
+    await disclosure.click({ force: true }).catch(() => undefined);
+    await page.waitForTimeout(500);
+  }
+
   await page.getByRole('tab', { name: 'Effects' }).click();
   await page.waitForTimeout(700);
 
@@ -564,15 +690,27 @@ try {
         const editor = page.getByLabel('File contents');
         await setCode(page, editor, '{\n  "sha\n}');
 
-        // Caret at the end of the half-typed name, which is where someone asking for help would be.
+        /*
+         * Caret at the end of the half-typed name, which is where someone asking for help would be —
+         * reached from the **top** of the file rather than the bottom.
+         *
+         * Monaco auto-closes the `{` that `setCode` inserts and re-indents what follows, so the buffer
+         * is four lines rather than three and its indentation is not what was typed. Counting up from
+         * the end therefore landed one line short, inside the trailing brace, where there is genuinely
+         * nothing to suggest — and the check reported the editor as broken for two rounds while the
+         * completion engine was answering correctly the whole time. Counting down from the top is
+         * exact whatever the editor adds below.
+         */
         await editorSurface(editor).click();
-        await page.keyboard.press('Control+End');
-        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('Control+Home');
+        await page.keyboard.press('ArrowDown');
         await page.keyboard.press('End');
         await page.keyboard.press('Control+Space');
         await page.waitForTimeout(700);
 
-        const list = page.getByRole('listbox', { name: 'Suggestions' });
+        // Monaco names its suggestion list `Suggest`, not `Suggestions`. An exact name is the point:
+        // a loose one would match some other list and turn a failure into a pass.
+        const list = page.getByRole('listbox', { name: 'Suggest', exact: true });
         if ((await list.count()) === 0) {
           const shown = await page
             .locator('section[aria-label="File editor"] header span')
