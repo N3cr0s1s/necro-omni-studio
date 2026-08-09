@@ -69,6 +69,14 @@ function makeDocument(clips: readonly Clip[]): TimelineDocument {
   return { ...base, sequence: { ...base.sequence, tracks: [v1, ...base.sequence.tracks.slice(1)] } };
 }
 
+/** Two lanes and their heights, as the keyframe hook produces them. */
+function laneRows() {
+  return [
+    { id: 'opacity', label: 'transform · opacity', heightPx: 34, body: <div /> },
+    { id: 'amount', label: 'film grain · amount', heightPx: 34, body: <div /> },
+  ];
+}
+
 function renderTimeline(overrides: Partial<Parameters<typeof Timeline>[0]> = {}) {
   const document = overrides.document ?? makeDocument([video('a', 0, 300), video('b', 400, 700)]);
   return render(
@@ -751,24 +759,59 @@ describe('opening a clip', () => {
     // A lane is read against the clip it belongs to; one drawn three tracks away has to be
     // correlated by eye.
     const doc = makeDocument([animated('moving')]);
-    renderTimeline({
-      document: doc,
-      expandedClip: clipId('moving'),
-      lanes: <div data-testid="lanes" />,
-    });
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });
 
-    const lanes = document.querySelector('[data-clip-lanes="moving"]');
+    const lane = document.querySelector('[data-clip-lane="opacity"]');
     const videoLane = document.querySelector('[data-track-id="v1"]');
     const audioLane = document.querySelector('[data-track-id="a1"]');
 
-    expect(lanes).not.toBeNull();
-    expect(videoLane!.compareDocumentPosition(lanes!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(lanes!.compareDocumentPosition(audioLane!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lane).not.toBeNull();
+    expect(videoLane!.compareDocumentPosition(lane!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lane!.compareDocumentPosition(audioLane!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('draws nothing when no clip is open', () => {
-    renderTimeline({ document: makeDocument([animated('moving')]), lanes: <div /> });
-    expect(document.querySelector('[data-clip-lanes]')).toBeNull();
+    renderTimeline({ document: makeDocument([animated('moving')]), lanes: laneRows() });
+    expect(document.querySelector('[data-clip-lane]')).toBeNull();
+  });
+
+  /**
+   * Alignment between the two columns.
+   *
+   * The report was two symptoms of one cause: a new lane appeared in the clip column with nothing
+   * beside it in the header column, so nothing said which parameter it animated *and* every row below
+   * it came apart. Both are fixed by the lane being a row of the timeline rather than markup injected
+   * into one of its columns.
+   */
+  it('gives every lane a header naming what it animates', () => {
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });
+
+    expect(screen.getByText('transform · opacity')).toBeDefined();
+    expect(screen.getByText('film grain · amount')).toBeDefined();
+  });
+
+  it('gives the header and the lane the same height, from one number', () => {
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });
+
+    for (const row of laneRows()) {
+      const header = document.querySelector(`[data-lane-header="${row.id}"]`) as HTMLElement;
+      const body = document.querySelector(`[data-clip-lane="${row.id}"]`) as HTMLElement;
+      expect(header.style.height).toBe(`${row.heightPx}px`);
+      expect(body.style.height).toBe(`${row.heightPx}px`);
+    }
+  });
+
+  it('puts the lane headers after their own track´s header, so the columns stay in step', () => {
+    const doc = makeDocument([animated('moving')]);
+    renderTimeline({ document: doc, expandedClip: clipId('moving'), lanes: laneRows() });
+
+    const headers = [...document.querySelectorAll('[data-track-header],[data-lane-header]')].map(
+      (element) =>
+        element.getAttribute('data-track-header') ?? `lane:${element.getAttribute('data-lane-header')}`,
+    );
+    expect(headers).toEqual(['v1', 'lane:opacity', 'lane:amount', 'a1', 't1']);
   });
 
   it('marks the open clip for assistive technology', () => {

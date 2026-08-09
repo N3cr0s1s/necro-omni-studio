@@ -211,7 +211,7 @@ export interface TimelineProps {
    * component stays presentational and learns nothing about keyframes.
    */
   readonly expandedClip?: ClipId;
-  readonly lanes?: ReactNode;
+  readonly lanes?: readonly TimelineLaneRow[];
   readonly onToggleExpandClip?: (clip: ClipId) => void;
 
   /**
@@ -229,6 +229,27 @@ export interface TimelineProps {
   readonly onClearRange?: () => void;
   /** Removes the marked range from every unlocked track. Offered only while a range exists. */
   readonly onRemoveRange?: () => void;
+}
+
+/**
+ * One parameter lane opened under a clip.
+ *
+ * A **row**, not a fragment of markup. The lanes were injected as an opaque `ReactNode` into the
+ * clip column alone, so the header column beside them had nothing to put in the same space: the two
+ * columns stopped lining up the moment a keyframe was created, and the lane that appeared said
+ * nothing about which parameter it belonged to. Both halves of that report are the same cause — a
+ * lane is a *row of the timeline*, and every row needs a header.
+ *
+ * The height travels with the row for the same reason. Alignment between the two columns cannot be
+ * maintained by two components that each decide it; it has to be one number used twice.
+ */
+export interface TimelineLaneRow {
+  /** Stable across renders, so React keeps a lane's DOM while its markers move. */
+  readonly id: string;
+  /** What this lane animates, e.g. `film grain · amount`. Drawn in the header column. */
+  readonly label: string;
+  readonly heightPx: number;
+  readonly body: ReactNode;
 }
 
 /**
@@ -324,6 +345,8 @@ export function Timeline(props: TimelineProps): ReactNode {
         <TrackHeaderColumn
           tracks={document.sequence.tracks}
           anySoloed={anySoloed}
+          {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
+          {...(props.lanes !== undefined ? { lanes: props.lanes } : {})}
           {...(props.onTrackMute !== undefined ? { onMute: props.onTrackMute } : {})}
           {...(props.onTrackSolo !== undefined ? { onSolo: props.onTrackSolo } : {})}
           {...(props.onTrackLock !== undefined ? { onLock: props.onTrackLock } : {})}
@@ -461,11 +484,20 @@ export function Timeline(props: TimelineProps): ReactNode {
                       ? { transitionLabel: props.transitionLabel }
                       : {})}
                   />
-                  {props.lanes !== undefined && holdsClip(track, props.expandedClip) && (
-                    <div data-clip-lanes={props.expandedClip} className="relative">
-                      {props.lanes}
-                    </div>
-                  )}
+                  {props.lanes !== undefined &&
+                    holdsClip(track, props.expandedClip) &&
+                    props.lanes.map((lane) => (
+                      <div
+                        key={lane.id}
+                        data-clip-lane={lane.id}
+                        className="relative"
+                        // The same number the header uses. Alignment between two columns cannot be
+                        // maintained by two components that each decide it.
+                        style={{ height: lane.heightPx }}
+                      >
+                        {lane.body}
+                      </div>
+                    ))}
                 </Fragment>
               ))}
             </div>
@@ -624,6 +656,8 @@ function TrackHeaderColumn({
   tracks,
   anySoloed,
   renaming,
+  expandedClip,
+  lanes,
   onMute,
   onSolo,
   onLock,
@@ -635,6 +669,9 @@ function TrackHeaderColumn({
   readonly tracks: readonly Track[];
   readonly anySoloed: boolean;
   readonly renaming?: TrackId;
+  /** The opened clip, so the lane headers land under the track that actually holds it. */
+  readonly expandedClip?: ClipId;
+  readonly lanes?: readonly TimelineLaneRow[];
   readonly onMute?: (track: TrackId) => void;
   readonly onSolo?: (track: TrackId) => void;
   readonly onLock?: (track: TrackId) => void;
@@ -654,20 +691,53 @@ function TrackHeaderColumn({
       <div className="h-6.5 flex-none border-b" />
 
       {tracks.map((track) => (
-        <TrackHeader
-          key={track.id}
-          track={track}
-          audible={isTrackAudible(track, anySoloed)}
-          {...(onMute !== undefined ? { onMute } : {})}
-          {...(onSolo !== undefined ? { onSolo } : {})}
-          {...(onLock !== undefined ? { onLock } : {})}
-          {...(onRemove !== undefined ? { onRemove } : {})}
-          {...(onRename !== undefined ? { onRename } : {})}
-          {...(onResize !== undefined ? { onResize } : {})}
-          {...(onToggleCollapse !== undefined ? { onToggleCollapse } : {})}
-          renaming={renaming === track.id}
-        />
+        <Fragment key={track.id}>
+          <TrackHeader
+            track={track}
+            audible={isTrackAudible(track, anySoloed)}
+            {...(onMute !== undefined ? { onMute } : {})}
+            {...(onSolo !== undefined ? { onSolo } : {})}
+            {...(onLock !== undefined ? { onLock } : {})}
+            {...(onRemove !== undefined ? { onRemove } : {})}
+            {...(onRename !== undefined ? { onRename } : {})}
+            {...(onResize !== undefined ? { onResize } : {})}
+            {...(onToggleCollapse !== undefined ? { onToggleCollapse } : {})}
+            renaming={renaming === track.id}
+          />
+          {/* Rendered by the same condition and in the same order the lane column uses, so the two
+              stay one row apart from each other rather than being kept in step by hand. */}
+          {lanes !== undefined &&
+            holdsClip(track, expandedClip) &&
+            lanes.map((lane) => <LaneHeader key={lane.id} lane={lane} />)}
+        </Fragment>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The header beside one parameter lane.
+ *
+ * Its whole job is to say *which* parameter the markers below belong to, and to occupy exactly the
+ * height the lane does. Before this the lanes were drawn in the clip column alone, so the two columns
+ * came apart the moment a keyframe existed — and an unnamed lane of diamonds is unreadable even when
+ * it is aligned.
+ *
+ * Indented and quieter than a track header, because a lane belongs *to* the row above it. A lane that
+ * looked like a track would suggest it can be muted, soloed and locked, none of which it can.
+ */
+function LaneHeader({ lane }: { readonly lane: TimelineLaneRow }): ReactNode {
+  return (
+    <div
+      data-lane-header={lane.id}
+      title={lane.label}
+      className="flex flex-none items-center gap-1.5 border-b bg-muted/20 pr-2 pl-5"
+      style={{ height: lane.heightPx }}
+    >
+      {/* A tick joining the lane to the track above it: the indent alone reads as an accident at a
+          glance, and this is the only mark saying the two rows are related. */}
+      <span aria-hidden="true" className="h-px w-2 flex-none bg-border" />
+      <span className="truncate text-[11px] text-muted-foreground">{lane.label}</span>
     </div>
   );
 }

@@ -41,7 +41,8 @@ import {
 import { GeneratorPanel, SegmentationPanel, VariantPicker } from '@nos/ui';
 import type { RecalledRun } from '@nos/generators';
 import type { ClipId } from '@nos/core';
-import type { MaskChoice } from './ClipInspector.js';
+import type { KeyframeChange, MaskChoice } from './ClipInspector.js';
+import type { SelectedKeyframe } from './KeyframeLanes.js';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
 import { Field, FieldLabel } from '@nos/ui/components/ui/field';
@@ -165,6 +166,16 @@ export interface RightPanelProps {
   readonly onRenameClip?: ((clip: ClipId, name: string) => void) | undefined;
   /** Opens the clip's name field, for a rename asked for from the timeline's context menu. */
   readonly renamingClip?: boolean | undefined;
+  /**
+   * The marker selected in a keyframe lane, and what to do to it.
+   *
+   * Threaded through rather than read here: the lanes own the selection, and this column is one of
+   * two places that show it. Two owners would let a marker be highlighted in one and edited in the
+   * other.
+   */
+  readonly keyframe?: SelectedKeyframe | undefined;
+  readonly onEditKeyframe?: ((change: KeyframeChange) => void) | undefined;
+  readonly onRemoveKeyframe?: (() => void) | undefined;
   /** Files in the project's `effects/` folder that could not be loaded at all. */
   readonly effectProblems?: readonly LibraryProblem[] | undefined;
   /** Settings that apply to every project on this machine, shown apart from the project's own. */
@@ -302,6 +313,9 @@ function ClipTab({
   onReject,
   onRenameClip,
   renamingClip,
+  keyframe,
+  onEditKeyframe,
+  onRemoveKeyframe,
   effectProblems,
   onCreateEffect,
   onEditEffect,
@@ -335,6 +349,9 @@ function ClipTab({
         {...(effectProblems !== undefined ? { effectProblems } : {})}
         renaming={renamingClip}
         sections={sections}
+        {...(keyframe !== undefined ? { keyframe } : {})}
+        {...(onEditKeyframe !== undefined ? { onEditKeyframe } : {})}
+        {...(onRemoveKeyframe !== undefined ? { onRemoveKeyframe } : {})}
       />
 
       {/*

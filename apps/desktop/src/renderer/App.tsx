@@ -124,7 +124,7 @@ import { type ExportSettings, DEFAULT_EXPORT } from '@nos/export';
 import type { DesktopBridge, ProjectInfo, SidecarInfo } from '../main/ipc-contract.js';
 import type { MeterReading } from '@nos/audio';
 import type { Transport } from './use-transport.js';
-import { KeyframeLanes } from './KeyframeLanes.js';
+import { useKeyframeLanes } from './KeyframeLanes.js';
 import { ManifestAuthoring } from './ManifestAuthoring.js';
 import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
@@ -843,6 +843,17 @@ export function App(): ReactNode {
   // One clip open at a time. Several would push the tracks below it off screen, and the lanes of two
   // clips on different tracks cannot be compared anyway — they are read against their own clip.
   const [expandedClip, setExpandedClip] = useState<ClipId | undefined>(undefined);
+  // Fed the drag's document so a lane's markers travel with the clip they belong to during a gesture,
+  // and read as rows rather than as markup so the header column can name each one beside it.
+  const keyframes = useKeyframeLanes({
+    document: drag.document,
+    ...(expandedClip !== undefined ? { clip: expandedClip } : {}),
+    effects: effectRegistry,
+    viewport,
+    playhead,
+    onChange: commitDocument,
+  });
+
   /** Open while a track-resize drag is in flight, so the whole drag is one history entry. */
   const resizing = useRef(false);
   // Which track's name field is open. Cleared by the rename itself, so the menu and a double-click
@@ -2150,18 +2161,7 @@ export function App(): ReactNode {
                     onToggleExpandClip={(clip) =>
                       setExpandedClip((current) => (current === clip ? undefined : clip))
                     }
-                    lanes={
-                      expandedClip === undefined ? undefined : (
-                        <KeyframeLanes
-                          document={drag.document}
-                          clip={expandedClip}
-                          effects={effectRegistry}
-                          viewport={viewport}
-                          playhead={playhead}
-                          onChange={commitDocument}
-                        />
-                      )
-                    }
+                    lanes={keyframes.rows}
                     {...(drag.snappedTo !== undefined
                       ? { snapIndicator: { frame: drag.snappedTo.frame, kind: drag.snappedTo.kind } }
                       : {})}
@@ -2202,6 +2202,9 @@ export function App(): ReactNode {
               effectProblems={effects.problems}
               onRenameClip={renameClip}
               renamingClip={renamingClip !== undefined && renamingClip === [...selected][0]}
+              {...(keyframes.selected !== undefined ? { keyframe: keyframes.selected } : {})}
+              onEditKeyframe={keyframes.edit}
+              onRemoveKeyframe={keyframes.remove}
               document={document}
               effects={effectRegistry}
               onChangeDocument={commitDocument}

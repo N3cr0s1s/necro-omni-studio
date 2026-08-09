@@ -20,7 +20,8 @@
 export type PanelTab = 'clip' | 'effects' | 'generate' | 'variants' | 'segment' | 'project';
 
 /** A section of the clip inspector. Named here because the tabs are what decide where each one goes. */
-export type ClipSection = 'identity' | 'timing' | 'transform' | 'effects' | 'audio' | 'transitions';
+export type ClipSection =
+  'identity' | 'timing' | 'transform' | 'effects' | 'audio' | 'transitions' | 'keyframe';
 
 export interface PanelTabDescriptor {
   readonly id: PanelTab;
@@ -40,7 +41,10 @@ export const PANEL_TABS: readonly PanelTabDescriptor[] = [
     label: 'Clip',
     // What the clip *is* and where it sits. Timing before framing, because where a clip is comes
     // before how it is framed — the order the inspector already used.
-    sections: ['identity', 'timing', 'transform', 'audio', 'transitions'],
+    // The selected marker first. It is the most transient thing in the column — it exists only while
+    // one is clicked — and burying it under six standing sections would mean scrolling to reach
+    // something you selected a moment ago.
+    sections: ['keyframe', 'identity', 'timing', 'transform', 'audio', 'transitions'],
   },
   // Its own tab, which is what #29 asked for by name: the stack, its parameters and its mask binding
   // are a workspace of their own and were competing with six other things for the same column.

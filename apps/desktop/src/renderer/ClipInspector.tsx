@@ -6,6 +6,8 @@ import {
   type EffectId,
   type EffectInstance,
   type EffectInstanceId,
+  type Easing,
+  type FrameIndex,
   type StaticValue,
   type TimelineDocument,
   animatedNumber,
@@ -45,6 +47,8 @@ import { Switch } from '@nos/ui/components/ui/switch';
 import { Toggle } from '@nos/ui/components/ui/toggle';
 import { AudioMix } from './AudioMix.js';
 import { ClipFadeSection } from './ClipFadeSection.js';
+import { KeyframeInspector } from './KeyframeInspector.js';
+import type { SelectedKeyframe } from './KeyframeLanes.js';
 import { ClipTiming } from './ClipTiming.js';
 import { ClipSpeedSection } from './ClipSpeedSection.js';
 import type { LibraryProblem } from './use-generator-library.js';
@@ -109,6 +113,24 @@ export interface ClipInspectorProps {
   readonly renaming?: boolean | undefined;
   /** Files in `effects/` that could not be loaded at all, so the picker can say so. */
   readonly effectProblems?: readonly LibraryProblem[] | undefined;
+  /**
+   * The marker clicked in a keyframe lane, and what to do to it.
+   *
+   * Issue #37: clicking a keyframe selected it and this column went on describing the clip, so every
+   * property of a marker except its value and its easing was unreachable. Passed in rather than
+   * derived here, because "which marker is selected" belongs to the lanes and two components deciding
+   * it separately is how one comes to highlight a marker the other is editing.
+   */
+  readonly keyframe?: SelectedKeyframe | undefined;
+  readonly onEditKeyframe?: ((change: KeyframeChange) => void) | undefined;
+  readonly onRemoveKeyframe?: (() => void) | undefined;
+}
+
+/** What the keyframe inspector can change. Every field optional: an edit names one thing. */
+export interface KeyframeChange {
+  readonly frame?: FrameIndex;
+  readonly value?: number;
+  readonly ease?: Easing;
 }
 
 /** One bindable mask, as the inspector needs to show it. */
@@ -134,6 +156,9 @@ export function ClipInspector({
   onEditEffect,
   editableEffects,
   sections,
+  keyframe,
+  onEditKeyframe,
+  onRemoveKeyframe,
 }: ClipInspectorProps): ReactNode {
   const [selected, setSelected] = useState<EffectInstanceId | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -183,6 +208,20 @@ export function ClipInspector({
 
   return (
     <div className="flex min-w-0 flex-col gap-3 p-3">
+      {/* First, and only while a marker is selected. It is the most transient thing in the column, and
+          burying it under six standing sections would mean scrolling to reach what you just clicked. */}
+      {shows('keyframe') &&
+        keyframe !== undefined &&
+        onEditKeyframe !== undefined &&
+        onRemoveKeyframe !== undefined && (
+          <KeyframeInspector
+            selected={keyframe}
+            frameRate={document.frameRate}
+            onEdit={onEditKeyframe}
+            onRemove={onRemoveKeyframe}
+          />
+        )}
+
       {shows('identity') && (
         <>
           {/* The clip's name, and the only place it can be changed. Three kept variants of one generator

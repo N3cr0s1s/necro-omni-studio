@@ -1,9 +1,11 @@
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   type AnimatableNumber,
   type Clip,
   type ClipTransform,
+  type Easing,
   type FrameIndex,
+  type Keyframe,
   type KeyframeId,
   type TimelineDocument,
   addKeyframeAt,
@@ -15,7 +17,7 @@ import {
   removeKeyframe,
 } from '@nos/core';
 import { type EffectRegistry } from '@nos/effects';
-import { type TimelineViewport, KeyframeLane } from '@nos/ui';
+import { type TimelineLaneRow, type TimelineViewport, KEYFRAME_LANE_HEIGHT, KeyframeLane } from '@nos/ui';
 
 /**
  * Keyframe lanes for the selected clip.
@@ -41,6 +43,41 @@ export interface KeyframeLanesProps {
   readonly onChange: (label: string, next: TimelineDocument) => void;
 }
 
+/**
+ * The marker under the cursor of attention, and everything needed to edit it from elsewhere.
+ *
+ * A keyframe's settings live in two places on purpose: the badge and the readout on the lane, for
+ * someone working in the timeline, and the inspector, for someone who wants every property of one
+ * marker in front of them at once. The second was missing entirely — clicking a marker selected it
+ * and the right column went on showing the clip — and it is the arrangement every editor uses.
+ *
+ * Carried out of the hook rather than duplicated: the lane and the panel must not each decide what
+ * "selected" means, or a marker will be highlighted in one and edited in the other.
+ */
+export interface SelectedKeyframe {
+  readonly id: KeyframeId;
+  /** Which parameter it animates, in the same words the lane header uses. */
+  readonly label: string;
+  readonly keyframe: Keyframe;
+  /** Its position on the timeline rather than inside the clip, which is what a user reads. */
+  readonly absoluteFrame: FrameIndex;
+  /** Whether it is the last marker, whose easing governs nothing. */
+  readonly last: boolean;
+}
+
+export interface KeyframeLanesResult {
+  /** One row per animated parameter, for the timeline to place beside its own headers. */
+  readonly rows: readonly TimelineLaneRow[];
+  readonly selected: SelectedKeyframe | undefined;
+  /** Changes the selected marker. A no-op when nothing is selected. */
+  readonly edit: (change: {
+    readonly frame?: FrameIndex;
+    readonly value?: number;
+    readonly ease?: Easing;
+  }) => void;
+  readonly remove: () => void;
+}
+
 /** The animated variant specifically: a lane only exists for a parameter that has keyframes. */
 type AnimatedParam = Extract<AnimatableNumber, { kind: 'animated' }>;
 
@@ -61,14 +98,14 @@ interface LaneTarget {
   read(document: TimelineDocument): AnimatedParam | undefined;
 }
 
-export function KeyframeLanes({
+export function useKeyframeLanes({
   document,
   clip,
   effects,
   viewport,
   playhead,
   onChange,
-}: KeyframeLanesProps): ReactNode {
+}: KeyframeLanesProps): KeyframeLanesResult {
   const [selected, setSelected] = useState<KeyframeId | undefined>(undefined);
   /**
    * The live drag.
@@ -163,13 +200,63 @@ export function KeyframeLanes({
     [document, onChange],
   );
 
-  if (located === undefined || lanes.length === 0) return null;
+  /** The lane holding the selected marker, and the marker itself. */
+  const selection = useMemo(() => {
+    if (selected === undefined) return undefined;
+    for (const target of lanes) {
+      const index = target.param.keyframes.findIndex((entry) => entry.id === selected);
+      if (index < 0) continue;
+      return {
+        target,
+        keyframe: target.param.keyframes[index]!,
+        last: index === target.param.keyframes.length - 1,
+      };
+    }
+    return undefined;
+  }, [lanes, selected]);
 
-  return (
-    <div className="flex flex-col border-t">
-      {lanes.map((target) => (
+  const clipStart = located?.clip.span.start;
+
+  const edit = useCallback(
+    (change: { readonly frame?: FrameIndex; readonly value?: number; readonly ease?: Easing }) => {
+      if (selection === undefined || clipStart === undefined) return;
+      // A frame arrives as a timeline position, because that is what the panel shows; keyframes are
+      // stored clip-relative, which is what lets a clip be moved without its animation drifting.
+      const relative =
+        change.frame === undefined ? undefined : frameIndex(Math.max(0, change.frame - clipStart));
+      onChange(
+        'edit keyframe',
+        selection.target.write(
+          document,
+          editKeyframe(selection.target.param, selection.keyframe.id, {
+            ...(relative === undefined ? {} : { frame: relative }),
+            ...(change.value === undefined ? {} : { value: change.value }),
+            ...(change.ease === undefined ? {} : { ease: change.ease }),
+          }),
+        ),
+      );
+    },
+    [selection, clipStart, document, onChange],
+  );
+
+  const remove = useCallback(() => {
+    if (selection === undefined) return;
+    onChange(
+      'remove keyframe',
+      selection.target.write(document, removeKeyframe(selection.target.param, selection.keyframe.id)),
+    );
+    setSelected(undefined);
+  }, [selection, document, onChange]);
+
+  const rows: readonly TimelineLaneRow[] = useMemo(() => {
+    if (located === undefined || lanes.length === 0) return [];
+
+    const laneRows = lanes.map((target) => ({
+      id: target.id,
+      label: target.label,
+      heightPx: KEYFRAME_LANE_HEIGHT,
+      body: (
         <KeyframeLane
-          key={target.id}
           label={target.label}
           keyframes={target.param.keyframes}
           clipStart={located.clip.span.start}
@@ -193,8 +280,8 @@ export function KeyframeLanes({
             });
           }}
           onDragEnd={() => {
-            // The single history entry for the whole gesture. Everything before this was a preview that
-            // never reached the store.
+            // The single history entry for the whole gesture. Everything before this was a preview
+            // that never reached the store.
             setDrag((current) => {
               if (current !== undefined) onChange('move keyframe', current.preview);
               return undefined;
@@ -215,13 +302,46 @@ export function KeyframeLanes({
             )
           }
         />
-      ))}
-      <p className="px-2 py-0.5 font-mono text-xs text-muted-foreground">
-        double-click a lane to add a keyframe · click a marker´s badge to cycle its easing
-      </p>
-    </div>
-  );
+      ),
+    }));
+
+    // A row of its own rather than a paragraph after the lanes, because everything under a track has
+    // to be a row: anything else in that column has no header beside it and pushes the two columns
+    // out of step, which is the whole of what was wrong here.
+    return [
+      ...laneRows,
+      {
+        id: 'lane-hint',
+        label: '',
+        heightPx: HINT_ROW_HEIGHT,
+        body: (
+          <p className="px-2 font-mono text-[11px] leading-[18px] text-muted-foreground">
+            double-click a lane to add a keyframe · click a marker´s badge to cycle its easing
+          </p>
+        ),
+      },
+    ];
+  }, [lanes, located, viewport, playhead, selected, document, onChange, commit]);
+
+  return {
+    rows,
+    selected:
+      selection === undefined || clipStart === undefined
+        ? undefined
+        : {
+            id: selection.keyframe.id,
+            label: selection.target.label,
+            keyframe: selection.keyframe,
+            absoluteFrame: frameIndex(clipStart + selection.keyframe.frame),
+            last: selection.last,
+          },
+    edit,
+    remove,
+  };
 }
+
+/** The hint row's height. One line of the smallest type the panel uses, plus its leading. */
+const HINT_ROW_HEIGHT = 18;
 
 /** Transform channels a keyframe lane can show. `rotation` included: a title can spin. */
 const TRANSFORM_CHANNELS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;

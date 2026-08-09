@@ -26,7 +26,7 @@ import {
 } from '@nos/core';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
 import { createViewport } from '@nos/ui';
-import { KeyframeLanes } from './KeyframeLanes.js';
+import { type KeyframeLanesProps, type KeyframeLanesResult, useKeyframeLanes } from './KeyframeLanes.js';
 import { createTextClip } from './TextInspector.js';
 
 afterEach(cleanup);
@@ -89,10 +89,31 @@ function documentWith(clip: Clip, kind: 'video' | 'text' | 'audio' = 'video'): T
   };
 }
 
+/**
+ * The hook, mounted.
+ *
+ * `useKeyframeLanes` returns rows rather than markup, because the timeline has to draw a header
+ * beside each one — so the tests place the bodies themselves, exactly as the timeline does. Rendering
+ * them any other way would be testing a layout nothing ships.
+ */
+function Harness(props: KeyframeLanesProps & { readonly report?: (result: KeyframeLanesResult) => void }) {
+  const result = useKeyframeLanes(props);
+  props.report?.(result);
+  return (
+    <div>
+      {result.rows.map((row) => (
+        <div key={row.id} data-lane-row={row.id} style={{ height: row.heightPx }}>
+          {row.body}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const renderLanes = (document: TimelineDocument, clip = 'c1') => {
   const onChange = vi.fn();
   render(
-    <KeyframeLanes
+    <Harness
       document={document}
       clip={clip}
       effects={effects}
@@ -102,6 +123,26 @@ const renderLanes = (document: TimelineDocument, clip = 'c1') => {
     />,
   );
   return onChange;
+};
+
+/** The hook's own result, for the parts of it the lanes do not render. */
+const mountLanes = (document: TimelineDocument, clip = 'c1') => {
+  const onChange = vi.fn();
+  let latest: KeyframeLanesResult | undefined;
+  render(
+    <Harness
+      document={document}
+      clip={clip}
+      effects={effects}
+      viewport={viewport}
+      playhead={frameIndex(0)}
+      onChange={onChange}
+      report={(result) => {
+        latest = result;
+      }}
+    />,
+  );
+  return { onChange, result: () => latest! };
 };
 
 /**
@@ -257,7 +298,7 @@ describe('which lanes appear', () => {
 
   it('shows nothing when no clip is selected', () => {
     render(
-      <KeyframeLanes
+      <Harness
         document={documentWith(videoClip())}
         effects={effects}
         viewport={viewport}
@@ -366,5 +407,132 @@ describe('clip-relative positions', () => {
     renderLanes(documentWith(videoClip({ transform: { ...videoClip().transform, opacity: curve(0, 1) } })));
     expect(screen.getByLabelText(/keyframe at frame 0/)).toBeDefined();
     expect(screen.getByLabelText(/keyframe at frame 12/)).toBeDefined();
+  });
+});
+
+/**
+ * The selection, carried out to the right column.
+ *
+ * Issue #37: clicking a marker selected it and the panel went on describing the clip, so every
+ * property of a keyframe except its value and its easing was unreachable. The hook is the one owner
+ * of "which marker is selected" — two owners is how a marker comes to be highlighted in one place and
+ * edited in another.
+ */
+describe('the selected marker', () => {
+  const animated = (start = 0) =>
+    documentWith(
+      videoClip({
+        span: spanFromBounds(frameIndex(start), frameIndex(start + 120)),
+        transform: { ...videoClip().transform, opacity: curve(0, 1) },
+      }),
+    );
+
+  it('is nothing until a marker is clicked', () => {
+    const { result } = mountLanes(animated());
+    expect(result().selected).toBeUndefined();
+  });
+
+  it('names the parameter and reports the marker itself', async () => {
+    const { result } = mountLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+
+    expect(result().selected?.label).toBe('transform · opacity');
+    expect(result().selected?.keyframe.value).toBe(0);
+    expect(result().selected?.last).toBe(false);
+  });
+
+  it('reports the frame on the timeline, not the offset into the clip', async () => {
+    // Keyframes are stored clip-relative so a clip can be moved without its animation drifting; every
+    // number the user reads is a timeline position. A marker 12 frames into a clip at 300 is 312.
+    const { result } = mountLanes(animated(300));
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 312/));
+    expect(result().selected?.keyframe.frame).toBe(12);
+    expect(result().selected?.absoluteFrame).toBe(312);
+  });
+
+  it('marks the last marker, whose easing governs nothing', async () => {
+    const { result } = mountLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 12/));
+    expect(result().selected?.last).toBe(true);
+  });
+
+  it('rebases a frame typed as a timeline position back into the clip', async () => {
+    const { onChange, result } = mountLanes(animated(300));
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 300/));
+    expect(result().selected?.absoluteFrame).toBe(300);
+
+    result().edit({ frame: frameIndex(340) });
+
+    // Looked up by id, not by position: markers are kept in frame order, and moving one past its
+    // neighbour changes which index it occupies.
+    const next = onChange.mock.calls.at(-1)![1] as TimelineDocument;
+    const clip = locateClip(next, clipId('c1'))!.clip as VideoClip;
+    const opacity = clip.transform.opacity;
+    const moved = isAnimated(opacity)
+      ? opacity.keyframes.find((entry) => entry.id === keyframeId('k0'))
+      : undefined;
+    expect(moved?.frame).toBe(40);
+  });
+
+  it('changes easing directly, without cycling to it', async () => {
+    const { onChange, result } = mountLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    result().edit({ ease: 'hold' });
+
+    const next = onChange.mock.calls.at(-1)![1] as TimelineDocument;
+    const clip = locateClip(next, clipId('c1'))!.clip as VideoClip;
+    const opacity = clip.transform.opacity;
+    expect(isAnimated(opacity) ? opacity.keyframes[0]!.ease : undefined).toBe('hold');
+  });
+
+  it('removes the marker and forgets it, so nothing stays selected that is gone', async () => {
+    const { onChange, result } = mountLanes(animated());
+    await userEvent.click(screen.getByLabelText(/opacity keyframe at frame 0/));
+    result().remove();
+
+    const next = onChange.mock.calls.at(-1)![1] as TimelineDocument;
+    const clip = locateClip(next, clipId('c1'))!.clip as VideoClip;
+    const opacity = clip.transform.opacity;
+    expect(isAnimated(opacity) ? opacity.keyframes.length : -1).toBe(1);
+  });
+
+  it('does nothing when asked to edit with nothing selected', () => {
+    const { onChange, result } = mountLanes(animated());
+    result().edit({ value: 0.5 });
+    result().remove();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The lanes as rows.
+ *
+ * The report was two symptoms of one cause: a lane appeared with nothing beside it in the header
+ * column, so it said nothing about which parameter it animated *and* the two columns came apart. Rows
+ * carry their own height and label so the timeline can draw both halves from one number.
+ */
+describe('the rows the hook produces', () => {
+  it('gives each lane a label and a height', () => {
+    const { result } = mountLanes(
+      documentWith(videoClip({ transform: { ...videoClip().transform, opacity: curve(0, 1) } })),
+    );
+    const lane = result().rows[0]!;
+    expect(lane.label).toBe('transform · opacity');
+    expect(lane.heightPx).toBeGreaterThan(0);
+  });
+
+  it('makes the hint a row of its own, so it too has a header beside it', () => {
+    // Anything under a track that is not a row has no header opposite it, and pushes every row below
+    // out of step — which is the whole of what was wrong.
+    const { result } = mountLanes(
+      documentWith(videoClip({ transform: { ...videoClip().transform, opacity: curve(0, 1) } })),
+    );
+    expect(result().rows.at(-1)?.id).toBe('lane-hint');
+    expect(result().rows.every((row) => row.heightPx > 0)).toBe(true);
+  });
+
+  it('produces no rows at all when nothing is animated', () => {
+    const { result } = mountLanes(documentWith(videoClip()));
+    expect(result().rows).toEqual([]);
   });
 });
