@@ -41,6 +41,8 @@ export const IPC = {
   /** Writes a project-relative text file. */
   writeTextFile: 'project:write-text',
   writeMixdown: 'export:write-mixdown',
+  chooseFilesToImport: 'project:choose-import',
+  copyIntoProject: 'project:copy-in',
   /** Lists a project subtree. */
   listFolder: 'project:list',
   /** The watcher's current state, for a renderer that subscribed after it started. */
@@ -224,6 +226,24 @@ export interface DesktopBridge {
    * regenerated on the next export — exactly what that folder is documented to hold.
    */
   writeMixdown(contents: Uint8Array): Promise<string>;
+  /**
+   * Asks the user which files to bring in. Empty when they cancelled, which is not a failure.
+   *
+   * Split from the copying because only the dialog needs privilege: *where* the files land and what
+   * they are called is a rule with tests, and it lives in the renderer where that package can be
+   * imported. The main process may import types from the workspace but not values.
+   */
+  chooseFilesToImport(): Promise<readonly string[]>;
+  /**
+   * Copies chosen files to project-relative destinations, returning the ones that landed.
+   *
+   * Copies rather than references: §4 promises that zipping the folder moves the whole project, and a
+   * link to somewhere else on the machine breaks that invisibly — the cut plays until it is opened
+   * somewhere else. Never overwrites; a destination that already exists is skipped.
+   */
+  copyIntoProject(
+    placements: readonly { readonly from: string; readonly to: string }[],
+  ): Promise<readonly string[]>;
   listFolder(path: string): Promise<readonly FolderEntry[]>;
 
   /**

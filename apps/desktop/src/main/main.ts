@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
@@ -370,6 +371,45 @@ function registerHandlers(): void {
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, contents);
     return relative;
+  });
+
+  ipcMain.handle(IPC.chooseFilesToImport, async (): Promise<readonly string[]> => {
+    // The dialog only. Where the files should land and what they should be called is decided in the
+    // renderer, which can import the tested rule — this process may import *types* from the workspace
+    // packages but not values, because it is loaded as source rather than bundled.
+    const chosen = await dialog.showOpenDialog({
+      title: 'Import media',
+      properties: ['openFile', 'multiSelections'],
+    });
+    return chosen.canceled ? [] : chosen.filePaths;
+  });
+
+  ipcMain.handle(IPC.copyIntoProject, async (_event, placements: unknown): Promise<readonly string[]> => {
+    if (!Array.isArray(placements)) return [];
+    const root = requireProject();
+    const landed: string[] = [];
+
+    for (const placement of placements) {
+      const from = (placement as { from?: unknown }).from;
+      const to = (placement as { to?: unknown }).to;
+      if (typeof from !== 'string' || typeof to !== 'string') continue;
+
+      // Resolved against the project for every entry, so a destination the renderer got wrong — or
+      // was made to get wrong — cannot write outside the folder.
+      const destination = resolveInProject(root, to);
+      try {
+        await mkdir(dirname(destination), { recursive: true });
+        // `COPYFILE_EXCL` as a second line of defence: the plan avoided every name it could see, and
+        // a race with something else writing the folder must not overwrite material.
+        await copyFile(from, destination, constants.COPYFILE_EXCL);
+        landed.push(to);
+      } catch {
+        // One file that cannot be read costs that file. Refusing the whole import because the last
+        // of twenty was on an unplugged card would be a worse trade.
+      }
+    }
+
+    return landed;
   });
 
   ipcMain.handle(IPC.listFolder, async (_event, path: unknown): Promise<readonly FolderEntry[]> => {

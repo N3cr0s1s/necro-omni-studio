@@ -135,7 +135,7 @@ import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js'
 import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
-import { allFiles, availabilityOf, describeAvailability, filesOnDisk } from '@nos/media';
+import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
 import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
 import { describeRippleMode, useClipEdits } from './use-clip-edits.js';
@@ -1017,13 +1017,51 @@ export function App(): ReactNode {
             if (done) tree.refresh();
           });
           break;
+        case 'import': {
+          // Into the folder that was right-clicked when it is one, otherwise `media/`, which is where
+          // §4 says imported source files live.
+          const into = target.isDirectory && target.path !== undefined ? target.path : 'media';
+          void (async () => {
+            const api = bridge();
+            if (api === undefined) return;
+
+            const chosen = await api.chooseFilesToImport();
+            if (chosen.length === 0) return;
+
+            /*
+             * Named here rather than in the main process, which cannot import the rule: the names have
+             * to avoid what the folder already holds *and* each other, since two cards each holding
+             * `shot.mp4` is an ordinary thing to import at once.
+             */
+            const taken = new Set(
+              (tree.tree === undefined ? [] : allFiles(tree.tree))
+                .filter((file) => file.path.startsWith(`${into}/`))
+                .map((file) => file.name),
+            );
+            const landed = await api.copyIntoProject(planImport(chosen, into, taken));
+
+            tree.refresh();
+            if (landed.length === chosen.length) {
+              confirmation.say(
+                landed.length === 1
+                  ? `imported ${landed[0]}`
+                  : `imported ${landed.length} files into ${into}`,
+              );
+            } else {
+              // Said rather than swallowed: a partial import that reported success would leave the
+              // user believing material is there.
+              setError(`imported ${landed.length} of ${chosen.length} files — the rest could not be read`);
+            }
+          })();
+          break;
+        }
         default: {
           const unreachable: never = action;
           throw new Error(`Unhandled browser action ${String(unreachable)}`);
         }
       }
     },
-    [files, tree],
+    [confirmation, files, tree],
   );
 
   /**

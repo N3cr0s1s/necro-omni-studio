@@ -8,4 +8,5 @@ export * from './contracts/index.js';
 export * from './tree/folder-tree.js';
 export * from './tree/filter-tree.js';
 export * from './tree/availability.js';
+export * from './tree/import-name.js';
 export * from './notes/markdown.js';

@@ -1,4 +1,11 @@
-import { ExternalLinkIcon, FolderPlusIcon, PencilIcon, SparklesIcon, Trash2Icon } from 'lucide-react';
+import {
+  ExternalLinkIcon,
+  FileUpIcon,
+  FolderPlusIcon,
+  PencilIcon,
+  SparklesIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import { PROJECT_FOLDERS } from '@nos/core';
 import type { ActionMenuItem } from '@nos/ui';
 
@@ -15,7 +22,14 @@ import type { ActionMenuItem } from '@nos/ui';
  * matters here — that a reserved folder is never offered for deletion.
  */
 
-export const BROWSER_MENU_ACTIONS = ['new-folder', 'rename', 'reveal', 'prune-takes', 'delete'] as const;
+export const BROWSER_MENU_ACTIONS = [
+  'import',
+  'new-folder',
+  'rename',
+  'reveal',
+  'prune-takes',
+  'delete',
+] as const;
 
 export type BrowserMenuAction = (typeof BROWSER_MENU_ACTIONS)[number];
 
@@ -47,6 +61,16 @@ export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuIt
   const reason = protectedEntry ? ' — the project needs this one' : '';
 
   return [
+    {
+      /*
+       * Bringing material in, which nothing offered: a project is a folder, so until now the only way
+       * to get footage into one was to copy it there with a file manager first. §4 calls `media/` the
+       * imported source files and nothing imported.
+       */
+      id: 'import',
+      label: state.isDirectory && path !== undefined ? `Import into ${basename(path)}…` : 'Import media…',
+      icon: FileUpIcon,
+    },
     {
       id: 'new-folder',
       // Always available, including on empty space: making the first folder is exactly when there is
