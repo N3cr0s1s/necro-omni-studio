@@ -131,8 +131,11 @@ try {
   const discard = page.getByRole('button', { name: 'Discard' });
   if (await discard.count()) await discard.first().click();
 
-  await page.getByRole('button', { name: 'Export' }).first().click();
-  await page.locator('[role="dialog"]').getByRole('button', { name: 'Export' }).click();
+  // Exact, because Playwright matches an accessible name by case-insensitive substring: this
+  // fixture project is called `exportcheck`, so any button whose label mentions the destination —
+  // the overwrite warning's "Save as exportcheck (2).mp4" — matches a loose `Export` too.
+  await page.getByRole('button', { name: 'Export', exact: true }).first().click();
+  await page.locator('[role="dialog"]').getByRole('button', { name: 'Export', exact: true }).click();
   await page.waitForFunction(() => document.body.textContent?.includes('complete') === true, {
     timeout: 180_000,
   });
@@ -151,7 +154,7 @@ try {
    * would close it.
    */
   rmSync(delivered, { force: true });
-  await page.locator('[role="dialog"]').getByRole('button', { name: 'Export' }).click();
+  await page.locator('[role="dialog"]').getByRole('button', { name: 'Export', exact: true }).click();
 
   /*
    * Existing is not the same as finished: ffmpeg creates the file when it opens the muxer, so reading
@@ -171,6 +174,57 @@ try {
   }
   if (!redelivered) fail('a second export in the same session delivered nothing');
   else console.log('✓ a second export in the same session delivers too');
+
+  /*
+   * Exporting over a file that is already there.
+   *
+   * The encoder passes `-y` and the dialog offers the same `renders/<project>.mp4` every time it
+   * opens, so a second export silently replaced the first — minutes of GPU time, and often the only
+   * copy of a finished cut. Every other write in this application refuses to destroy without a word:
+   * an import skips a name already taken, a delete goes to the trash.
+   *
+   * Checked here rather than in the component test because the warning depends on the *watcher*
+   * having reported the file the export just wrote. A component test supplies that set directly and
+   * would pass with the folder never being read at all.
+   */
+  const dialog = page.locator('[role="dialog"]');
+  let warned = '';
+  for (let waited = 0; waited < 30 && !/will be replaced/.test(warned); waited += 1) {
+    await page.waitForTimeout(1000);
+    warned = await dialog.innerText().catch(() => '');
+  }
+
+  if (!/will be replaced/.test(warned)) {
+    fail('the dialog offered to overwrite a delivered file without saying so');
+  } else {
+    console.log('✓ exporting onto a delivered file says it will be replaced');
+
+    const free = dialog.getByRole('button', { name: /^Save as / });
+    if ((await free.count()) === 0) {
+      fail('the overwrite warning offers no way past it');
+    } else {
+      await free.click();
+      await page.waitForTimeout(500);
+      await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+
+      const beside = join(project, 'renders', 'exportcheck (2).mp4');
+      let landed = false;
+      for (let waited = 0; waited < 180 && !landed; waited += 1) {
+        await page.waitForTimeout(1000);
+        landed = existsSync(beside) && statSync(beside).size > 0;
+      }
+
+      // Both, which is the whole point: the free name has to be a *second* file, not a rename of the
+      // first.
+      if (landed && existsSync(delivered)) {
+        console.log('✓ and the free name delivers beside it rather than over it');
+      } else {
+        fail(
+          `taking the free name did not leave both files — beside: ${landed}, first: ${existsSync(delivered)}`,
+        );
+      }
+    }
+  }
 
   if (errors.length > 0) fail(`the renderer raised ${errors.length}: ${errors[0]}`);
 

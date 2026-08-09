@@ -944,6 +944,34 @@ path that has never run is exactly what this document keeps recording.
 
 ### Export rules (keep these)
 
+**An export says before it replaces a delivered file.** The encoder passes `-y` — right for a
+deliberate re-render — and the dialog offers the same `renders/<project>.mp4` every time it opens.
+Between the two, a second export silently destroyed the first: minutes of GPU time, and often the only
+copy of a finished cut. Everything else in this application refuses to destroy without a word — an
+import skips a name already taken, a delete goes to the trash — and export was the one place where
+losing something cost the most.
+
+A warning and not a refusal: re-rendering over a take is an ordinary thing to want, and an export that
+*could not* overwrite is one people work around by hand. What was missing is the word, so the dialog
+says what will happen and offers a free name in one click. The naming rule is `uniquePath`, beside
+`uniqueName` in `@nos/media`, so a delivery is numbered by the same convention as an import rather
+than by a second copy of it.
+
+**The set is optional and absent means "not known".** A caller that has not read the folder must not
+be forced to claim the file is absent, so nothing is said.
+
+**Checked in `exportcheck`, not only in a component test.** The warning depends on the *watcher*
+having reported the file the export just wrote; a component test supplies that set directly and would
+pass with the folder never read at all. The harness already exported twice — and deleted the file
+first, which is exactly why it never saw this.
+
+**Playwright matches an accessible name by case-insensitive substring.** The fixture project is called
+`exportcheck`, so the new "Save as exportcheck (2).mp4" button matched a loose `{ name: 'Export' }`
+and broke a check that had nothing to do with it. Every `Export` selector in that harness is `exact`
+now; a loose name is a selector waiting to catch a label nobody has written yet.
+
+
+
 - A **review copy** renders smaller *and* reads the proxies. Scaling at the encoder saves nothing, and
   decoding originals for a file nobody will grade wastes the minutes the setting exists to save. A
   final export still reads originals — one that quietly delivered proxies would be a serious failure.

@@ -1681,6 +1681,10 @@ export function App(): ReactNode {
           onCancel={exportRun.cancel}
           onClose={() => setExportSettings(undefined)}
           onReveal={() => void bridge()?.revealInFolder(exportSettings.outputPath)}
+          // The folder as the watcher last reported it. The encoder overwrites, and the dialog offers
+          // the same destination every time it opens, so without this a second export silently
+          // replaced the first.
+          {...(onDisk !== undefined ? { existingFiles: onDisk } : {})}
         />
       )}
 

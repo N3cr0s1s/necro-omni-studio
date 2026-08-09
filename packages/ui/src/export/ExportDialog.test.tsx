@@ -321,3 +321,64 @@ describe('the review copy', () => {
     expect(screen.getByRole('switch', { name: 'Review copy' }).getAttribute('aria-disabled')).toBe('true');
   });
 });
+
+describe('a destination that already holds a file', () => {
+  /**
+   * The encoder passes `-y` and the dialog offers the same `renders/<project>.mp4` every time it
+   * opens, so a second export silently replaced the first — minutes of GPU time, and often the only
+   * copy of a finished cut. Everything else in this application refuses to destroy without a word.
+   */
+  const taken = new Set(['renders/cut.mp4']);
+
+  it('says what will happen', () => {
+    render(
+      <ExportDialog settings={{ ...settings(), outputPath: 'renders/cut.mp4' }} existingFiles={taken} />,
+    );
+    expect(screen.getByText(/renders\/cut\.mp4 exists and will be replaced/)).toBeDefined();
+  });
+
+  it('says nothing when the destination is free', () => {
+    render(
+      <ExportDialog settings={{ ...settings(), outputPath: 'renders/other.mp4' }} existingFiles={taken} />,
+    );
+    expect(screen.queryByText(/will be replaced/)).toBeNull();
+  });
+
+  it('says nothing when the folder has not been read', () => {
+    // Absent means "not known", not "the file is not there": a caller that has not read the folder
+    // must not be made to claim it is empty.
+    render(<ExportDialog settings={{ ...settings(), outputPath: 'renders/cut.mp4' }} />);
+    expect(screen.queryByText(/will be replaced/)).toBeNull();
+  });
+
+  it('offers a free name, and taking it clears the warning', async () => {
+    // A warning rather than a refusal — re-rendering over a take is an ordinary thing to want — so
+    // what matters is that there is one click out of it.
+    const onChange = vi.fn();
+    render(
+      <ExportDialog
+        settings={{ ...settings(), outputPath: 'renders/cut.mp4' }}
+        existingFiles={taken}
+        onChange={onChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save as cut (2).mp4' }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ outputPath: 'renders/cut (2).mp4' }));
+  });
+
+  it('does not offer the way out while an export is running', () => {
+    // Changing the destination mid-render would name a file the encoder is not writing.
+    render(
+      <ExportDialog
+        settings={{ ...settings(), outputPath: 'renders/cut.mp4' }}
+        existingFiles={taken}
+        progress={progress()}
+      />,
+    );
+    // `disabled` as an attribute rather than a matcher: `jest-dom` is not installed here, and the
+    // registry's Button renders a real `<button>`.
+    expect(screen.getByRole('button', { name: /Save as/ }).hasAttribute('disabled')).toBe(true);
+  });
+});

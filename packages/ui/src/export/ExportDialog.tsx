@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo } from 'react';
 import { CircleCheckIcon, FolderOpenIcon, GaugeIcon, TriangleAlertIcon, UploadIcon } from 'lucide-react';
 import type { ValidationIssue } from '@nos/core';
+import { baseName, uniquePath } from '@nos/media';
 import {
   type EncoderSpeed,
   type ExportProgress,
@@ -72,6 +73,19 @@ export interface ExportDialogProps {
   readonly onBrowse?: () => void;
   /** Shows the finished file in the file manager. Offered only once there is one. */
   readonly onReveal?: () => void;
+  /**
+   * Project-relative paths that already exist, so a delivery about to replace one can say so.
+   *
+   * The encoder overwrites — it passes `-y`, which is right for a deliberate re-render — and the
+   * dialog offers the same `renders/<project>.mp4` every time it opens. Between the two, a second
+   * export silently destroyed the first: minutes of GPU time and, often, the only copy of a finished
+   * cut. Everything else in this application refuses to destroy without a word, and this was the one
+   * place where losing something cost the most.
+   *
+   * Optional, because a caller that has not read the folder should not be forced to claim the file is
+   * absent. Absent means "not known", and nothing is said.
+   */
+  readonly existingFiles?: ReadonlySet<string>;
 }
 
 export function ExportDialog({
@@ -84,6 +98,7 @@ export function ExportDialog({
   onClose,
   onReveal,
   onBrowse,
+  existingFiles,
 }: ExportDialogProps): ReactNode {
   const validation = useMemo(() => validateExportSettings(settings), [settings]);
   const issues: readonly ValidationIssue[] = validation.ok ? [] : validation.error;
@@ -143,6 +158,12 @@ export function ExportDialog({
             </InputGroup>
           </Field>
           <FieldIssue message={issueFor('outputPath')} />
+          <Overwrite
+            path={settings.outputPath}
+            {...(existingFiles !== undefined ? { existingFiles } : {})}
+            disabled={running}
+            onUse={(path) => onChange?.({ ...settings, outputPath: path })}
+          />
 
           <Field orientation="horizontal">
             <FieldLabel className="w-18 shrink-0">Codec</FieldLabel>
@@ -369,5 +390,43 @@ function ProgressSection({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What is already at the destination, and the way past it.
+ *
+ * A warning rather than a refusal: re-rendering over a previous take is an ordinary thing to want, and
+ * an export that could not overwrite would be one people work around by hand. What was missing is the
+ * *word* — so this says what will happen and offers a free name in one click, which is the same shape
+ * as every other destructive action here.
+ *
+ * Drawn as a warning and not as muted status, for the reason the backend line is: this is a
+ * consequence, not a fact about the form.
+ */
+function Overwrite({
+  path,
+  existingFiles,
+  disabled,
+  onUse,
+}: {
+  readonly path: string;
+  readonly existingFiles?: ReadonlySet<string>;
+  readonly disabled: boolean;
+  readonly onUse: (path: string) => void;
+}): ReactNode {
+  // Nothing known about the folder, or nothing there: either way there is nothing to warn about.
+  if (existingFiles === undefined || !existingFiles.has(path)) return null;
+
+  const free = uniquePath(path, existingFiles);
+
+  return (
+    <p className="text-destructive flex items-center gap-2 pl-20 font-mono text-xs">
+      <TriangleAlertIcon className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{`${path} exists and will be replaced`}</span>
+      <Button variant="outline" size="sm" disabled={disabled} onClick={() => onUse(free)}>
+        {`Save as ${baseName(free)}`}
+      </Button>
+    </p>
   );
 }

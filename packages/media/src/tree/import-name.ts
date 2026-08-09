@@ -50,6 +50,32 @@ export function uniqueName(name: string, taken: ReadonlySet<string>): string {
 }
 
 /**
+ * The same rule applied to a whole project-relative path.
+ *
+ * For a *delivery*, not an import: the export encoder passes `-y`, and the dialog offers the same
+ * `renders/<project>.mp4` every time it opens — so a second export silently replaced the first, which
+ * in this application is minutes of GPU time and the only copy of a finished cut. Every other write
+ * here refuses to destroy something: an import skips a name already taken, a delete goes to the trash.
+ * Export was the one place that cost the most to lose and warned about it least.
+ *
+ * The folder is preserved and only the last segment is renumbered, so `renders/cut.mp4` becomes
+ * `renders/cut (2).mp4` rather than moving anywhere.
+ */
+export function uniquePath(path: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(path)) return path;
+
+  const cut = path.lastIndexOf('/');
+  const folder = cut === -1 ? '' : path.slice(0, cut + 1);
+  // Compared against the same set the caller holds, which is keyed by full path — so the candidates
+  // `uniqueName` proposes have to be re-qualified before they are tested.
+  const withinFolder = new Set(
+    [...taken].filter((entry) => entry.startsWith(folder)).map((entry) => entry.slice(folder.length)),
+  );
+
+  return `${folder}${uniqueName(baseName(path), withinFolder)}`;
+}
+
+/**
  * Where a set of imports should land, and under what names.
  *
  * Resolved as a batch rather than one at a time, because two files being imported together can want

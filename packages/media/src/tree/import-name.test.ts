@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, extensionOf, planImport, stemOf, uniqueName } from './import-name.js';
+import { baseName, extensionOf, planImport, stemOf, uniqueName, uniquePath } from './import-name.js';
 
 /**
  * Naming a file brought into a project.
@@ -84,5 +84,37 @@ describe('planning a batch', () => {
   it('reads a Windows path, so a chooser on either platform resolves', () => {
     expect(baseName('C:\\Users\\u\\shot.mp4')).toBe('shot.mp4');
     expect(baseName('/home/u/shot.mp4')).toBe('shot.mp4');
+  });
+});
+
+describe('a free name for a delivery', () => {
+  /**
+   * Export is the one write in this application that used to destroy something without a word: the
+   * encoder passes `-y` and the dialog offers the same path every time it opens, so a second export
+   * replaced the first — minutes of GPU time and the only copy of a finished cut.
+   */
+  it('leaves a path nothing has taken', () => {
+    expect(uniquePath('renders/cut.mp4', new Set())).toBe('renders/cut.mp4');
+  });
+
+  it('numbers before the extension, keeping the folder', () => {
+    // `renders/cut.mp4 (2)` would be unopenable, and moving it to the root would hide it.
+    expect(uniquePath('renders/cut.mp4', new Set(['renders/cut.mp4']))).toBe('renders/cut (2).mp4');
+  });
+
+  it('skips past every copy already there', () => {
+    const taken = new Set(['renders/cut.mp4', 'renders/cut (2).mp4', 'renders/cut (3).mp4']);
+    expect(uniquePath('renders/cut.mp4', taken)).toBe('renders/cut (4).mp4');
+  });
+
+  it('is not confused by the same name in another folder', () => {
+    // The set is keyed by full path, so a candidate has to be re-qualified before it is tested —
+    // otherwise `media/cut (2).mp4` would make `renders/cut (2).mp4` look taken.
+    const taken = new Set(['renders/cut.mp4', 'media/cut (2).mp4']);
+    expect(uniquePath('renders/cut.mp4', taken)).toBe('renders/cut (2).mp4');
+  });
+
+  it('works at the project root, where there is no folder to keep', () => {
+    expect(uniquePath('cut.mp4', new Set(['cut.mp4']))).toBe('cut (2).mp4');
   });
 });
