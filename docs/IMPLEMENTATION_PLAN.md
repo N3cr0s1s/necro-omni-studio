@@ -908,6 +908,15 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**State the shell needs at close time is pushed, not pulled.** Asking the renderer whether it is dirty
+*while* the window tears down races the teardown, and a stale answer is either a lost edit or a prompt
+nobody can explain. The same reasoning puts the close after the save, in the renderer: an editor that
+saved while quitting would be a data-loss bug wearing the costume of a fix.
+
+**A modal in the shutdown path can hang every harness.** They tear down by killing the process, so a
+dialog that appeared on a graceful close would wait forever — worth re-running all three after touching
+anything on that path, and perfcheck especially, since it leaves its document dirty.
+
 **Crash recovery is driven by killing the shell**, not by closing it: a polite close exercises the
 path that was never in doubt. Two assertions, because they fail for different reasons — the recovery
 file appears after an edit, and the next launch offers the work back. Checking only the second reports
