@@ -521,9 +521,19 @@ try {
   } catch {
     electron.kill('SIGTERM');
   }
-  // Left behind on failure, so the delivered file can be looked at.
+  /*
+   * Left behind on failure, so the delivered file can be looked at.
+   *
+   * Retried, because the shell was sent SIGTERM a line ago and its renderers are still writing to
+   * `user-data` while this walks the tree: an unretried remove raced them and threw `ENOTEMPTY`,
+   * which failed a run whose every assertion had passed. A check that falls over in its own teardown
+   * reports a green result as red, which is worse than not cleaning up at all.
+   *
+   * `smokecheck` already retried here. The fix existing in one harness and not its neighbour is the
+   * same shape as every other gap in this repository, and it is why this comment names both.
+   */
   if (process.exitCode === undefined || process.exitCode === 0)
-    rmSync(work, { recursive: true, force: true });
+    rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   else console.error(`  the run is left in ${work}`);
 }
 
