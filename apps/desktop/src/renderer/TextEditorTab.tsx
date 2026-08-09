@@ -1,13 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { SaveIcon, TriangleAlertIcon } from 'lucide-react';
-import { type SchemaShape, acceptCompletion, completionsFor, locationAt } from '@nos/core';
-import { CompletionList, completionCommand, cycle, jsonProblem, opensOnTyping, tokenizeJson } from '@nos/ui';
+import { jsonProblem } from '@nos/ui';
 import { Button } from '@nos/ui/components/ui/button';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Spinner } from '@nos/ui/components/ui/spinner';
-import { cn } from '@nos/ui/lib/utils';
 import { bridge } from './bridge.js';
-import { schemaFor } from './file-schemas.js';
+import { LazyCodeEditor } from './code-editor/LazyCodeEditor.js';
+import { useMonacoTheme } from './code-editor/use-monaco-theme.js';
 
 /**
  * A project file, open for editing.
@@ -83,9 +82,9 @@ export function TextEditorTab({ path, onDirty, onSaved }: TextEditorTabProps): R
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
   const isJson = path.toLowerCase().endsWith('.json');
-  // Which description applies, if any. `undefined` for a file nothing models, which offers nothing —
-  // the same path a `.txt` takes.
-  const schema = useMemo(() => (isJson ? schemaFor(path) : undefined), [isJson, path]);
+  // Registered globally rather than per editor, so the completions know which description applies
+  // without this component telling Monaco anything.
+  const themeKey = useMonacoTheme();
   const problem = useMemo(() => (isJson ? jsonProblem(text) : undefined), [isJson, text]);
 
   const save = useCallback(async () => {
@@ -139,215 +138,47 @@ export function TextEditorTab({ path, onDirty, onSaved }: TextEditorTabProps): R
       </header>
       <Separator />
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <Highlighted text={text} json={isJson} schema={schema?.shape} onChange={setText} />
+      {/* No padding and no scroller of its own: Monaco owns its scrolling, and a parent that also
+          scrolled would move the text out from under the caret. */}
+      <div className="min-h-0 flex-1">
+        <LazyCodeEditor
+          value={text}
+          onChange={setText}
+          language={languageFor(path)}
+          path={path}
+          themeKey={themeKey}
+          // The parse failure, underlined where it is. It was already reported as a line in the
+          // header, which means reading a number and then counting rows — the one job an editor
+          // should never leave to the reader.
+          markers={
+            problem?.line === undefined
+              ? []
+              : [
+                  {
+                    line: problem.line,
+                    ...(problem.column !== undefined ? { column: problem.column } : {}),
+                    message: problem.message,
+                    severity: 'error' as const,
+                  },
+                ]
+          }
+          ariaLabel="File contents"
+          className="size-full"
+        />
       </div>
     </section>
   );
 }
 
 /**
- * The editable surface: a transparent textarea over a coloured copy of the same text.
+ * Which language a file is edited as.
  *
- * Both layers use identical type metrics and identical padding, and the tokenizer covers every
- * character — that is what keeps the caret over the glyph it belongs to. A trailing newline gets an
- * extra blank line in the coloured layer, because a `<pre>` collapses the last one and the two would
- * otherwise disagree by a row at the bottom of every file.
+ * By extension, which is the same rule the schema registry uses. `plaintext` for everything else
+ * rather than a guess: a note coloured as if it were code is harder to read than one left alone.
  */
-function Highlighted({
-  text,
-  json,
-  schema,
-  onChange,
-}: {
-  readonly text: string;
-  readonly json: boolean;
-  readonly schema: SchemaShape | undefined;
-  readonly onChange: (text: string) => void;
-}): ReactNode {
-  const areaRef = useRef<HTMLTextAreaElement | null>(null);
-  const caretRef = useRef<HTMLSpanElement | null>(null);
-  const tokens = useMemo(() => (json ? tokenizeJson(text) : []), [json, text]);
-
-  /** The caret the suggestions are for. `undefined` means the list is closed. */
-  const [asking, setAsking] = useState<number>();
-  const [active, setActive] = useState(0);
-  const [anchor, setAnchor] = useState({ left: 0, top: 0 });
-
-  const completions = useMemo(
-    () => (asking === undefined ? [] : completionsFor(schema, locationAt(text, asking))),
-    [asking, schema, text],
-  );
-
-  /*
-   * Where to draw the list.
-   *
-   * Measured off a mirror of the highlighted layer rather than computed. A textarea gives no way to
-   * ask where its caret is, and every arithmetic answer — characters times an assumed advance width —
-   * is wrong the moment a line wraps or a glyph is not the width it was assumed to be. The mirror
-   * holds the text up to the caret in the same font, the same width and the same wrapping, so the
-   * marker after it is exactly where the caret is by construction.
-   */
-  useEffect(() => {
-    if (asking === undefined) return;
-    const marker = caretRef.current?.getBoundingClientRect();
-    const container = areaRef.current?.parentElement?.getBoundingClientRect();
-    if (marker === undefined || container === undefined) return;
-    setAnchor({ left: marker.left - container.left, top: marker.bottom - container.top + 4 });
-  }, [asking, text]);
-
-  const accept = useCallback(
-    (index: number) => {
-      const completion = completions[index];
-      if (asking === undefined || completion === undefined) return;
-
-      const accepted = acceptCompletion(text, locationAt(text, asking), completion);
-      onChange(accepted.text);
-      setAsking(undefined);
-
-      // The caret goes where the insertion ended, after React has written the new value — setting it
-      // before would put it back where the browser's own update lands it.
-      requestAnimationFrame(() => {
-        areaRef.current?.setSelectionRange(accepted.caret, accepted.caret);
-        areaRef.current?.focus();
-      });
-    },
-    [asking, completions, onChange, text],
-  );
-
-  const shared = 'font-mono text-xs leading-5 whitespace-pre-wrap break-words';
-
-  return (
-    <div className="relative min-h-full">
-      <pre aria-hidden="true" className={cn(shared, 'text-foreground m-0 p-0')}>
-        {json
-          ? tokens.map((token, index) => (
-              <span key={index} className={toneOf(token.kind)}>
-                {token.text}
-              </span>
-            ))
-          : text}
-        {/* `<pre>` swallows a single trailing newline; without this the two layers differ by a row. */}
-        {text.endsWith('\n') ? '\n' : ''}
-      </pre>
-
-      {/* The measuring mirror: the same text, font, width and wrapping, up to the caret. Invisible and
-          untouchable, so it costs a layout and nothing else. */}
-      {asking !== undefined && (
-        <pre
-          aria-hidden="true"
-          className={cn(shared, 'pointer-events-none invisible absolute inset-0 m-0 p-0')}
-        >
-          {text.slice(0, asking)}
-          <span ref={caretRef} />
-        </pre>
-      )}
-
-      <textarea
-        ref={areaRef}
-        aria-label="File contents"
-        spellCheck={false}
-        value={text}
-        role="combobox"
-        aria-expanded={completions.length > 0}
-        aria-controls="json-completions"
-        {...(completions.length > 0 ? { 'aria-activedescendant': `json-completions-${active}` } : {})}
-        onChange={(event) => {
-          onChange(event.target.value);
-
-          const caret = event.target.selectionStart;
-          const typed = event.target.value[caret - 1] ?? '';
-          // Reopened at the new caret while a word is being typed, and closed the moment it is not —
-          // a list left hanging over a comma is a list that is describing the wrong place.
-          if (json && schema !== undefined && opensOnTyping(typed)) {
-            setAsking(caret);
-            setActive(0);
-          } else setAsking(undefined);
-        }}
-        onKeyDown={(event) => {
-          const command = completionCommand(event, asking !== undefined && completions.length > 0);
-          if (command === 'none') return;
-
-          // Every one of these is a key the textarea would otherwise act on — Tab moving focus out of
-          // the editor being the one that is hardest to recover from.
-          event.preventDefault();
-
-          switch (command) {
-            case 'open':
-              if (json && schema !== undefined) {
-                setAsking(event.currentTarget.selectionStart);
-                setActive(0);
-              }
-              return;
-            case 'next':
-              setActive((current) => cycle(current, completions.length, 1));
-              return;
-            case 'previous':
-              setActive((current) => cycle(current, completions.length, -1));
-              return;
-            case 'accept':
-              accept(active);
-              return;
-            default:
-              setAsking(undefined);
-          }
-        }}
-        // Moving the caret by pointer describes a different place, and the old list would be about the
-        // old one.
-        onPointerDown={() => setAsking(undefined)}
-        onBlur={() => setAsking(undefined)}
-        // Transparent text over the coloured copy, with a visible caret. `resize-none` because the
-        // container scrolls; a textarea that grew its own scrollbar would scroll independently of the
-        // layer beneath it.
-        className={cn(
-          shared,
-          'caret-foreground absolute inset-0 m-0 resize-none border-0 bg-transparent p-0 text-transparent outline-none',
-        )}
-      />
-
-      {asking !== undefined && (
-        <CompletionList
-          completions={completions}
-          active={active}
-          left={anchor.left}
-          top={anchor.top}
-          onAccept={accept}
-          idPrefix="json-completions"
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * How a token is drawn.
- *
- * **Emphasis, not hue**, and that is a measured decision rather than a stylistic one. Highlighting
- * wants a categorical palette, and shadcn's is `chart-1`…`chart-5` — which this application already
- * forbids as text, because across the six shipped themes those roles run to **1.42:1** against the
- * surface they sit on. Code is the smallest text in the window, so it is the worst place for them.
- *
- * `primary` was the other candidate and fails too: 17:1 in five themes and **2.49:1** in the one the
- * editor opens in. Measured against `background` in every theme, only `foreground` and
- * `muted-foreground` clear AA everywhere (4.73–7.75), and `destructive` is spoken for — it means an
- * error, and a number drawn in it would say something false.
- *
- * Two tones and a weight is less than a themed editor gives, and it is what this palette can honestly
- * carry. It still does the job JSON needs: keys are what you scan for, values are what you read, and
- * punctuation is structure you should be able to look past.
- */
-function toneOf(kind: string): string {
-  switch (kind) {
-    case 'key':
-      return 'text-foreground font-medium';
-    case 'string':
-      return 'text-foreground';
-    case 'number':
-    case 'keyword':
-      return 'text-muted-foreground';
-    case 'punctuation':
-      return 'text-muted-foreground/70';
-    default:
-      return '';
-  }
+export function languageFor(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.frag') || lower.endsWith('.vert') || lower.endsWith('.glsl')) return 'glsl';
+  return 'plaintext';
 }

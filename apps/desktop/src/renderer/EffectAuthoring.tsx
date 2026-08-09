@@ -21,10 +21,11 @@ import { NativeSelect, NativeSelectOption } from '@nos/ui/components/ui/native-s
 import { ScrollArea } from '@nos/ui/components/ui/scroll-area';
 import { Separator } from '@nos/ui/components/ui/separator';
 import { Spinner } from '@nos/ui/components/ui/spinner';
-import { Textarea } from '@nos/ui/components/ui/textarea';
 import { bridge } from './bridge.js';
 import { EFFECTS_FOLDER } from './use-effect-library.js';
 import { ShaderPreview } from './ShaderPreview.js';
+import { type CodeMarker, LazyCodeEditor } from './code-editor/LazyCodeEditor.js';
+import { useMonacoTheme } from './code-editor/use-monaco-theme.js';
 
 /**
  * Writing an effect: the GLSL, what it exposes, and what it looks like — on one screen.
@@ -81,6 +82,7 @@ export function EffectAuthoring({
     opened === undefined ? emptyEffectDraft() : draftFromEffect(opened.manifest, opened.shader),
   );
   const [compile, setCompile] = useState<CompileCheck>({ ok: true });
+  const themeKey = useMonacoTheme();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -166,12 +168,26 @@ export function EffectAuthoring({
           <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Fragment shader
           </span>
-          <Textarea
-            aria-label="Fragment shader"
-            spellCheck={false}
+          {/*
+            Issue #35: VS Code's editor here too, with GLSL colouring this codebase defines — Monaco
+            ships none, and `cpp` gets `float` right while missing `vec3` and `sampler2D`, which is
+            worse than plain text because the eye learns to trust it.
+
+            The compiler's own diagnostics are underlined where they happened. They were already
+            reported as a line and a message under the pane, which meant reading a number and then
+            counting rows to find it — the one job an editor should never leave to the reader.
+          */}
+          <LazyCodeEditor
             value={draft.shader}
-            onChange={(event) => setDraft((current) => ({ ...current, shader: event.target.value }))}
-            className="min-h-0 flex-1 resize-none font-mono text-xs"
+            onChange={(shader) => setDraft((current) => ({ ...current, shader }))}
+            language="glsl"
+            // Named after the file it will be saved as, so the undo history follows the effect rather
+            // than the dialog being open.
+            path={`${EFFECTS_FOLDER}/${draft.id === '' ? 'untitled' : draft.id}.frag`}
+            markers={compileMarkers(compile)}
+            themeKey={themeKey}
+            ariaLabel="Fragment shader"
+            className="min-h-0 flex-1"
           />
         </div>
 
@@ -478,4 +494,32 @@ function Labelled({
       {children(id)}
     </Field>
   );
+}
+
+/**
+ * Compiler diagnostics as editor markers.
+ *
+ * The lines are already in *authored* coordinates — `assembleFragmentShader` reports how many lines
+ * the wrapper added and `checkShader` subtracts them — so they land where the author is looking
+ * rather than in generated preamble they cannot see.
+ *
+ * A diagnostic at or before line zero came from the preamble itself, which the author did not write.
+ * Those are pinned to the first line rather than dropped: something is wrong with the shader and
+ * saying so imprecisely beats saying nothing.
+ */
+export function compileMarkers(check: CompileCheck): readonly CodeMarker[] {
+  if (check.ok) return [];
+
+  // A driver that answered with an unstructured log still has something to say, and a pane that
+  // showed nothing would look like a shader that compiled.
+  if (check.diagnostics.length === 0) {
+    return check.log === '' ? [] : [{ line: 1, message: check.log, severity: 'error' as const }];
+  }
+
+  return check.diagnostics.map((diagnostic) => ({
+    line: Math.max(1, diagnostic.line),
+    ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
+    message: diagnostic.message,
+    severity: diagnostic.severity,
+  }));
 }

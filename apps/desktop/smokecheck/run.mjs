@@ -54,6 +54,46 @@ function pass(message) {
   console.log(`✓ ${message}`);
 }
 
+/**
+ * Replaces the contents of a Monaco editor.
+ *
+ * `fill` is for form controls; Monaco's textarea is a keyboard surface it diffs on every input, and
+ * setting its value directly does not reach the model. Select-all then `insertText` is the gesture a
+ * user makes, and it goes through the same path their typing does — which is the point of driving the
+ * real window at all.
+ */
+async function setCode(page, locator, text) {
+  /*
+   * Clicked on the *visible* text, not on the input.
+   *
+   * Monaco's input is a one-pixel textarea parked under the caret. Focusing it directly is enough to
+   * make typing land — `insertText` goes straight to the focused element — but not enough for the
+   * editor to consider itself focused, so none of its keybindings fire: no Ctrl+Space, no Ctrl+F.
+   * That produced a run where text could be entered and every keyboard feature looked broken.
+   * Clicking the rendered lines is what a user does, and it is what routes the keyboard properly.
+   */
+  await editorSurface(locator).click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.insertText(text);
+  await page.waitForTimeout(400);
+}
+
+/** The rendered lines of the editor a labelled input belongs to. */
+function editorSurface(locator) {
+  return locator.locator('xpath=ancestor::*[contains(@class,"monaco-editor")][1]').locator('.view-lines');
+}
+
+/** Everything a Monaco editor is showing, from its model rather than its virtualized rows. */
+async function readCode(page, name) {
+  return page.evaluate((label) => {
+    const area = document.querySelector(`textarea[aria-label="${label}"]`);
+    // The rendered rows: Monaco virtualizes long files, so this is what is *visible*, which is all a
+    // check about the first lines of a file needs.
+    const root = area?.closest('.monaco-editor');
+    return [...(root?.querySelectorAll('.view-line') ?? [])].map((line) => line.textContent).join('\n');
+  }, name);
+}
+
 // A throwaway copy of exportcheck's fixture: it already has a title, an audio clip, a project-local
 // effect and a generator folder, which is more of the application's surface than a bare project.
 const work = mkdtempSync(join(tmpdir(), 'nos-smokecheck-'));
@@ -370,6 +410,7 @@ try {
 
     // Scoped to the editor and exact: Playwright matches an accessible name by substring, so a loose
     // `Id` also finds the media browser's `Only video` filter behind the dialog.
+    // Monaco's own hidden textarea, which is what carries the accessible name and takes the typing.
     const shader = editor.getByLabel('Fragment shader', { exact: true });
     const saveEffect = editor.getByRole('button', { name: 'Save effect' });
 
@@ -379,7 +420,7 @@ try {
     if (starter.length > 1000) pass('the effect editor previews the starter shader on a real driver');
     else fail(`the preview drew nothing — ${starter.length} bytes`);
 
-    await shader.fill('void main() { fragColor = nosuchfn(source, v_uv); }');
+    await setCode(page, shader, 'void main() { fragColor = nosuchfn(source, v_uv); }');
     await page.waitForTimeout(1200);
     const reported = await editor.innerText();
 
@@ -396,7 +437,9 @@ try {
     if (await saveEffect.isDisabled()) pass('and refuses to save a shader that does not compile');
     else fail('an effect that cannot compile could be saved');
 
-    await shader.fill(
+    await setCode(
+      page,
+      shader,
       'void main() { vec4 c = texture(source, v_uv); fragColor = vec4(1.0, 0.0, 0.0, c.a); }',
     );
     await editor.getByLabel('Id', { exact: true }).fill('smokecheck_red');
@@ -506,7 +549,7 @@ try {
       } else {
         // Loaded, not merely opened: an editor that shows an empty buffer for a file that exists is
         // one save away from destroying it.
-        const contents = await page.getByLabel('File contents').inputValue();
+        const contents = await readCode(page, 'File contents');
         if (contents.trim().startsWith('{')) pass('and a manifest opens in the text editor, loaded');
         else fail(`the text editor opened empty — ${contents.length} characters`);
 
@@ -519,13 +562,10 @@ try {
          * are the ones `effects/*.json` uses.
          */
         const editor = page.getByLabel('File contents');
-        await editor.click();
-        await page.keyboard.press('Control+End');
-        await page.keyboard.press('Control+a');
-        await editor.fill('{\n  "sha\n}');
-        await page.waitForTimeout(400);
+        await setCode(page, editor, '{\n  "sha\n}');
 
         // Caret at the end of the half-typed name, which is where someone asking for help would be.
+        await editorSurface(editor).click();
         await page.keyboard.press('Control+End');
         await page.keyboard.press('ArrowUp');
         await page.keyboard.press('End');
@@ -544,7 +584,7 @@ try {
 
           await page.keyboard.press('Enter');
           await page.waitForTimeout(500);
-          const completed = await editor.inputValue();
+          const completed = await readCode(page, 'File contents');
 
           // The name, the quote it was inside closed, and the colon — accepting a completion that
           // left you to type `": "` yourself would have done the easy half.

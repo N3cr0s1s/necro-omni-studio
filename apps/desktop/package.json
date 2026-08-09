@@ -18,7 +18,8 @@
     "@nos/media": "*",
     "@nos/sidecar-client": "*",
     "@nos/text": "*",
-    "@nos/ui": "*"
+    "@nos/ui": "*",
+    "monaco-editor": "^0.56.0"
   },
   "scripts": {
     "typecheck": "tsc --build",

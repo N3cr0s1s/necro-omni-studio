@@ -38,12 +38,17 @@ afterEach(() => {
 });
 
 describe('a new effect', () => {
-  it('opens on a shader that already works', async () => {
-    // An editor that opens on an empty box gives an error before anything is typed.
+  it('opens an editor for the shader it will save', async () => {
+    /*
+     * What the *component* owns after issue #35: mounting the editor, on the file the effect will
+     * become. That the starter shader already compiles is the draft's claim and is asserted where
+     * the draft is — `effect-draft.test.ts` — rather than a second time through the DOM.
+     *
+     * The editor is loaded lazily, so what is on screen first is the placeholder, which must still
+     * name the file or opening one would look like nothing happening.
+     */
     open();
-    const shader = screen.getByLabelText('Fragment shader') as HTMLTextAreaElement;
-    expect(shader.value).toContain('void main');
-    expect(shader.value).toContain('fragColor');
+    expect(await screen.findByText(/opening effects\/untitled\.frag/u)).not.toBeNull();
   });
 
   it('will not save without an id and a name', () => {
@@ -141,10 +146,11 @@ describe('replacing one that is already there', () => {
     expect(screen.queryByText(/saving replaces/)).toBeNull();
   });
 
-  it('reopens it with its own shader rather than the starter', () => {
+  it('reopens on that effect’s own file, so its undo history follows it', async () => {
+    // Monaco keys a model — and therefore an undo stack — by path. Reopening an effect under the
+    // file it was saved as is what makes closing and reopening the tab keep the history.
     open({ existing, editing: 'film_grain' });
-    const shader = screen.getByLabelText('Fragment shader') as HTMLTextAreaElement;
-    expect(shader.value).toBe('void main(){ fragColor = texture(source, v_uv); }');
+    expect(await screen.findByText(/opening effects\/film_grain\.frag/u)).not.toBeNull();
   });
 });
 
