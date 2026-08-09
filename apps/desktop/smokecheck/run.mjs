@@ -324,6 +324,19 @@ try {
     fail('the import did not copy the file into the project');
   }
 
+  /*
+   * And appears. Landing on disk is only half of an import: the browser is driven by the watcher, so a
+   * file that arrived without the tree noticing would be there and invisible — which is
+   * indistinguishable, to the user, from an import that failed.
+   */
+  let shown = false;
+  for (let waited = 0; waited < 20 && !shown; waited += 1) {
+    await page.waitForTimeout(500);
+    shown = (await page.getByRole('treeitem', { name: /outside\.txt/ }).count()) > 0;
+  }
+  if (shown) pass('an imported file appears in the browser');
+  else fail('an imported file never appeared in the browser');
+
   const again = await page.evaluate(
     async (from) => globalThis.nos.copyIntoProject([{ from, to: 'media/outside.txt' }]),
     outside,
