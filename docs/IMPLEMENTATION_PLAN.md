@@ -908,6 +908,15 @@ the application has no way to close a project, and inventing one purely to be te
 tail wagging the dog — and checks that it says so, offers the way in, and does not hold out actions
 that cannot work.
 
+**Recovered work is unsaved work.** Restoring a recovery resets the store, and a reset marks the
+document saved — so the editor believed unwritten work was on disk: no autosave, no marker, no prompt
+on close, and the rescued work lost by the next quit. A reset now says whether the document is what is
+on disk, defaulting to yes because the usual reset is an open.
+
+**Ask whether a new guard can misfire, in both directions.** A prompt on every close would be worse
+than none; a prompt that never fires when it matters is worse still. Checking the first found the
+second.
+
 **State the shell needs at close time is pushed, not pulled.** Asking the renderer whether it is dirty
 *while* the window tears down races the teardown, and a stale answer is either a lost edit or a prompt
 nobody can explain. The same reasoning puts the close after the save, in the renderer: an editor that
