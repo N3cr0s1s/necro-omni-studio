@@ -4564,3 +4564,35 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   that was still running, and treating a *missing* job as "not started yet" waited forty minutes for a
   job the server had forgotten in a restart. The queue is now one job deep, transient errors retry, and
   a prompt that is in neither the queue nor the history is recognised as lost.
+
+- 2026-08-10: The promo's edit, and the limit that shapes it (issue #40).
+
+  **The cut is data.** `promo/edit.mjs` is the edit decision list — ten sections of eighteen seconds, one
+  per narration block, each cutting bed, app, bed, app, bed, app. Sixty shots, 5400 frames, exactly three
+  minutes, and `promo/build-project.mjs` turns it into a `project.json` the application opens.
+
+  Written rather than clicked together, and that is the honest division: an EDL is data, and typing sixty
+  shots into a timeline through a Playwright script would be a worse test of the program than opening the
+  result and cutting it. What it does prove is that the shape a real edit needs — four tracks, per-shot
+  ramps, keyframed titles, section markers — is expressible in the file format and renders through the
+  same compositor the export uses.
+
+  **The first version of the cut was wrong, and the test now says so.** It asked for 150-frame shots off
+  a 120-frame bed: a whole second of material that does not exist, at the end of thirty of the forty
+  shots. Nothing refuses that — a clip simply runs past its own media — so `SOURCE_FRAMES` states what
+  each source holds and a test asserts no shot exceeds it. Fast cuts rather than slow motion for the
+  same honesty: retiming a 24 fps bed to half speed on a 30 fps timeline shows every source frame two or
+  three times, which on hard-edged motion graphics reads as a stutter.
+
+  **And the real constraint is not the GPU.** ComfyUI here runs in a Docker container with a memory
+  cgroup limit; the kernel log shows sixteen OOM kills on *host* RAM at about 25 GB of anonymous memory,
+  on jobs of twelve, ten, five and even four seconds. Whether a given render survives is marginal — some
+  four-second jobs finish, some do not — so the runner retries a lost job three times rather than
+  treating it as a verdict on the prompt. Raising the container's memory limit is the fix, and it is the
+  user's to make.
+
+  Three of my own faults were in the runner and are recorded because each cost real time: eight jobs
+  queued at once, a reset treated as a failure, and a job the server had forgotten treated as one that
+  had not started. The lesson underneath all three is the same as the one about the mechanical `exact`
+  edit — **read the log before forming a theory.** "Longer clips are heavier" got the direction right and
+  the cause wrong, and `dmesg` had the answer from the first failure onward.
