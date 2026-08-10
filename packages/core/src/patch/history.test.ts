@@ -12,6 +12,8 @@ import {
   redoLabel,
   undo,
   undoLabel,
+  jump,
+  steps,
 } from './history.js';
 
 /** A stand-in document: the history layer is generic and knows nothing about timelines. */
@@ -209,5 +211,75 @@ describe('clearHistory', () => {
     expect(state.present.document).toEqual(doc(0));
     expect(canUndo(state)).toBe(false);
     expect(canRedo(state)).toBe(false);
+  });
+});
+
+/*
+ * The history as a list, and moving through it in one gesture.
+ *
+ * Undo and redo say what the *next* step in each direction is, which is enough for two buttons and not
+ * enough for the question a user has after ten minutes of cutting: what did I do, and how far back is
+ * the point I want? Ten presses to reach it is ten chances to overshoot.
+ */
+describe('reading the history', () => {
+  const three = () => {
+    let state = createHistory('a', 'Open project');
+    state = commit(state, 'b', 'Split clip');
+    state = commit(state, 'c', 'Move clip');
+    return state;
+  };
+
+  it('lists every step oldest first, with the present at zero', () => {
+    expect(steps(three())).toEqual([
+      { label: 'Open project', offset: -2 },
+      { label: 'Split clip', offset: -1 },
+      { label: 'Move clip', offset: 0 },
+    ]);
+  });
+
+  it('keeps undone steps on the list, ahead of now', () => {
+    // They are still reachable, and a list that dropped them would make redo look like a dead button.
+    expect(steps(undo(three()))).toEqual([
+      { label: 'Open project', offset: -1 },
+      { label: 'Split clip', offset: 0 },
+      { label: 'Move clip', offset: 1 },
+    ]);
+  });
+
+  it('offers one entry for a fresh document', () => {
+    expect(steps(createHistory('a'))).toEqual([{ label: 'Open project', offset: 0 }]);
+  });
+});
+
+describe('jumping through the history', () => {
+  const three = () => {
+    let state = createHistory('a', 'Open project');
+    state = commit(state, 'b', 'Split clip');
+    state = commit(state, 'c', 'Move clip');
+    return state;
+  };
+
+  it('moves back the number of steps asked for', () => {
+    expect(jump(three(), -2).present.document).toBe('a');
+  });
+
+  it('moves forward again', () => {
+    expect(jump(jump(three(), -2), 2).present.document).toBe('c');
+  });
+
+  it('lands on the end rather than refusing an offset past it', () => {
+    // A list built one render ago can name a step a commit in between has just dropped, and refusing
+    // would leave the user pressing a row that does nothing.
+    expect(jump(three(), -99).present.document).toBe('a');
+    expect(jump(three(), 99).present.document).toBe('c');
+  });
+
+  it('changes nothing at zero, and returns the very same state', () => {
+    const state = three();
+    expect(jump(state, 0)).toBe(state);
+  });
+
+  it('leaves the redo stack intact, since jumping back is undo and not an edit', () => {
+    expect(steps(jump(three(), -2)).filter((step) => step.offset > 0)).toHaveLength(2);
   });
 });

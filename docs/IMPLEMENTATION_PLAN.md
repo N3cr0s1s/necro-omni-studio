@@ -4424,3 +4424,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   `Math.max` pass it straight through, and it reaches CSS as an invalid transform that makes the picture
   vanish with nothing logged. Infinity needs no special case, and pretending it did would have hidden
   the one value that does.
+
+- 2026-08-10: The history, as a list rather than two buttons.
+
+  The store has recorded a label on **every** commit since M1 and the whole stack has been in the
+  snapshot just as long; two buttons could only ever read the top of it. The question a user has after
+  ten minutes of cutting is not "what does undo do" — it is *what did I do, and how far back is the
+  point I want*. The previous answer was to press `Ctrl+Z` ten times and watch for the moment it looked
+  right, which is ten chances to overshoot, and overshooting is how a redo stack gets thrown away.
+
+  **`jump` moves by an offset, not to an index.** A list rendered a moment ago names a step that a
+  commit in between may have dropped, and an index into a stack that has changed points at the wrong
+  edit. It is built from repeated `undo`/`redo` rather than by reaching into the stacks, because those
+  two already carry the rules about what a step *is* — a second way of arriving at a state is a second
+  thing to keep correct. Clamped by construction: each call is a no-op at the end of its stack.
+
+  Undone steps stay on the list, dimmed. Dropping them would make redo look like a dead button, and the
+  moment right after an undo is exactly when someone wants to see what they just left behind.
+
+  **And it broke the story board — through the harness, not the code.** `getByRole('button', {name:
+  'Story'})` matches an accessible name by case-insensitive **substring**, and `History` contains
+  `story`. The new control sits earlier in the title bar, so `.first()` found it and the run reported
+  that the Story button did not open a story tab. The second time this exact trap has been sprung here
+  — `Film Grain` matched a stack row the same way — so the names in that check are pinned with `exact`
+  now.
+
+  Worth stating plainly: **the failure was real and pointed at the wrong file.** A green story-board
+  check would have been a lie, and a red one that accused working code cost the time it takes to read
+  the DOM order. A harness that matches loosely is a harness that will eventually accuse the code.

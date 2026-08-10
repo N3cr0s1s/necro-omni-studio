@@ -166,6 +166,56 @@ export function redo<TDocument>(state: HistoryState<TDocument>): HistoryState<TD
   };
 }
 
+/**
+ * One entry in the history, as a list can show it.
+ *
+ * `offset` is the distance from now: negative is behind, `0` is the present, positive is ahead. A
+ * distance rather than an index because that is what a caller does with it — `jump(-3)` is "three
+ * steps back", and an index into a list whose length changes on every edit is a value that goes stale
+ * between rendering a menu and clicking it.
+ */
+export interface HistoryStep {
+  readonly label: string;
+  readonly offset: number;
+}
+
+/**
+ * The history as a flat list, oldest first.
+ *
+ * Labels only. The entries hold whole documents — cheap, because they share structure — but handing
+ * them to a UI would invite it to read one, and the store is the single place a document may come
+ * from.
+ *
+ * Undo and redo already expose the *next* step in each direction, which is enough for two buttons and
+ * not enough for the question a user actually has after ten minutes of cutting: what did I do, and how
+ * far back is the point I want? Ten presses of `Ctrl+Z` to reach it is ten chances to overshoot.
+ */
+export function steps<TDocument>(state: HistoryState<TDocument>): readonly HistoryStep[] {
+  const past = state.past.map((entry, index) => ({
+    label: entry.label,
+    offset: index - state.past.length,
+  }));
+  const future = state.future.map((entry, index) => ({ label: entry.label, offset: index + 1 }));
+
+  return [...past, { label: state.present.label, offset: 0 }, ...future];
+}
+
+/**
+ * Moves the given number of steps, negative for back.
+ *
+ * Repeated `undo`/`redo` rather than an index into the stacks: those two already carry the rules about
+ * what a step *is*, and a second way of arriving at a state is a second thing to keep correct. Clamped
+ * by construction — each call is a no-op at the end of its stack, so an offset past either end lands on
+ * the end rather than being refused.
+ */
+export function jump<TDocument>(state: HistoryState<TDocument>, offset: number): HistoryState<TDocument> {
+  let moved = state;
+  for (let step = 0; step < Math.abs(Math.trunc(offset)); step += 1) {
+    moved = offset < 0 ? undo(moved) : redo(moved);
+  }
+  return moved;
+}
+
 /** Label of the step undo would revert, for a menu item like "Undo Move clip". */
 export function undoLabel<TDocument>(state: HistoryState<TDocument>): string | undefined {
   return canUndo(state) ? state.present.label : undefined;

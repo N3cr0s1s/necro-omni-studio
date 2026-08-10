@@ -6,6 +6,7 @@ import {
   type ClipId,
   type EffectInstanceId,
   type FrameIndex,
+  type HistoryStep,
   type JobGroupId,
   type FrameRate,
   type TimelineDocument,
@@ -87,6 +88,7 @@ import {
   FileCode2Icon,
   FileJsonIcon,
   FolderPlusIcon,
+  HistoryIcon,
   PauseIcon,
   PlayIcon,
   SaveIcon,
@@ -138,6 +140,12 @@ import type { Transport } from './use-transport.js';
 import { useKeyframeLanes } from './KeyframeLanes.js';
 import { ManifestAuthoring } from './ManifestAuthoring.js';
 import { RecentProjects } from './RecentProjects.js';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@nos/ui/components/ui/dropdown-menu';
 import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
@@ -976,8 +984,10 @@ export function App(): ReactNode {
       canRedo: historySnapshot.canRedo,
       undoLabel: historySnapshot.undoLabel,
       redoLabel: historySnapshot.redoLabel,
+      steps: historySnapshot.steps,
       undo: () => store.undo(),
       redo: () => store.redo(),
+      jump: (offset: number) => store.jump(offset),
     }),
     [
       store,
@@ -985,6 +995,7 @@ export function App(): ReactNode {
       historySnapshot.canRedo,
       historySnapshot.undoLabel,
       historySnapshot.redoLabel,
+      historySnapshot.steps,
     ],
   );
 
@@ -2635,8 +2646,12 @@ export interface HistoryControls {
   /** The label the store recorded for the edit undo would reverse. */
   readonly undoLabel: string | undefined;
   readonly redoLabel: string | undefined;
+  /** Every step, oldest first, with `offset: 0` marking now. */
+  readonly steps: readonly HistoryStep[];
   undo(): void;
   redo(): void;
+  /** Moves the given number of steps, negative for back. */
+  jump(offset: number): void;
 }
 
 /**
@@ -2684,9 +2699,63 @@ export function HistoryButtons({ history }: { readonly history: HistoryControls 
       >
         <RedoIcon />
       </Button>
+      <HistoryList history={history} />
     </span>
   );
 }
+
+/**
+ * What has been done, and a way back to any of it.
+ *
+ * The store has carried a label on every commit since M1 and the whole stack has been in the snapshot
+ * just as long; two buttons could only ever read the top of it. The question this answers is the one a
+ * user has after ten minutes of cutting — *what did I do, and how far back is the point I want* — and
+ * the previous answer was to press `Ctrl+Z` ten times and watch for the moment it looked right. Ten
+ * presses is ten chances to overshoot, and overshooting is how a redo stack gets thrown away.
+ *
+ * Newest first, because the step someone wants is almost always a recent one and a list that grows
+ * downwards puts it further from the pointer with every edit. Capped, for the same reason: past a
+ * couple of dozen entries this is not a list anyone reads.
+ *
+ * Undone steps stay on it, dimmed and still reachable. Dropping them would make redo look like a dead
+ * button — and the moment after an undo is exactly when someone wants to see what they just left.
+ */
+function HistoryList({ history }: { readonly history: HistoryControls }): ReactNode {
+  // Nothing to choose from on a fresh document: one entry is the present, and a menu whose only row is
+  // "you are here" is a control that does nothing.
+  if (history.steps.length < 2) return null;
+
+  const recent = [...history.steps].reverse().slice(0, HISTORY_LIST_LIMIT);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon-sm" aria-label="History" title="What has been done">
+            <HistoryIcon />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="min-w-56">
+        {recent.map((step) => (
+          <DropdownMenuItem
+            // Offset, not index: a list built one render ago names a step a commit in between may have
+            // dropped, and an index into a stack that has changed points at the wrong edit.
+            key={`${step.offset}:${step.label}`}
+            onClick={() => history.jump(step.offset)}
+            className={step.offset > 0 ? 'text-muted-foreground' : undefined}
+          >
+            <span className="truncate">{step.label}</span>
+            {step.offset === 0 && <span className="ml-auto shrink-0 text-xs text-muted-foreground">now</span>}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Past this, a history list is something to scroll rather than something to read. */
+const HISTORY_LIST_LIMIT = 24;
 
 /**
  * The transport.

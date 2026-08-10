@@ -1022,10 +1022,14 @@ try {
    * drawn — or drawn but not committed — is the failure mode worth catching, and neither shows up in a
    * unit test that renders the tab on its own.
    */
-  await page.getByRole('button', { name: 'Story' }).first().click();
+  // `exact`, because Playwright matches an accessible name by case-insensitive **substring** and
+  // `History` contains `story`. Without it this clicked the history control that now sits beside the
+  // undo buttons and reported the story board as broken — the same trap `Film Grain` set once, and the
+  // reason every name here that could be a substring of another is pinned.
+  await page.getByRole('button', { name: 'Story', exact: true }).first().click();
   await page.waitForTimeout(1200);
 
-  if ((await page.getByRole('tab', { name: 'Story' }).count()) === 0) {
+  if ((await page.getByRole('tab', { name: 'Story', exact: true }).count()) === 0) {
     fail('the Story button did not open a story tab');
   } else {
     pass('the story board opens in its own tab');
@@ -1335,6 +1339,29 @@ try {
     fail(
       `a frame over the budget said nothing about it — the strip reads ${JSON.stringify(readout?.[0] ?? 'no layer/pass readout')}`,
     );
+  }
+
+  /*
+   * The history, as a list rather than two buttons.
+   *
+   * The store has recorded a label on every commit since M1 and the whole stack has been in the
+   * snapshot just as long — two buttons could only ever read the top of it. Checked in the window
+   * because the question is whether the stack the store keeps *reaches* a control.
+   */
+  const historyButton = page.getByRole('button', { name: 'History' });
+  if ((await historyButton.count()) > 0) {
+    await historyButton.click();
+    await page.waitForTimeout(600);
+    const rows = await page.getByRole('menuitem').allInnerTexts();
+    if (rows.some((row) => /now/.test(row))) {
+      pass(`the history is offered as a list (${rows.length} steps, newest first)`);
+    } else {
+      fail(`the history list does not say where the document is — rows ${JSON.stringify(rows.slice(0, 4))}`);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  } else {
+    fail('after a session of edits nothing offers the history');
   }
 
   /*

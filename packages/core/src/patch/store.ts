@@ -3,6 +3,7 @@ import {
   DEFAULT_HISTORY_LIMIT,
   type HistoryOptions,
   type HistoryState,
+  type HistoryStep,
   beginGesture,
   canRedo,
   canUndo,
@@ -10,8 +11,10 @@ import {
   commit,
   createHistory,
   endGesture,
+  jump,
   redo,
   redoLabel,
+  steps,
   undo,
   undoLabel,
 } from './history.js';
@@ -38,6 +41,14 @@ export interface StoreSnapshot {
   readonly dirty: boolean;
   /** Whether a coalescing gesture is currently open. */
   readonly gestureOpen: boolean;
+  /**
+   * The whole history as labels, oldest first, with `offset: 0` marking now.
+   *
+   * Two buttons can say what the *next* step in each direction is; they cannot answer the question a
+   * user has after ten minutes of cutting — what did I do, and how far back is the point I want.
+   * Reaching it by pressing undo ten times is ten chances to overshoot it.
+   */
+  readonly steps: readonly HistoryStep[];
 }
 
 /**
@@ -90,6 +101,13 @@ export interface DocumentStore {
 
   undo(): void;
   redo(): void;
+  /**
+   * Moves the given number of steps through the history, negative for back.
+   *
+   * Clamped rather than refused: an offset past either end lands on the end, because a list built one
+   * render ago can name a step that a commit in between has just dropped.
+   */
+  jump(offset: number): void;
 
   /** Records the current document as persisted, clearing the dirty flag. */
   markSaved(): void;
@@ -173,6 +191,16 @@ export function createDocumentStore(
       publish();
     },
 
+    jump(offset: number) {
+      if (offset === 0) return;
+      const moved = jump(history, offset);
+      // Unchanged when the offset ran off the end of a stack. Publishing anyway would tell every
+      // subscriber the document had changed when it had not.
+      if (moved === history) return;
+      history = moved;
+      publish();
+    },
+
     redo() {
       if (!canRedo(history)) return;
       history = redo(history);
@@ -212,5 +240,6 @@ function buildSnapshot(history: HistoryState<TimelineDocument>, saved: TimelineD
     // Reference equality is sound because every edit produces a new document object.
     dirty: history.present.document !== saved,
     gestureOpen: history.openGesture !== undefined,
+    steps: steps(history),
   };
 }
