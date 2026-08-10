@@ -4683,3 +4683,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   And the trim guard from the previous entry is now verified in the running window: `smokecheck` drags the
   audio clip's out-point well past the end of its one-second tone and asserts the clip did not grow.
+
+- 2026-08-10: The promo has sound, because the audio model fits where the video one does not.
+
+  `stable_audio_3` rendered eighty seconds of underscore in **twelve seconds** and three one-shots in six
+  each — in the same container that is OOM-killed by a four-second video. The models are not the same size,
+  and assuming "generation is blocked" from one of them would have left a silent promo on the strength of
+  the wrong evidence. Worth naming: *a blocked pipeline is blocked per model, not per machine.*
+
+  So the promo now carries a music bed, a riser leading into each even section, an impact landing on each
+  odd one, and a tick cluster opening the film. Which is the right way round for a short piece: a silent
+  promo reads as broken, a short one only reads as short.
+
+  **The accents are butt-jointed, not layered, and that is forced.** The editing rules refuse a collision
+  rather than resolving it — a clip is never displaced to make room — so a builder emitting two overlapping
+  clips on one track produces a document the application will not accept. The opening riser and the tick
+  cluster overlapped in the first version by exactly that much. They are pushed to the previous end rather
+  than dropped: an accent two frames late is still an accent, where a silently lost one leaves a cut with
+  nothing on it for no stated reason.
+
+  The bed sits at `0.2` linear rather than unity, because the accents are what a viewer registers and the
+  bed is what they feel. A separate `A3` is left empty for the narration, which still needs a voice sample.
+
+  One thing I cannot verify and will not claim: **whether the music contains singing.** The prompt asked for
+  none and the negative prompt names vocals, speech, singing and lyrics — but median F0 measures a sub bass
+  at 92 Hz just as happily as a voice, so the measurement that settled the TTS question says nothing here.
+  It needs an ear.

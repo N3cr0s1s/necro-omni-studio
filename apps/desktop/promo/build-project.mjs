@@ -16,7 +16,18 @@
  */
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { APP_CLIPS, BEDS, BLOCKS, FPS, SECTION_FRAMES, honestLength, shots, titles } from './edit.mjs';
+import {
+  APP_CLIPS,
+  BEDS,
+  BLOCKS,
+  FPS,
+  MUSIC,
+  SECTION_FRAMES,
+  accents,
+  honestLength,
+  shots,
+  titles,
+} from './edit.mjs';
 
 const [, , mediaDirectory, projectDirectory] = process.argv;
 if (mediaDirectory === undefined || projectDirectory === undefined) {
@@ -61,8 +72,26 @@ for (const name of appClips) {
   );
 }
 
+/*
+ * The sound, copied in the same way and treated the same: present or absent, never assumed.
+ *
+ * `stable_audio_3` fits in the container the video model does not, so a promo with one picture bed can
+ * still have a full score — which is the right way round. A silent promo reads as broken; a short one only
+ * reads as short.
+ */
+const SOUND = ['music', 'riser', 'impact', 'ticks'];
+const sound = SOUND.filter((name) => existsSync(join(mediaDirectory, 'audio', `${name}.flac`)));
+for (const name of sound) {
+  copyFileSync(
+    join(mediaDirectory, 'audio', `${name}.flac`),
+    join(projectDirectory, 'media', `${name}.flac`),
+  );
+}
+
 const frames = honestLength(beds.length, appClips.length);
-console.log(`  ${beds.length}/${BEDS.length} beds, ${appClips.length}/${APP_CLIPS.length} recordings`);
+console.log(
+  `  ${beds.length}/${BEDS.length} beds, ${appClips.length}/${APP_CLIPS.length} recordings, ${sound.length}/${SOUND.length} sounds`,
+);
 console.log(`  the material supports ${frames / FPS}s without a source appearing more often than it should`);
 
 const transform = { x: 0, y: 0, scale: 1, rotation: 0 };
@@ -141,13 +170,50 @@ const document = {
         kind: 'audio',
         name: 'A1 · music',
         height: 64,
-        clips: [],
+        clips: sound.includes('music')
+          ? [
+              {
+                id: 'music',
+                kind: 'audio',
+                // Trimmed to the cut. The bed is eighty seconds and the film is as long as its material
+                // allows, so the clip takes what it needs and the fade takes it out.
+                span: { start: 0, duration: frames },
+                label: 'music',
+                enabled: true,
+                effects: [],
+                source: { asset: MUSIC.asset, sourceIn: 0, sourceRate: String(FPS) },
+                gain: MUSIC.gain,
+                fade: { inFrames: 30, outFrames: 60 },
+              },
+            ]
+          : [],
       },
       {
         id: 'A2',
         kind: 'audio',
-        name: 'A2 · narration',
+        name: 'A2 · accents',
         height: 64,
+        clips: accents({ frames })
+          .filter((accent) => sound.includes(accent.label))
+          .map((accent, index) => ({
+            id: `accent_${String(index).padStart(2, '0')}`,
+            kind: 'audio',
+            span: { start: accent.start, duration: accent.frames },
+            label: accent.label,
+            enabled: true,
+            effects: [],
+            source: { asset: accent.asset, sourceIn: 0, sourceRate: String(FPS) },
+            gain: accent.gain,
+            fade: { inFrames: 2, outFrames: 8 },
+          })),
+      },
+      {
+        id: 'A3',
+        kind: 'audio',
+        name: 'A3 · narration',
+        height: 64,
+        // Empty on purpose. The TTS needs a voice sample the repository does not have, and the script is
+        // written into `notes/` so adding it later is a generation rather than a retyping.
         clips: [],
       },
       {

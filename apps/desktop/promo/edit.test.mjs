@@ -5,9 +5,11 @@ import {
   BLOCKS,
   FPS,
   MAX_APPEARANCES,
+  MUSIC,
   SECTION_FRAMES,
   SOURCE_FRAMES,
   TOTAL_FRAMES,
+  accents,
   honestLength,
   shots,
   titles,
@@ -120,5 +122,55 @@ describe('the narration', () => {
       expect(block.title.length).toBeGreaterThan(0);
       expect(block.line.split(' ').length).toBeGreaterThan(3);
     }
+  });
+});
+
+/*
+ * The sound.
+ *
+ * `stable_audio_3` fits in the container the video model does not — eighty seconds of underscore in twelve
+ * seconds of compute — so the promo has a score even with one picture bed. Which is the right way round: a
+ * silent promo reads as broken, a short one only reads as short.
+ */
+describe('the accents', () => {
+  const at = (frames) => accents({ frames });
+
+  it('never overlaps, because the editing rules refuse a collision rather than resolving it', () => {
+    // A builder that emits two overlapping clips on one track produces a document the application will not
+    // accept. The opening riser and the tick cluster overlapped in the first version by exactly that much.
+    for (const frames of [SECTION_FRAMES, 2160, TOTAL_FRAMES]) {
+      const all = at(frames);
+      const faults = all.filter(
+        (accent, index) => index > 0 && accent.start < all[index - 1].start + all[index - 1].frames,
+      );
+      expect(faults, `at ${frames} frames`).toEqual([]);
+    }
+  });
+
+  it('marks every section, so no cut opens in silence', () => {
+    const sections = 2160 / SECTION_FRAMES;
+    // One per section, plus the tick cluster that opens the film once.
+    expect(at(2160).length).toBe(sections + 1);
+  });
+
+  it('alternates, so consecutive sections do not open the same way', () => {
+    // An accent that never varies is one the ear stops hearing.
+    const kinds = at(TOTAL_FRAMES)
+      .filter((accent) => accent.label !== 'ticks')
+      .map((accent) => accent.label);
+    expect(new Set(kinds).size).toBeGreaterThan(1);
+  });
+
+  it('stays inside the cut', () => {
+    for (const accent of at(2160)) {
+      expect(accent.start).toBeGreaterThanOrEqual(0);
+      expect(accent.start + accent.frames).toBeLessThanOrEqual(2160 + accent.frames);
+    }
+  });
+
+  it('sets the bed under the accents rather than at unity', () => {
+    // The accents are what a viewer registers and the bed is what they feel.
+    expect(MUSIC.gain).toBeGreaterThan(0);
+    expect(MUSIC.gain).toBeLessThan(0.5);
   });
 });
