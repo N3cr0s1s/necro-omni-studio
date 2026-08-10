@@ -6,6 +6,7 @@ import {
   type ClipId,
   type EffectInstanceId,
   type FrameIndex,
+  type JobGroupId,
   type FrameRate,
   type TimelineDocument,
   type TrackId,
@@ -1691,10 +1692,39 @@ export function App(): ReactNode {
    * Assembled here because this is the only place that can see all of them; each is adapted in
    * `activities.ts`, so adding a sixth source changes this list and nothing else.
    */
+  /*
+   * Runs a failed group's request again.
+   *
+   * Here rather than on the runtime because repeating a request needs the **manifest**, and the queue
+   * keeps only a generator id — the registry that resolves one is the shell's. A generator removed
+   * from the library since the run has no retry, and the button is simply not offered.
+   *
+   * The request is repeated as it was asked for: same parameters, same target, same variant count.
+   * Seeds are derived afresh, and that is right — a failed run produced nothing, so there is no image
+   * to reproduce, and the user is asking for the *request* again rather than for a particular result.
+   */
+  const retryGroup = useCallback(
+    (id: JobGroupId) => {
+      const group = runtime.snapshot.groups.find((candidate) => candidate.id === id);
+      if (group === undefined) return;
+      const manifest = library.registry?.manifestFor(group.generator);
+      if (manifest === undefined) return;
+
+      runtime.run({
+        manifest,
+        ...(group.preset === undefined ? {} : { preset: group.preset }),
+        params: group.params,
+        target: group.target,
+        variantCount: group.variantCount,
+      });
+    },
+    [library.registry, runtime],
+  );
+
   const activities = useMemo(
     () =>
       orderActivities([
-        ...generatorActivities(runtime.snapshot),
+        ...generatorActivities(runtime.snapshot, { onRetry: retryGroup }),
         ...exportActivity(exportRun.progress),
         ...derivationActivity(proxies.pending.length, proxies.ready),
         ...segmentationActivity(masks.session?.running === true, masks.session?.progress, masks.error),

@@ -27,6 +27,13 @@ export interface ActivityFact {
   readonly value: string;
 }
 
+/** One thing a user can do about an activity. The label is a verb: `Retry`, `Reveal`, `Dismiss`. */
+export interface ActivityAction {
+  readonly id: string;
+  readonly label: string;
+  run(): void;
+}
+
 export interface Activity {
   readonly id: string;
   readonly kind: ActivityKind;
@@ -44,6 +51,19 @@ export interface Activity {
   readonly state: ActivityState;
   /** Parameters and anything else worth seeing in the expanded list. */
   readonly facts?: readonly ActivityFact[];
+  /**
+   * What can be done about it, offered in the expanded list.
+   *
+   * A failure with no way forward is a dead end: a generation that fell over on a backend hiccup
+   * showed its reason and its seed and left re-entering every parameter as the only route back. The
+   * list is where a user is already looking when something has gone wrong, so it is where the answer
+   * belongs.
+   *
+   * On the activity rather than on the kind, so a later kind can offer its own — reveal a delivered
+   * file, open the folder a failed import was reading — without this component learning what any of
+   * them mean.
+   */
+  readonly actions?: readonly ActivityAction[];
   readonly startedAt?: number;
   readonly finishedAt?: number;
 }

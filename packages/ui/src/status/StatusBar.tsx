@@ -256,6 +256,18 @@ function ActivityRow({ activity, now }: { readonly activity: Activity; readonly 
           ))}
         </dl>
       )}
+
+      {/* Last, under the reason it is about. A row of buttons above the failure they answer would be
+          a choice offered before the question. */}
+      {activity.actions !== undefined && activity.actions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {activity.actions.map((action) => (
+            <Button key={action.id} variant="outline" size="xs" onClick={() => action.run()}>
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

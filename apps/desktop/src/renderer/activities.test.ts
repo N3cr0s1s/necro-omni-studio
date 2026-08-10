@@ -119,3 +119,53 @@ describe('the facts under a run', () => {
     expect(activity?.facts).toContainEqual({ label: 'description', value: 'a short metallic clang' });
   });
 });
+
+/*
+ * What a user can do about a failure.
+ *
+ * A generation that fell over showed its reason and its seed and offered nothing: the only route back
+ * was re-entering every parameter into a panel that had very likely moved on to a different generator.
+ * The mockups put `retry · cancel · reveal in folder` on a job row for exactly this.
+ */
+describe('acting on a run', () => {
+  const failed = (): QueueSnapshot =>
+    snapshot(
+      [group({ id: 'g1' as JobGroup['id'] })],
+      [
+        run({
+          id: 'r1' as JobRun['id'],
+          group: 'g1' as JobGroup['id'],
+          status: 'failed',
+          error: 'the backend refused',
+        }),
+      ],
+    );
+
+  it('offers a retry on a failed run', () => {
+    const [activity] = generatorActivities(failed(), { onRetry: () => undefined });
+    expect(activity?.actions?.map((action) => action.label)).toEqual(['Run again']);
+  });
+
+  it('names the group it would repeat, not the run', () => {
+    // A group is the request; a run is one variant of it. Retrying one variant of three would quietly
+    // change what was asked for.
+    const seen: string[] = [];
+    const [activity] = generatorActivities(failed(), { onRetry: (id) => seen.push(String(id)) });
+    activity?.actions?.[0]?.run();
+    expect(seen).toEqual(['g1']);
+  });
+
+  it('offers nothing on a run that is still going', () => {
+    const going = snapshot(
+      [group({ id: 'g1' as JobGroup['id'] })],
+      [run({ id: 'r1' as JobRun['id'], group: 'g1' as JobGroup['id'], status: 'running' })],
+    );
+    expect(generatorActivities(going, { onRetry: () => undefined })[0]?.actions).toBeUndefined();
+  });
+
+  it('offers nothing when the shell cannot retry', () => {
+    // No registry entry for the generator, so no manifest, so no way to repeat the request. A button
+    // that would refuse is worse than no button.
+    expect(generatorActivities(failed())[0]?.actions).toBeUndefined();
+  });
+});

@@ -1,5 +1,6 @@
 import type { Activity, ActivityFact } from '@nos/ui';
 import type { QueueSnapshot } from '@nos/generators';
+import type { JobGroupId } from '@nos/core';
 import type { ExportProgress } from '@nos/export';
 
 /**
@@ -21,9 +22,36 @@ import type { ExportProgress } from '@nos/export';
  * doing, they finish at different times, and collapsing them would hide exactly the partial progress
  * the spec's §5.8 is built around — the point of variants is that the first ready one is usable.
  */
-export function generatorActivities(snapshot: QueueSnapshot): readonly Activity[] {
+export interface GeneratorActions {
+  /**
+   * Runs a failed group's request again, or absent when nothing can.
+   *
+   * Passed in rather than derived, because repeating a request needs the *manifest* and the queue
+   * keeps only a generator id — the registry that resolves one lives in the shell. A run whose
+   * generator has since been removed from the library therefore has no retry, and offering a button
+   * that would refuse is worse than offering none.
+   */
+  readonly onRetry?: ((group: JobGroupId) => void) | undefined;
+}
+
+export function generatorActivities(
+  snapshot: QueueSnapshot,
+  actions: GeneratorActions = {},
+): readonly Activity[] {
   return snapshot.runs.map((run) => {
     const group = snapshot.groups.find((candidate) => candidate.id === run.group);
+    /*
+     * Only on a failure, and only when the group is still known.
+     *
+     * A finished run has its output; a running one has cancel elsewhere. The dead end this answers is
+     * specific: a generation that fell over on a backend hiccup showed its reason and its seed, and
+     * left re-entering every parameter as the only route back — with the panel very likely showing a
+     * different generator by then.
+     */
+    const retry =
+      run.status === 'failed' && group !== undefined && actions.onRetry !== undefined
+        ? [{ id: `retry:${run.id}`, label: 'Run again', run: () => actions.onRetry!(group.id) }]
+        : [];
 
     return {
       id: `run:${run.id}`,
@@ -40,6 +68,7 @@ export function generatorActivities(snapshot: QueueSnapshot): readonly Activity[
           : { label: 'seed', value: String(run.seed) },
         ...(group === undefined ? [] : paramFacts(group.params)),
       ],
+      ...(retry.length > 0 ? { actions: retry } : {}),
       ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
       ...(run.finishedAt !== undefined ? { finishedAt: run.finishedAt } : {}),
     } satisfies Activity;

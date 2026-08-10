@@ -4142,3 +4142,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   Worth being exact about the cost: a check that silently drives an old binary does not merely fail to
   catch things. It **accuses working code**, and the time goes into the wrong place at the worst hour.
+
+- 2026-08-10: A failed generation was a dead end.
+
+  Second thing the mockups have that the application did not. A job row in 1c carries
+  `retry · cancel · reveal in folder`; the queue had cancel and dismiss and no way to run a request
+  again. So a generation that fell over on a backend hiccup showed its reason and its seed and left
+  **re-entering every parameter** as the only route back — with the panel very likely showing a
+  different generator by then, since the failure arrives minutes later.
+
+  `Activity` gained `actions`, on the activity rather than on the kind, so a later one can offer its
+  own — reveal a delivered file, open the folder a failed import was reading — without `StatusBar`
+  learning what any of them mean. Rendered under the reason they answer: a row of buttons above the
+  failure would be a choice offered before the question.
+
+  **The retry lives in the shell, not the runtime**, and that is forced rather than chosen. Repeating a
+  request needs the *manifest*; the queue keeps a generator id, and the registry that resolves one is
+  the shell's. A generator removed from the library since the run therefore has no retry and no button
+  — offering one that would refuse is worse than offering none.
+
+  Seeds are derived afresh, deliberately. A failed run produced nothing, so there is no image to
+  reproduce; the user is asking for the *request* again, not for a particular result. Preserving the
+  seed would also have meant `lockedSeed`, which §5.8 forces to a single variant — quietly changing a
+  three-variant request into a one-variant one on the way through a retry.
+
+  The retry names the **group**, not the run. A group is the request; a run is one variant of it, and
+  retrying a single variant of three would silently alter what was asked for.
