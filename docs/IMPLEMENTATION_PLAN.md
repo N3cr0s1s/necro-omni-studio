@@ -4528,3 +4528,39 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   move during a coalesced drag. It is a lazy getter now, cached per snapshot: lazy alone would hand back
   a new array per read, and the shell memoizes its history controls on that identity. An intermittent
   number was a true signal about work on the wrong path.
+
+- 2026-08-10: A narration generator, and what the hardware will actually do (issue #40).
+
+  The issue asks for a three-minute promo made *with* the program, narrated by the TTS in a female
+  voice. Two facts had to be established before any of it could be planned, and both changed the plan.
+
+  **The shipped TTS cannot do it alone.** `fish_s2_voiceclone_hu` is a voice *clone*: it requires a
+  reference sample, and there is not one audio file in the repository. So `fish_s2_narration` was added
+  — a manifest over ComfyUI's `FishS2TTS`, which needs no reference — because §5 makes a new capability
+  a manifest rather than code, and this is exactly that case.
+
+  It works on `s2-pro-bnb-nf4` with `offload_to_cpu`; the unquantised weights exceed 16 GB. And it
+  offers **no speaker selection** — the voice follows the seed. Eight seeds measured by median F0:
+  95, 104, 88, 96, 101, 104, 82, 147 Hz. All in the male band; a female speaking voice sits around
+  165–255 Hz. The measurement is a proxy for one decision between two bands an octave apart and says
+  nothing about whether a voice is good — but it is the only handle available to something that cannot
+  listen.
+
+  So the female voice is **blocked on a sample the user has to provide**, and deliberately not worked
+  around: cloning a stranger's voice is a consent problem, and pitch-shifting a male voice up while
+  calling it "the girl's voice" is a misrepresentation. The script lives in `notes/` so the existing
+  clone generator can read it from a notes file the moment a sample exists.
+
+  **And the card decides the shot length.** 4 s at 0.4 MP took 271 s — about 68 s of compute per second
+  of video. Twelve 15-second clips is three hours before a single cut. Worse, longer clips *restart the
+  ComfyUI process*: twelve seconds queued eight deep killed it, then ten seconds on its own killed it
+  again, while four seconds completes reliably. So the beds are twelve of five seconds, and the three
+  minutes gets built the way an editor builds one — repeats at different speeds, titles over held
+  frames, and the application's own footage between them.
+
+  Two faults of my own along the way, both in the runner rather than in ComfyUI. Queueing eight heavy
+  jobs at once is what restarted the server the first time. And polling `/history` every two seconds
+  while the GPU is saturated gets connections reset — treating a reset as a failed job threw away work
+  that was still running, and treating a *missing* job as "not started yet" waited forty minutes for a
+  job the server had forgotten in a restart. The queue is now one job deep, transient errors retry, and
+  a prompt that is in neither the queue nor the history is recognised as lost.
