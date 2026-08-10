@@ -38,6 +38,8 @@ from .models import (
     CacheStatsModel,
     DerivedArtifactModel,
     DeriveRequest,
+    DurationsModel,
+    DurationsRequest,
     ErrorModel,
     ExportStartRequest,
     ExportStatusModel,
@@ -234,6 +236,10 @@ def create_app(project_root: Path, token: str | None = None) -> FastAPI:
     @app.post("/media/probe", response_model=MediaMetadataModel, dependencies=[Authorized])
     async def probe(body: ProbeRequest, media: ServiceDep) -> MediaMetadataModel:
         return await media.probe(body.asset)
+
+    @app.post("/media/durations", response_model=DurationsModel, dependencies=[Authorized])
+    async def durations(body: DurationsRequest, media: ServiceDep) -> DurationsModel:
+        return DurationsModel(durations=await media.durations(body.assets))
 
     @app.post("/media/derive", response_model=DerivedArtifactModel, dependencies=[Authorized])
     async def derive(body: DeriveRequest, media: ServiceDep) -> DerivedArtifactModel:

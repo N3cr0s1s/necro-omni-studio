@@ -32,7 +32,8 @@ from __future__ import annotations
 import os
 import sys
 import threading
-from typing import BinaryIO, Callable
+from collections.abc import Callable
+from typing import BinaryIO
 
 
 def watch_parent(
@@ -68,7 +69,7 @@ def _wait_for_eof(stream: BinaryIO, on_orphaned: Callable[[], None]) -> None:
                 break
             # Anything actually sent is ignored rather than treated as a command. This pipe exists to
             # be closed; giving it a second meaning would make an accidental write a control channel.
-    except Exception:  # noqa: BLE001 - a broken pipe means the same thing as end-of-file
+    except Exception:
         pass
 
     on_orphaned()

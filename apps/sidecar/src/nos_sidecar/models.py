@@ -69,6 +69,18 @@ class ProbeRequest(StrictModel):
     asset: str
 
 
+class DurationsRequest(StrictModel):
+    """Assets to report the length of. Anything unreadable comes back as ``null``."""
+
+    assets: list[str]
+
+
+class DurationsModel(BaseModel):
+    """Seconds by asset path, ``null`` where there is no answer rather than an error."""
+
+    durations: dict[str, float | None]
+
+
 class StillRequest(StrictModel):
     """Lift one frame of a video out as an image the project owns.
 

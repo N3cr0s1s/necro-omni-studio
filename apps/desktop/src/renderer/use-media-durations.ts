@@ -13,28 +13,32 @@ import { formatDuration } from './use-asset-detail.js';
  * ## Why this is a hook and not a field on the tree
  *
  * The tree comes from the main process, which walks directory entries: a name, a size, a kind. A
- * duration is not on disk — it is in the container, and reading it means asking the sidecar to probe
- * the file. Putting it in the walk would make opening a project wait for a probe of every asset in it.
+ * duration is not on disk — it is in the container, and reading it means asking the sidecar. Putting
+ * it in the walk would make opening a project wait for a probe of every asset in it.
  *
- * So durations arrive **after** the tree and independently of it, and a row simply has none until its
- * probe lands. That is also why this returns a map rather than a decorated tree: the tree is rebuilt
+ * So durations arrive **after** the tree and independently of it, and a row simply has none until the
+ * answer lands. That is also why this returns a map rather than a decorated tree: the tree is rebuilt
  * on every watcher event, and a decorated copy would have to be rebuilt with it.
+ *
+ * ## Why one request rather than one per file
+ *
+ * The first version probed each file separately, and it was wrong in a way worth recording. A project
+ * legitimately holds media with no readable duration — a placeholder a generator has not written yet,
+ * a file still being encoded, a container ffprobe does not understand — and `/media/probe` answers
+ * those with a 404 or a 422, correctly, because *that* endpoint's question is "the metadata, or why
+ * not". **A browser logs every 4xx to its console whatever the caller does with the promise**, so a
+ * single unreadable file in a project turned into a renderer error on every scan, which the export
+ * check counts and rightly failed on.
+ *
+ * The fix was not to swallow the error but to ask a different question. A listing wants "the duration
+ * if there is one", and `/media/durations` answers `null` where there is none — no error, nothing
+ * logged, and one round trip for a folder of two hundred takes instead of two hundred.
  */
 
-/** Formatted durations by project-relative path. Absent means not probed yet, or not media. */
+/** Formatted durations by project-relative path. Absent means not answered yet, or not media. */
 export type MediaDurations = ReadonlyMap<string, string>;
 
-/**
- * At most this many probes in flight.
- *
- * The sidecar runs one ffprobe per request and a project can hold hundreds of files. Unbounded, a
- * freshly opened folder would fire every probe at once and the sidecar would spend the first seconds
- * of the session unable to answer the thing the user is actually waiting for — the preview's first
- * frame.
- */
-const MAX_IN_FLIGHT = 3;
-
-/** Only these are asked about. A markdown note has no duration and a probe of one is a wasted call. */
+/** Only these are asked about. A markdown note has no duration and asking about one is a wasted call. */
 const TIMED_ASSETS = new Set(['video', 'audio']);
 
 export function useMediaDurations(
@@ -47,8 +51,8 @@ export function useMediaDurations(
    * Every path ever asked about, kept across tree rebuilds.
    *
    * The watcher rebuilds the tree on any change anywhere — an autosave, a new mask — and without this
-   * each rebuild would re-probe every file in the project. A ref rather than state because reading it
-   * must not schedule a render.
+   * each rebuild would ask about every file in the project again. A ref rather than state because
+   * reading it must not schedule a render.
    */
   const asked = useRef(new Set<string>());
 
@@ -64,32 +68,10 @@ export function useMediaDurations(
     for (const path of wanted) asked.current.add(path);
 
     let live = true;
-    const queue = [...wanted];
-
-    /*
-     * One worker per slot, each taking the next path when it finishes.
-     *
-     * Rather than slicing the list into fixed batches: a batch waits for its slowest member before
-     * starting the next, so one long file stalls two idle slots. This keeps all three busy until the
-     * queue is empty.
-     */
-    const worker = async (): Promise<void> => {
-      while (live) {
-        const path = queue.shift();
-        if (path === undefined) return;
-
-        const seconds = await probeDuration(sidecar, path);
-        if (!live || seconds === undefined) continue;
-
-        setDurations((current) => {
-          const next = new Map(current);
-          next.set(path, formatDuration(seconds));
-          return next;
-        });
-      }
-    };
-
-    void Promise.all(Array.from({ length: MAX_IN_FLIGHT }, worker));
+    void readDurations(sidecar, wanted).then((answers) => {
+      if (!live || answers.size === 0) return;
+      setDurations((current) => new Map([...current, ...answers]));
+    });
 
     return () => {
       live = false;
@@ -100,24 +82,35 @@ export function useMediaDurations(
 }
 
 /**
- * One probe, or nothing.
+ * Asks for the whole batch, and formats what came back.
  *
- * Never throws and never reports a failure: a file the sidecar cannot read still belongs in the
- * browser, and a row that said `—` where every other row says a time would draw the eye to the one
- * thing the user cannot act on. It simply has no duration, exactly as a note has none.
+ * Never throws. A sidecar that is starting, or has gone, leaves the rows as they were — a duration is
+ * a label, and losing the ones already on screen because a later batch failed would be worse than
+ * showing nothing new.
  */
-async function probeDuration(sidecar: SidecarInfo, asset: string): Promise<number | undefined> {
+async function readDurations(
+  sidecar: SidecarInfo,
+  assets: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  const formatted = new Map<string, string>();
   try {
-    const response = await fetch(`${sidecar.baseUrl}/media/probe`, {
+    const response = await fetch(`${sidecar.baseUrl}/media/durations`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-nos-token': sidecar.token },
-      body: JSON.stringify({ asset }),
+      body: JSON.stringify({ assets }),
     });
-    if (!response.ok) return undefined;
+    if (!response.ok) return formatted;
 
-    const body = (await response.json()) as { readonly duration_seconds?: number | null };
-    return body.duration_seconds == null ? undefined : body.duration_seconds;
+    const body = (await response.json()) as {
+      readonly durations?: Readonly<Record<string, number | null>>;
+    };
+    for (const [asset, seconds] of Object.entries(body.durations ?? {})) {
+      // `null` is the honest answer for a file with no readable stream, and it stays absent from the
+      // map so the row shows nothing rather than a zero.
+      if (seconds !== null && seconds !== undefined) formatted.set(asset, formatDuration(seconds));
+    }
   } catch {
-    return undefined;
+    // Nothing to add. Reported nowhere, because a missing duration is not something a user can act on.
   }
+  return formatted;
 }

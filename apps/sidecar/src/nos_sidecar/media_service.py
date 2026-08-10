@@ -134,6 +134,34 @@ class MediaService:
         self._hashes.flush()
         return digest
 
+    async def durations(self, assets: list[str]) -> dict[str, float | None]:
+        """How long each asset is, with ``None`` for anything that has no answer.
+
+        A *listing* wants "the duration if there is one", where :meth:`probe` answers "the metadata,
+        or an error explaining why not". Those are different questions and the difference is not
+        cosmetic: the browser asks about every media file it shows, and among them are
+        placeholders a generator has not written yet, files still being encoded, and
+        containers ffprobe cannot read. Each of those is a legitimate 404 or 422 from
+        ``probe`` — and a row with no duration in the browser, which is not an error.
+
+        Answering ``None`` rather than raising keeps that distinction where it belongs. The
+        renderer was asking one by one, and a browser logs every 4xx to the console
+        whatever the caller does with it — so one unreadable file in a project turned into
+        a console error on every scan.
+
+        One call rather than one per file for the same reason: a folder of two hundred takes is two
+        hundred round trips, of which the interesting information is a number each.
+        """
+        answers: dict[str, float | None] = {}
+        for asset in assets:
+            try:
+                metadata = await self.probe(asset)
+            except MediaError:
+                answers[asset] = None
+                continue
+            answers[asset] = metadata.duration_seconds
+        return answers
+
     async def probe(self, asset: str) -> MediaMetadataModel:
         """Read stream metadata for an asset."""
         path = self.require_file(asset)

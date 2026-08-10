@@ -4333,3 +4333,15 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   A file that cannot be read shows **nothing**, not a dash: a row reading `—` beside rows reading times
   draws the eye to exactly the files that cannot be cut.
+
+  **And the first version was wrong in a way only the export check could show.** It probed each file
+  separately through `/media/probe`, whose question is "the metadata, or why not" — so a placeholder a
+  generator has not written, a file still encoding, or a container ffprobe cannot read answers 404 or
+  422, *correctly*. A browser logs every 4xx to its console whatever the caller does with the promise,
+  so one unreadable file in a project became a renderer error on every scan, and `exportcheck` failed
+  on it. The fix was not to swallow the error but to ask a different question: `/media/durations`
+  answers `null` where there is no duration, because a listing wants "the length if there is one".
+
+  One round trip for a folder of two hundred takes instead of two hundred, and the client's whole
+  concurrency-limiting apparatus — three workers pulling from a queue — deleted along with the
+  problem it was managing.

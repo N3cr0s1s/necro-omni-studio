@@ -85,6 +85,38 @@ class TestProbe:
         # A still must not be reported as video, or the timeline would size it from a frame count.
         assert body["video"] is None
 
+    def test_reports_durations_for_a_batch(self, client: TestClient) -> None:
+        response = client.post(
+            "/media/durations", json={"assets": ["media/landscape.mp4", "media/still.png"]}
+        )
+        assert response.status_code == 200
+        durations = response.json()["durations"]
+        assert durations["media/landscape.mp4"] is not None
+        # A still has no duration, and that is an answer rather than a failure.
+        assert durations["media/still.png"] is None
+
+    def test_answers_null_for_a_file_it_cannot_read(self, client: TestClient) -> None:
+        """The whole reason this endpoint exists beside ``/media/probe``.
+
+        A project legitimately holds media with no readable duration — a placeholder a generator has
+        not written, a file still encoding. ``probe`` answers those with a 404 or a 422, correctly,
+        because its question is "the metadata, or why not". A *listing* asks a different
+        question, and a browser logs every 4xx to its console whatever the caller does with
+        the promise — so one unreadable file meant a renderer error on every scan.
+        """
+        response = client.post(
+            "/media/durations", json={"assets": ["media/nothing-here.mp4", "media/landscape.mp4"]}
+        )
+        assert response.status_code == 200
+        durations = response.json()["durations"]
+        assert durations["media/nothing-here.mp4"] is None
+        assert durations["media/landscape.mp4"] is not None
+
+    def test_takes_an_empty_batch_without_complaint(self, client: TestClient) -> None:
+        response = client.post("/media/durations", json={"assets": []})
+        assert response.status_code == 200
+        assert response.json()["durations"] == {}
+
     def test_hashes_a_note_without_invoking_ffprobe(self, client: TestClient) -> None:
         response = client.post("/media/probe", json={"asset": "notes/treatment.md"})
         assert response.status_code == 200
