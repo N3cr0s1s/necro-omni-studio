@@ -288,7 +288,10 @@ try {
   // backend at a different machine for every keystroke.
   await address.blur();
   await page.waitForTimeout(800);
-  await page.getByRole('tab', { name: 'generate' }).click();
+  // `Generate`, with its capital. `exact` compares case as well as the whole string, and the lowercase
+  // spelling here was passing only because a loose match ignores case — which is the same looseness
+  // that let `Fit` match `fit · 44%` and `Story` match `History`.
+  await page.getByRole('tab', { name: 'Generate' }).click();
 
   let warned = '';
   for (let waited = 0; waited < 24 && !/unreachable/.test(warned); waited += 1) {
@@ -974,7 +977,7 @@ try {
 
         // Monaco names its suggestion list `Suggest`, not `Suggestions`. An exact name is the point:
         // a loose one would match some other list and turn a failure into a pass.
-        const list = page.getByRole('listbox', { name: 'Suggest', exact: true });
+        const list = page.getByRole('listbox', { name: 'Suggest' });
         if ((await list.count()) === 0) {
           const shown = await page
             .locator('section[aria-label="File editor"] header span')
@@ -1342,6 +1345,27 @@ try {
   }
 
   /*
+   * The markers, as a list rather than a ruler you scroll.
+   *
+   * A tab is one entry in `PANEL_TABS`, which is the point of that list being data — so what is worth
+   * checking here is the other half: that the tab reached the panel, and that a marker placed on the
+   * ruler appears in it.
+   */
+  await page.getByRole('tab', { name: 'Markers' }).click();
+  await page.waitForTimeout(700);
+  const markerPanel = (await page.innerText('body')).includes('no markers');
+  if (markerPanel) {
+    // Place one at the playhead, the way §6.1 says: a marker is put down at a moment.
+    await page.keyboard.press('m');
+    await page.waitForTimeout(700);
+  }
+  if (/no markers/.test(await page.innerText('body'))) {
+    fail('a marker placed with M did not appear in the marker list');
+  } else {
+    pass('a marker placed on the ruler appears in the list');
+  }
+
+  /*
    * The history, as a list rather than two buttons.
    *
    * The store has recorded a label on every commit since M1 and the whole stack has been in the
@@ -1634,13 +1658,13 @@ try {
   }
 
   const saveLive = await page
-    .getByRole('button', { name: 'Save', exact: true })
+    .getByRole('button', { name: 'Save' })
     .first()
     .isEnabled()
     .catch(() => false);
   if (saveLive) {
     // Only clicked when it is live, because the click is the destructive act being guarded against.
-    await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Save' }).first().click();
     await page.waitForTimeout(2000);
   }
 

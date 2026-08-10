@@ -2431,6 +2431,9 @@ export function App(): ReactNode {
             className="min-w-0 border-l"
           >
             <RightPanel
+              onSeek={transport.seek}
+              onEditMarker={editMarker}
+              onRemoveMarker={removeMarkerAt}
               projectTree={tree.tree}
               masks={masks}
               maskChoices={maskChoices}

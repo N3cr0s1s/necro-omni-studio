@@ -226,7 +226,7 @@ try {
 
   // Fit is the worst case on purpose. At any other zoom the lane culls what is off screen, and the
   // 200-clip target would be measured against whatever fraction happened to be visible.
-  await page.getByRole('button', { name: 'Fit' }).click();
+  await page.getByRole('button', { name: 'Fit', exact: true }).click();
   await page.waitForTimeout(1500);
 
   const onScreen = await page.evaluate(() => document.querySelectorAll('[data-clip-id]').length);

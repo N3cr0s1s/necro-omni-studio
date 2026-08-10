@@ -10,10 +10,11 @@ import {
   describeShaderError,
 } from '@nos/compositor';
 import type { EffectRegistry } from '@nos/effects';
-import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
+import { CircleAlertIcon, MinusIcon, PlusIcon, TriangleAlertIcon } from 'lucide-react';
+import { Button } from '@nos/ui/components/ui/button';
 import { createMediaTextures } from './media-textures.js';
 import { passBudgetNote, prepareFrame } from './frame-render.js';
-import { describeZoom, usePreviewZoom } from './use-preview-zoom.js';
+import { ZOOM_RANGE, describeZoom, usePreviewZoom } from './use-preview-zoom.js';
 
 /**
  * How much one wheel notch changes the zoom.
@@ -285,11 +286,52 @@ export function Preview({
         {glError === undefined && (
           <>
             <span>{`frame ${frame}`}</span>
-            {/* What the panel is showing the frame at. The word `fit` is what separates "this is all
-                the room there is" from "you asked for this" — without it a user who has never touched
-                the zoom reads 68% as something they did. */}
+            {/*
+              What the panel is showing the frame at, and the controls that change it.
+              
+              The word `fit` separates "this is all the room there is" from "you asked for this" —
+              without it a user who has never touched the zoom reads 68% as something they did.
+
+              Buttons as well as the gestures, because a capability reachable only by `Ctrl`+wheel is
+              one only a reader of the shortcut sheet has. The readout is the way back: it already
+              says where you are, so making it say *and click here to return* costs no width, and a
+              third button would.
+            */}
             {describeZoom(picture?.width, doc.resolution.width, zoom.scale) !== undefined && (
-              <span>{describeZoom(picture?.width, doc.resolution.width, zoom.scale)}</span>
+              <span className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-5"
+                  onClick={() => zoom.zoomBy(1 / ZOOM_STEP)}
+                  disabled={zoom.scale <= ZOOM_RANGE.min}
+                  aria-label="Zoom out"
+                  title="Zoom out (Ctrl+wheel)"
+                >
+                  <MinusIcon className="size-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1 font-mono text-xs font-normal text-muted-foreground"
+                  onClick={() => zoom.reset()}
+                  disabled={!zoom.zoomed}
+                  title={zoom.zoomed ? 'Back to fit (double-click the picture)' : 'Fitted to the panel'}
+                >
+                  {describeZoom(picture?.width, doc.resolution.width, zoom.scale)}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-5"
+                  onClick={() => zoom.zoomBy(ZOOM_STEP)}
+                  disabled={zoom.scale >= ZOOM_RANGE.max}
+                  aria-label="Zoom in"
+                  title="Zoom in (Ctrl+wheel)"
+                >
+                  <PlusIcon className="size-3" />
+                </Button>
+              </span>
             )}
             <span>{`${planned} layers`}</span>
             <span>{`${stats?.passesExecuted ?? 0} passes`}</span>

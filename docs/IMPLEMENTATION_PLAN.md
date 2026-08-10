@@ -4452,3 +4452,40 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Worth stating plainly: **the failure was real and pointed at the wrong file.** A green story-board
   check would have been a lie, and a red one that accused working code cost the time it takes to read
   the DOM order. A harness that matches loosely is a harness that will eventually accuse the code.
+
+- 2026-08-10: Markers as a list, zoom controls, and a lesson about mechanical fixes.
+
+  **The markers.** They have carried a label and a colour since the document model was written and the
+  ruler draws them — but a ruler shows the stretch of sequence that happens to be on screen, and the
+  only way through them was `Alt`+arrow, one at a time and blind. On a twenty-minute cut the question
+  is *where did I note the thing about the interview*, and the answer was to step through every flag
+  until one said so. A tab is one entry in `PANEL_TABS`, which is what that list being data was for.
+
+  The timecode is the button. It is what identifies a marker — two can share a name, none can share a
+  frame — so making the identifier the way there saves the row a second control competing with the
+  name field. Placing one stays on the ruler: a marker is put down *at a moment*, not chosen from a
+  menu.
+
+  **The preview's zoom got controls**, because a capability reachable only by `Ctrl`+wheel is one only
+  a reader of the shortcut sheet has. The readout is the way back — it already says where you are, so
+  making it say *and click here to return* costs no width where a third button would.
+
+  **And that readout broke `perfcheck`.** `getByRole('button', { name: 'Fit' })` matched `fit · 44%`.
+  Third time for this trap in two days — `Film Grain` matched a stack row, `History` matched `Story`,
+  and now this.
+
+  So I added `exact: true` to every plain-string name in all three harnesses, mechanically, with a
+  regex. **That was worse.** It broke five checks at once: `exact` compares case as well, so a
+  lowercase `generate` stopped matching the `Generate` tab; and a menu item's accessible name includes
+  its shortcut, so `Crossfade at the cut` is really `Crossfade at the cutShift+F`. Undoing it
+  mechanically then removed an `exact` that `exportcheck` had held for a documented reason — the
+  comment explaining it sat three lines above the line the regex rewrote.
+
+  The rule that survives is narrower than "always be exact": **a name needs `exact` when it is a
+  prefix of another label on the same role, and must not have it when the accessible name is composed
+  of more than the label.** Which of the two applies is a fact about the UI, not something a regex can
+  read.
+
+  The larger lesson is the one that cost the time: *a mechanical fix applied across files that contain
+  hand-reasoned exceptions will delete the reasoning.* Both directions of this change were wrong in the
+  same way, and the file said so in a comment before I started.

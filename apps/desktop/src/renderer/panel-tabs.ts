@@ -17,7 +17,7 @@
  * the rules that keep them consistent. It takes a set instead and draws what it is asked for.
  */
 
-export type PanelTab = 'clip' | 'effects' | 'generate' | 'variants' | 'segment' | 'project';
+export type PanelTab = 'clip' | 'effects' | 'markers' | 'generate' | 'variants' | 'segment' | 'project';
 
 /** A section of the clip inspector. Named here because the tabs are what decide where each one goes. */
 export type ClipSection =
@@ -49,6 +49,9 @@ export const PANEL_TABS: readonly PanelTabDescriptor[] = [
   // Its own tab, which is what #29 asked for by name: the stack, its parameters and its mask binding
   // are a workspace of their own and were competing with six other things for the same column.
   { id: 'effects', label: 'Effects', sections: ['effects'] },
+  // Beside the clip rather than under the project, because a marker is a note about *the cut* — the
+  // thing being worked on — and not a property of the file it is saved in.
+  { id: 'markers', label: 'Markers', sections: [] },
   { id: 'generate', label: 'Generate', sections: [] },
   { id: 'variants', label: 'Variants', sections: [] },
   { id: 'segment', label: 'Segment', sections: [] },

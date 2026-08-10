@@ -50,6 +50,8 @@ import { cn } from '@nos/ui/lib/utils';
 import { assetChoicesFrom } from './generator-assets.js';
 import { useFrameGrab } from './use-frame-grab.js';
 import { ClipInspector } from './ClipInspector.js';
+import type { MarkerChange } from '@nos/editing';
+import { MarkerList } from './MarkerList.js';
 import { TextInspector } from './TextInspector.js';
 import { ProjectSettings } from './ProjectSettings.js';
 import { useAudition } from './use-audition.js';
@@ -130,6 +132,15 @@ export interface RightPanelProps {
   readonly libraryPath: string | undefined;
   readonly runtime: GeneratorRuntime;
   readonly playhead: FrameIndex;
+  /**
+   * Moving the playhead, so a marker can be gone to.
+   *
+   * The panel has never needed to move it before — every other tab describes what is already selected.
+   * A marker list is the first thing here whose whole purpose is to take you somewhere.
+   */
+  readonly onSeek?: ((frame: FrameIndex) => void) | undefined;
+  readonly onEditMarker?: ((frame: FrameIndex, change: MarkerChange) => void) | undefined;
+  readonly onRemoveMarker?: ((frame: FrameIndex) => void) | undefined;
   /** Where the sidecar serves project files, so a generated variant can be auditioned. */
   readonly sidecar: SidecarInfo | undefined;
   readonly selectedClip: string | undefined;
@@ -232,6 +243,16 @@ export function RightPanel(props: RightPanelProps): ReactNode {
         </TabsContent>
         <TabsContent value="effects" className="min-h-0 flex-1 overflow-auto">
           <ClipTab {...props} sections={sectionsFor('effects')} />
+        </TabsContent>
+        <TabsContent value="markers" className="min-h-0 flex-1 overflow-auto">
+          <MarkerList
+            markers={props.document.sequence.markers}
+            frameRate={props.document.frameRate}
+            playhead={props.playhead}
+            onSeek={props.onSeek ?? (() => undefined)}
+            onEdit={props.onEditMarker ?? (() => undefined)}
+            onRemove={props.onRemoveMarker ?? (() => undefined)}
+          />
         </TabsContent>
         <TabsContent value="project" className="min-h-0 flex-1 overflow-auto">
           <ProjectTab {...props} />
