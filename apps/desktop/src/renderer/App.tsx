@@ -176,6 +176,7 @@ import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { describeCacheStats, useDerivedCache } from './derived-cache.js';
 import { gpuStatusNote, useGpuStatus } from './use-gpu-status.js';
+import { retryRequest } from './retry-generation.js';
 import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
 import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
@@ -1705,18 +1706,8 @@ export function App(): ReactNode {
    */
   const retryGroup = useCallback(
     (id: JobGroupId) => {
-      const group = runtime.snapshot.groups.find((candidate) => candidate.id === id);
-      if (group === undefined) return;
-      const manifest = library.registry?.manifestFor(group.generator);
-      if (manifest === undefined) return;
-
-      runtime.run({
-        manifest,
-        ...(group.preset === undefined ? {} : { preset: group.preset }),
-        params: group.params,
-        target: group.target,
-        variantCount: group.variantCount,
-      });
+      const request = retryRequest({ snapshot: runtime.snapshot, registry: library.registry }, id);
+      if (request !== undefined) runtime.run(request);
     },
     [library.registry, runtime],
   );

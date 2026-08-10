@@ -4168,3 +4168,30 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   The retry names the **group**, not the run. A group is the request; a run is one variant of it, and
   retrying a single variant of three would silently alter what was asked for.
+
+- 2026-08-10: Closing the gap I had just admitted to.
+
+  The retry shipped with the pure adapter tested and the wiring only typechecked, and that was said
+  out loud rather than implied. Provoking a real backend failure end to end would have meant wiring
+  the mock's `failSubmitOn` into the shipped application — **a test hook in production code, to cover
+  a lookup.** So the coverage went to where the decisions actually are instead.
+
+  `retryRequest` is now a module of its own, and the callback in `App` is a lookup and a call. That is
+  the shape this project keeps arriving at: judgement where it can be checked without rendering, wiring
+  short enough to read in one line.
+
+  **It asks for `ManifestSource`, not `GeneratorRegistry`** — one method, `manifestFor`. A function
+  that asks for the whole registry cannot be exercised without building one, which means validating
+  manifests against a backend to test a lookup; the registry satisfies the narrow interface
+  structurally, so the shell passes its own with no adapter. Depending on what you use is the cheaper
+  design *and* the testable one, which is not always the same trade.
+
+  Eight tests on the request, four on the list. Two of them pin things a reader would otherwise have to
+  take on trust: the variant count survives (a preserved seed would have forced it to one under §5.8),
+  and the `preset` key is **absent** rather than `undefined` when there was none, because
+  `exactOptionalPropertyTypes` makes those different and the queue reads it with `in`.
+
+  Both mutants run: hiding the action block fails three of the four list tests, and the assertion that
+  the reason is shown had to be scoped to the popover — the bar's summary says it too, so the loose
+  query matched twice. **That was the component being right and the test being sloppy**, which is worth
+  writing down because it is the failure that most often gets "fixed" in the wrong file.
