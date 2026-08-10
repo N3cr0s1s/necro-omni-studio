@@ -150,20 +150,6 @@ export function previousClipBefore(track: Track, frame: FrameIndex): Clip | unde
 }
 
 /**
- * Every frame position an edit could snap to on this track.
- *
- * Clip edges only — the playhead and markers are sequence-level and are added by the
- * caller, because a track does not know about them.
- */
-export function snapPoints(track: Track): readonly FrameIndex[] {
-  const points: FrameIndex[] = [];
-  for (const clip of trackClips(track)) {
-    points.push(clip.span.start, endExclusive(clip.span));
-  }
-  return points;
-}
-
-/**
  * Whether a track contributes to output, given whether anything is soloed.
  *
  * Solo has to be evaluated against the whole track set, not per track, so this takes the

@@ -10,7 +10,6 @@ import {
   type Transition,
   clipFade,
   containsFrame,
-  endExclusive,
   evaluateAt,
   fadeAmountAt,
   frameIndex,
@@ -371,19 +370,4 @@ export { PASS_WARNING_THRESHOLD };
 
 export function exceedsPassBudget(plan: RenderPlan): boolean {
   return plan.passCount > PASS_WARNING_THRESHOLD;
-}
-
-/** Frame range a plan is valid for, so a preview can skip rebuilding while nothing changes. */
-export function planValidUntil(document: TimelineDocument, frame: FrameIndex): FrameIndex {
-  let next = Number.POSITIVE_INFINITY;
-
-  for (const track of document.sequence.tracks) {
-    for (const clip of trackClips(track)) {
-      for (const boundary of [clip.span.start, endExclusive(clip.span)]) {
-        if (boundary > frame && boundary < next) next = boundary;
-      }
-    }
-  }
-
-  return Number.isFinite(next) ? frameIndex(next) : frameIndex(frame + 1);
 }

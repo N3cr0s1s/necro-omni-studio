@@ -648,3 +648,56 @@ describe('a locked track', () => {
     expect(String(onReject.mock.calls.at(-1)?.[0])).toMatch(/lock/i);
   });
 });
+
+/*
+ * Adding the same effect twice.
+ *
+ * A run of the smoke check put nine Film Grains on a title through the picker and the frame ended up
+ * carrying one. That was seen through a harness which was, in the same block, wrong about three other
+ * things — so it was recorded as unexplained rather than as a finding. This is the same claim asked
+ * without a harness in the way.
+ *
+ * The panel is re-rendered with each committed document, because that is what the shell does and it is
+ * the whole question: the instance id is derived from `stack.length`, so a second add computed against
+ * a document that has not come back down would mint the id the first one already used and replace it.
+ */
+describe('adding the same effect more than once', () => {
+  it('appends rather than replacing, when each commit is fed back', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    let live = single();
+
+    const view = render(
+      <ClipInspector document={live} clip="c1" effects={effects} playhead={0} onChange={onChange} />,
+    );
+
+    for (let round = 0; round < 3; round += 1) {
+      await user.click(screen.getByRole('button', { name: /Add effect from registry/ }));
+      await user.click(screen.getByRole('button', { name: 'Film Grain' }));
+      live = onChange.mock.calls.at(-1)![1] as TimelineDocument;
+      view.rerender(
+        <ClipInspector document={live} clip="c1" effects={effects} playhead={0} onChange={onChange} />,
+      );
+    }
+
+    const clip = locateClip(live, 'c1' as never)!.clip;
+    expect(clip.effects).toHaveLength(3);
+    // Distinct ids, which is the mechanism: two effects sharing one id is what a replace looks like.
+    expect(new Set(clip.effects.map((entry) => entry.id)).size).toBe(3);
+  });
+
+  it('replaces rather than appending when the commit is not fed back', async () => {
+    // The failure mode named, so it cannot be mistaken for a passing case later: a panel still holding
+    // yesterday's document mints the id it already used. This is what the shell must not do, and
+    // stating it here is what makes the test above mean something.
+    const user = userEvent.setup();
+    const { onChange } = renderInspector();
+
+    for (let round = 0; round < 3; round += 1) {
+      await user.click(screen.getByRole('button', { name: /Add effect from registry/ }));
+      await user.click(screen.getByRole('button', { name: 'Film Grain' }));
+    }
+
+    expect(afterChange(onChange).effects).toHaveLength(1);
+  });
+});

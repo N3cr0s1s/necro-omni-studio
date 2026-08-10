@@ -4013,3 +4013,37 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   the budget say so. The nine-adds behaviour is left unexplained on purpose rather than written up as
   a finding: it was observed through a harness that was demonstrably wrong about three other things,
   and that is not evidence.
+
+- 2026-08-10: The nine adds explained, and two functions that were traps.
+
+  **The correction first.** Last entry left "nine adds landed as one" unexplained. It was the harness,
+  and the cause is worth writing down because it will happen again: the effect stack's rows carry the
+  accessible name `Film Grain, pass 1 of 1`, **Playwright matches `name` by substring**, and the stack
+  renders *above* the picker. So after the first add, `getByRole('button', {name: 'Film Grain'}).first()`
+  matched the stack row, and every later click merely selected the effect. Asked without a harness in
+  the way — re-rendering the panel with each committed document, which is what the shell does — three
+  adds append three effects with three distinct ids. The panel was never wrong.
+
+  Both directions are now tests: fed back it appends, not fed back it replaces. The second is the
+  failure mode named, so it cannot later be mistaken for a passing case.
+
+  **`planValidUntil` deleted.** "Frame range a plan is valid for, so a preview can skip rebuilding
+  while nothing changes" — written, tested, no caller. The comment is false: it returns the next clip
+  *boundary*, and a plan is not reusable between boundaries because every layer names a source frame
+  and every keyframed parameter is evaluated per frame. Wiring it up as its own docstring invites
+  would hold the picture still and freeze animation.
+
+  And the optimisation it exists for is worth nothing: **`buildRenderPlan` costs 0.009 ms per frame at
+  200 clips**, against a 16 ms budget, next to a decode and a GL submit. Measured before deciding,
+  because "this is a hot path" is a belief until someone times it.
+
+  **`snapPoints` deleted** for the same reason with a sharper edge: `@nos/editing`'s
+  `collectSnapCandidates` is the real one and offers markers, the work range, the playhead and the
+  origin as well as clip edges. The core copy returned clip edges of a single track. It had no caller,
+  and anyone wiring up the shorter one would have *silently lost* marker and work-range snapping —
+  a feature disappearing with no error anywhere.
+
+  **A dead function with a promise in its comment is worse than no function.** Both of these read as
+  finished work waiting to be plugged in; both would have made the application worse. The sweep for
+  "exported and never called" earns its keep by finding capability that is missing — and it finds this
+  too, which is the same question asked of code rather than of features.

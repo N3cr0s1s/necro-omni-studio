@@ -25,7 +25,7 @@ import {
 } from '@nos/core';
 import type { EffectShaderSource, EffectSourceResolver } from '../contracts/effect-source.js';
 import { planAssets, planLayers } from '../contracts/render-plan.js';
-import { PASS_WARNING_THRESHOLD, buildRenderPlan, exceedsPassBudget, planValidUntil } from './build-plan.js';
+import { PASS_WARNING_THRESHOLD, buildRenderPlan, exceedsPassBudget } from './build-plan.js';
 
 /** A resolver that knows a couple of effects and one transition. */
 const effects: EffectSourceResolver = {
@@ -723,19 +723,6 @@ describe('plan metadata', () => {
       v2: [video('a2', 0, 100)],
     });
     expect(planAssets(plan(document, 10))).toHaveLength(2);
-  });
-});
-
-describe('planValidUntil', () => {
-  it('reports the next clip boundary, so a preview can reuse a plan', () => {
-    const document = makeDocument({ v1: [video('a', 0, 100), video('b', 200, 300)] });
-    expect(planValidUntil(document, frameIndex(50))).toBe(100);
-    expect(planValidUntil(document, frameIndex(150))).toBe(200);
-  });
-
-  it('advances by one frame when nothing changes ahead', () => {
-    const document = makeDocument({ v1: [video('a', 0, 100)] });
-    expect(planValidUntil(document, frameIndex(500))).toBe(501);
   });
 });
 
