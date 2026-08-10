@@ -966,10 +966,20 @@ export function App(): ReactNode {
    */
   const gpuNote = gpuStatusNote(useGpuStatus(runtime.gpu));
 
-  /** One line about any clip that asks for more material than its source holds. */
-  const overrunNote = useMemo(
-    () => describeSourceOverruns(clipsPastTheirSource(document, sourceBounds.resolver)),
+  /**
+   * Clips that ask for more material than their source holds, and how many frames each is short.
+   *
+   * Computed once for both readers: the status line says *that* something is wrong and the mark on the
+   * clip says *which*. Two sweeps would be two chances to disagree about the same document.
+   */
+  const overruns = useMemo(
+    () => clipsPastTheirSource(document, sourceBounds.resolver),
     [document, sourceBounds.resolver],
+  );
+  const overrunNote = useMemo(() => describeSourceOverruns(overruns), [overruns]);
+  const pastSource = useMemo(
+    () => new Map(overruns.map((entry) => [String(entry.clip), entry.missing])),
+    [overruns],
   );
 
   // The browser's footer. The cache size is re-read as proxies land, because a number that only
@@ -2310,6 +2320,7 @@ export function App(): ReactNode {
                     document={drag.document}
                     strips={strips.strips}
                     missingAssets={missingAssets}
+                    pastSource={pastSource}
                     onAddTrack={addTrackOfKind}
                     onTrackRemove={removeTrackById}
                     onTrackRename={(id, name) => {

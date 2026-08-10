@@ -1414,3 +1414,43 @@ describe('the scrub audio toggle', () => {
     expect(onToggleScrubAudio).toHaveBeenCalled();
   });
 });
+
+/*
+ * A clip that outruns its own media.
+ *
+ * The status line says *that* one does; the mark on the clip says *which*. Both are needed because the
+ * frames such a clip produces are black or a held frame, indistinguishable from a shot meant to end that
+ * way — so being told there is a problem without being shown where leaves the user hunting.
+ */
+describe('a clip past the end of its source', () => {
+  it('says so in the accessible name, where an icon cannot reach', () => {
+    expect(clipAccessibleLabel(video('a', 0, 150), false, 30)).toContain(
+      '30 frames past the end of the source',
+    );
+  });
+
+  it('uses the singular for one frame, the commonest case after an edit', () => {
+    expect(clipAccessibleLabel(video('a', 0, 121), false, 1)).toContain('1 frame past');
+  });
+
+  it('says nothing when the clip fits', () => {
+    expect(clipAccessibleLabel(video('a', 0, 100), false, 0)).not.toContain('past the end');
+  });
+
+  it('defers to a missing file, so one fault is not reported twice', () => {
+    // An offline clip outruns its source by its whole length. The missing file is the fault and the
+    // length is a consequence; two marks for one problem is one mark too many.
+    const label = clipAccessibleLabel(video('a', 0, 300), true, 300);
+    expect(label).toContain('media missing');
+    expect(label).not.toContain('past the end');
+  });
+
+  it('marks the clip on the timeline, so the offender is findable', () => {
+    renderTimeline({
+      document: makeDocument([video('short', 0, 150)]),
+      pastSource: new Map([['short', 30]]),
+    });
+
+    expect(screen.getByLabelText(/30 frames past the end of the source/)).toBeDefined();
+  });
+});

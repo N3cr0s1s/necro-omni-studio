@@ -4625,3 +4625,35 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   be an edit nobody asked for, and one that cannot be undone from a state the user never saw. Three ways
   in exist that no trim can catch: a hand-written project, a relink to a shorter take, and a source
   replaced on disk.
+
+- 2026-08-10: The promo, and the two faults using the program turned up.
+
+  A 72-second promo exists, cut and **rendered by the application**: 1920×1080, 2160 frames, four tracks,
+  per-shot ramps, keyframed titles, section markers. `promo/build-project.mjs` writes the document and
+  `promo/export.mjs` drives the shell and reads the delivered file back with ffprobe rather than trusting
+  the dialog.
+
+  **Not three minutes, and the reason is stated rather than padded over.** One bed of twelve rendered; the
+  container's memory limit killed the rest. Three minutes from one four-second clip would be that clip
+  thirty times, which is padding wearing the shape of an edit. So `honestLength` derives the length from
+  the material — a bed may appear four times, a screen recording six, because a two-second recording makes
+  a *different* claim each time it appears and a four-second abstract bed does not. The same function
+  returns the full three minutes the moment the beds exist.
+
+  The per-kind limit was one number first, and the test caught what that cost: six recordings at four
+  showings each ran out two sections early, and **the application disappeared from the last thirty-six
+  seconds of its own promo.**
+
+  ## Two faults found by using it
+
+  **`waitForFunction`'s third argument is the options.** Every harness passed `{ timeout }` in the second
+  position, where it is the *page function's argument* — so all of them ran on the default thirty seconds,
+  and `exportcheck`'s stated 180-second limit had never been in force. It only showed when a 2160-frame
+  export needed longer than thirty seconds. Six files fixed. A wrong-position argument is invisible while
+  every wait happens to be short.
+
+  **A clip may outrun its media, and now it says which one.** `clipsPastTheirSource` gives the status line
+  one sentence; `ClipBody` marks the clip itself in amber — the two read one sweep, because two would be
+  two chances to disagree about the same document. The mark defers to `offline`: a missing file outruns its
+  source by the clip's whole length, so the missing file is the fault and the length is a consequence, and
+  two marks for one problem is one too many.

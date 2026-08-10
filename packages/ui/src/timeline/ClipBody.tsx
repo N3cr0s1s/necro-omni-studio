@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   LinkIcon,
   SparklesIcon,
+  TriangleAlertIcon,
   SquareDashedIcon,
   UnplugIcon,
 } from 'lucide-react';
@@ -50,6 +51,15 @@ export interface ClipBodyProps {
    * the user moved. The fact belongs to the folder, so it is passed in — a document cannot know it.
    */
   readonly offline?: boolean;
+  /**
+   * Frames this clip shows for which its source has no material, or `0` when it fits.
+   *
+   * Marked for the same reason `offline` is: the frames it produces are black or a held frame, which is
+   * indistinguishable from a shot meant to end that way. The status line already says *that* a clip
+   * outruns its media; without a mark on the clip itself the user is told there is a problem and left to
+   * find it. Passed in because the length of a file is not something a document knows.
+   */
+  readonly pastSourceFrames?: number;
   readonly onPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
   /**
    * Whether each edge is a cut shared with a neighbour, so shift-dragging it rolls rather than trims.
@@ -152,6 +162,7 @@ export function ClipBody({
   selected,
   strip,
   offline,
+  pastSourceFrames = 0,
   onPointerDown,
   rollableStart,
   rollableEnd,
@@ -194,7 +205,7 @@ export function ClipBody({
     >
       <div
         role="button"
-        aria-label={clipAccessibleLabel(clip, offline === true)}
+        aria-label={clipAccessibleLabel(clip, offline === true, pastSourceFrames)}
         aria-pressed={selected}
         tabIndex={0}
         data-clip-id={clip.id}
@@ -225,6 +236,23 @@ export function ClipBody({
               // Before the generated mark, because "this cannot be drawn" outranks "a generator made
               // it": one is a property of the take, the other is why nothing appears.
               <UnplugIcon aria-hidden="true" className="size-2.5 flex-none text-destructive" />
+            )}
+            {offline !== true && pastSourceFrames > 0 && (
+              /*
+               * Only when the media is *there* and too short. An offline clip outruns its source by its
+               * whole length, and saying both would be two marks for one fault — the missing file is the
+               * fault, and its length is a consequence.
+               *
+               * Amber rather than destructive: the shot plays, and it plays wrong at the end. That is a
+               * different thing from a clip that cannot be drawn at all, and colouring them the same
+               * would flatten the distinction the user needs.
+               */
+              <span
+                title={`${pastSourceFrames} frame${pastSourceFrames === 1 ? '' : 's'} past the end of the source`}
+                className="flex-none"
+              >
+                <TriangleAlertIcon aria-hidden="true" className="size-2.5 text-amber-500" />
+              </span>
             )}
             {isGenerated(clip) && (
               <SparklesIcon aria-hidden="true" className="size-2.5 flex-none text-chart-4" />
@@ -497,11 +525,14 @@ function FadeHandle({
  * Includes provenance and effect count because those are conveyed visually by colour and a badge,
  * neither of which reaches a screen reader.
  */
-export function clipAccessibleLabel(clip: Clip, offline = false): string {
+export function clipAccessibleLabel(clip: Clip, offline = false, pastSourceFrames = 0): string {
   const parts = [clip.label || clip.kind];
   // First among the notes, and said in words: the icon that carries it visually reaches no screen
   // reader, and it is the difference between a clip that will render and one that cannot.
   if (offline) parts.push('media missing');
+  else if (pastSourceFrames > 0) {
+    parts.push(`${pastSourceFrames} frame${pastSourceFrames === 1 ? '' : 's'} past the end of the source`);
+  }
   if (isGenerated(clip)) parts.push('generated');
   const passes = passCount(clip);
   if (passes > 0) parts.push(`${passes} effect${passes === 1 ? '' : 's'}`);

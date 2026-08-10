@@ -118,6 +118,14 @@ export interface TimelineProps {
    * — which during a drag is every pointer move, and re-renders all two hundred rows for nothing.
    */
   readonly missingAssets?: ReadonlySet<string>;
+  /**
+   * Clips that outrun their media, by id, with how many frames they ask for beyond it.
+   *
+   * Supplied for the same reason `missingAssets` is: the length of a file is not something a document
+   * knows. The status line already says that *a* clip runs past its source; without this the user is told
+   * there is a problem and left to find which shot it is.
+   */
+  readonly pastSource?: ReadonlyMap<string, number>;
 
   readonly onScrub?: (frame: FrameIndex) => void;
   readonly onSelectClip?: (clip: ClipId, additive: boolean) => void;
@@ -477,6 +485,7 @@ export function Timeline(props: TimelineProps): ReactNode {
                     selectedClips={props.selectedClips}
                     {...(props.strips !== undefined ? { strips: props.strips } : {})}
                     {...(props.missingAssets !== undefined ? { missingAssets: props.missingAssets } : {})}
+                    {...(props.pastSource !== undefined ? { pastSource: props.pastSource } : {})}
                     {...(props.expandedClip !== undefined ? { expandedClip: props.expandedClip } : {})}
                     {...(props.onToggleExpandClip !== undefined
                       ? { onToggleExpandClip: props.onToggleExpandClip }
@@ -1490,6 +1499,7 @@ function TrackLane({
   selectedClips,
   strips,
   missingAssets,
+  pastSource,
   expandedClip,
   onToggleExpandClip,
   onClipPointerDown,
@@ -1512,6 +1522,7 @@ function TrackLane({
   readonly selectedClips: ReadonlySet<string>;
   readonly strips?: ReadonlyMap<string, ClipStrip>;
   readonly missingAssets?: ReadonlySet<string>;
+  readonly pastSource?: ReadonlyMap<string, number>;
   readonly expandedClip?: ClipId;
   readonly onToggleExpandClip?: (clip: ClipId) => void;
   readonly onClipPointerDown?: (clip: ClipId, event: React.PointerEvent<HTMLDivElement>) => void;
@@ -1570,6 +1581,7 @@ function TrackLane({
             selected={selectedClips.has(clip.id)}
             {...(strips?.get(clip.id) !== undefined ? { strip: strips.get(clip.id)! } : {})}
             {...(isOffline(clip, missingAssets) ? { offline: true } : {})}
+            {...((pastSource?.get(clip.id) ?? 0) > 0 ? { pastSourceFrames: pastSource!.get(clip.id)! } : {})}
             expanded={expandedClip === clip.id}
             {...(onToggleExpandClip !== undefined ? { onToggleExpand: onToggleExpandClip } : {})}
             onPointerDown={(clipId, event) => {
