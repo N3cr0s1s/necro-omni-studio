@@ -137,3 +137,41 @@ describe('naming a new folder', () => {
     expect(sanitizeFolderName('...')).toBeUndefined();
   });
 });
+
+/*
+ * Emptying the derived cache, per §4.
+ *
+ * `cache/` is the only folder the spec calls derived and deletable, and the sidecar has been able to
+ * report and empty it since the media service was written with nothing in the application asking. The
+ * row is shaped like `prune-takes` beside it: one folder, disabled elsewhere rather than hidden, and
+ * priced before it does anything.
+ */
+describe('clearing the derived cache', () => {
+  const on = (path: string | undefined, cache?: string) =>
+    browserMenuItems({ path, isDirectory: true, ...(cache === undefined ? {} : { cache }) }).find(
+      (entry) => entry.id === 'clear-cache',
+    );
+
+  it('is offered on the cache folder', () => {
+    expect(on('cache', '2.41 GB in 40 files')?.disabled).toBe(false);
+  });
+
+  it('says what it would reclaim, so the size is not a guess', () => {
+    expect(on('cache', '2.41 GB in 40 files')?.label).toContain('2.41 GB in 40 files');
+  });
+
+  it('is refused on any other folder', () => {
+    expect(on('media', '2.41 GB in 40 files')?.disabled).toBe(true);
+    expect(on(undefined, '2.41 GB in 40 files')?.disabled).toBe(true);
+  });
+
+  it('is refused when there is nothing to reclaim', () => {
+    // An action that would remove nothing should say so by being unavailable, rather than by doing
+    // nothing when pressed.
+    expect(on('cache')?.disabled).toBe(true);
+  });
+
+  it('is not marked destructive, because nothing in the cut is in it', () => {
+    expect(on('cache', '1 MB in 2 files')?.danger).toBeUndefined();
+  });
+});

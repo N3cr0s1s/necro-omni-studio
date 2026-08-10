@@ -62,6 +62,21 @@ export async function walkProject(
           break;
         }
         if (entry.kind === 'folder') {
+          /*
+           * Reported as well as walked, which it was not.
+           *
+           * A folder used to be queued for traversal and dropped, so the only directories the tree
+           * ever heard about were the ones it could infer from the *paths of files inside them* — and
+           * an **empty folder was invisible**. §4 defines a project as its folder structure and the
+           * browser as a view of the real tree; a project whose `media/` had nothing in it yet showed
+           * no `media/` at all, which is exactly the moment a user is looking for somewhere to import
+           * to. `renders/`, `notes/` and `generated/` were in the same position for the whole life of
+           * a project until something happened to write into them.
+           *
+           * `buildTree` has always had the branch for this — "ensure empty directories still
+           * appear" — and nothing could reach it, because no directory entry was ever produced.
+           */
+          files.push({ path: assetPath(entry.path), sizeBytes: 0, isDirectory: true });
           if (folder.depth + 1 <= maxDepth) next.push({ path: entry.path, depth: folder.depth + 1 });
           continue;
         }

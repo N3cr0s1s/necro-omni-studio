@@ -4047,3 +4047,36 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   finished work waiting to be plugged in; both would have made the application worse. The sweep for
   "exported and never called" earns its keep by finding capability that is missing — and it finds this
   too, which is the same question asked of code rather than of features.
+
+- 2026-08-10: Every empty folder was invisible in the browser, found while building something else.
+
+  §4 defines a project **as** a folder structure and the browser as a view of the real tree.
+  `walkProject` queued each folder for traversal and then dropped it — only files were ever pushed into
+  the entry list — so the only directories the tree heard about were the ones it could infer from the
+  paths of files *inside* them. **An empty folder did not exist as far as the browser was concerned.**
+
+  A new project showed `project.json` and nothing else. No `media/` to import into, at exactly the
+  moment a user is looking for somewhere to put footage; no `renders/`, no `notes/`, no `generated/`,
+  until something happened to write into them. `buildTree` has always carried the branch for this —
+  *"ensure empty directories still appear; an empty `renders/` is meaningful information"* — and
+  nothing could reach it, because no directory entry was ever produced. **A guard written for a case
+  that cannot arrive reads exactly like a guard that works.**
+
+  Found while building the thing below, which could not be reached without it. That is the second time
+  a feature has been the instrument rather than the point.
+
+  **Clearing the derived cache**, per §4 — the one folder the spec calls disposable. The sidecar has
+  served `/cache/stats` and `/cache/clear` since the media service was written, both covered by its own
+  tests, and nothing in the application called either: a cache grown to a few gigabytes could be seen
+  and not reclaimed, short of closing the editor and deleting the directory by hand with the shell
+  still holding proxies open.
+
+  Shaped like `prune-takes` beside it — one folder, disabled elsewhere rather than hidden, priced in
+  the label, not `danger` — and with one deliberate difference: **no confirmation**. What goes is
+  derived from sources that are still there and rebuilt the moment it is wanted, so the worst outcome
+  is that the next preview waits for a proxy. An unused *take* is the only copy of something a
+  generator produced, and removing one is a decision.
+
+  Not automatic either. A cache that emptied itself on a size threshold would re-derive every proxy in
+  the project at the least convenient moment, which is precisely when someone is working with large
+  sources. It is offered, priced, and left to the person.

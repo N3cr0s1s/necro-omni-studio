@@ -173,6 +173,7 @@ import { clipStartOf, maskIdForClip, sessionMaskSource } from './mask-source.js'
 import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
+import { describeCacheStats, useDerivedCache } from './derived-cache.js';
 import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
 import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
@@ -860,6 +861,13 @@ export function App(): ReactNode {
   // The spec's realtime preview target is "1080p/30 from proxy". The originals are decoded until each
   // proxy exists, so importing a 4K source shows a picture immediately and gets a cheaper one shortly.
   const proxies = useProxies({ document, sidecar });
+  /*
+   * The derived cache's size, so the browser can offer to reclaim it.
+   *
+   * §4 is the only place in the spec that calls a project folder disposable, and the sidecar has been
+   * able to report and empty it all along with nothing asking.
+   */
+  const derivedCache = useDerivedCache(sidecar);
 
   // The browser's footer. The cache size is re-read as proxies land, because a number that only
   // updated on relaunch would be wrong for exactly as long as it mattered.
@@ -1263,6 +1271,9 @@ export function App(): ReactNode {
    * latter, which is a stale read waiting to happen: between opening a menu and choosing from it the
    * selection can move, and "move to trash" acting on the wrong file is not a recoverable mistake.
    */
+  /** Priced once per change rather than per right-click, since the menu is rebuilt on every render. */
+  const cacheLabel = useMemo(() => describeCacheStats(derivedCache.stats), [derivedCache.stats]);
+
   const runBrowserMenuAction = useCallback(
     (target: BrowserMenuTarget, action: BrowserMenuAction) => {
       switch (action) {
@@ -1279,6 +1290,18 @@ export function App(): ReactNode {
           break;
         case 'prune-takes':
           void proposePrune();
+          break;
+        case 'clear-cache':
+          /*
+           * No confirmation, unlike the prune beside it. What goes is derived from sources that are
+           * still there and is rebuilt the moment it is wanted again, so the worst outcome is that
+           * the next preview waits for a proxy — where an unused *take* is the only copy of something
+           * a generator produced, and removing one is a decision.
+           *
+           * The tree is rescanned because `cache/` is a real folder in the browser, and rows for
+           * files that are gone would sit there until the watcher's next debounce.
+           */
+          void derivedCache.clear().then(() => tree.refresh());
           break;
         case 'delete':
           void files.trash(target.path).then((done) => {
@@ -1787,10 +1810,11 @@ export function App(): ReactNode {
           browserMenuItems({
             path: target.path === '' ? undefined : target.path,
             isDirectory: target.isDirectory,
+            ...(cacheLabel === undefined ? {} : { cache: cacheLabel }),
           }),
         runBrowserMenuAction,
       ),
-    [runBrowserMenuAction],
+    [cacheLabel, runBrowserMenuAction],
   );
 
   return (

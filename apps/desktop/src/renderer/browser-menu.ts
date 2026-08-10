@@ -28,6 +28,7 @@ export const BROWSER_MENU_ACTIONS = [
   'rename',
   'reveal',
   'prune-takes',
+  'clear-cache',
   'delete',
 ] as const;
 
@@ -37,6 +38,14 @@ export interface BrowserMenuState {
   /** The row under the pointer, absent for a right-click on empty space. */
   readonly path: string | undefined;
   readonly isDirectory: boolean;
+  /**
+   * What emptying the derived cache would reclaim, or absent when nothing would.
+   *
+   * Decided by the caller, for the same reason `crossfadeFrames` is on the clip menu: the size is the
+   * sidecar's answer about a folder, not something the tree can work out, and a row that offered to
+   * reclaim space without saying how much would be asking the user to guess.
+   */
+  readonly cache?: string | undefined;
 }
 
 /**
@@ -106,6 +115,22 @@ export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuIt
       icon: SparklesIcon,
       disabled: path !== PROJECT_FOLDERS.generated,
       separated: true,
+    },
+    {
+      /*
+       * The only folder §4 calls *derived and deletable*, and the only one whose contents can be
+       * thrown away without losing anything: every proxy, filmstrip and waveform in it is rebuilt on
+       * demand from a source that is still there.
+       *
+       * Beside `prune-takes` and shaped like it — offered on one folder, disabled elsewhere rather
+       * than hidden, priced in the label, and not `danger`, because nothing here is part of the cut.
+       * Disabled when the cache is already empty: an action that would remove nothing should say so
+       * by being unavailable, not by doing nothing when pressed.
+       */
+      id: 'clear-cache',
+      label: state.cache === undefined ? 'Clear derived cache' : `Clear derived cache (${state.cache})`,
+      icon: Trash2Icon,
+      disabled: path !== PROJECT_FOLDERS.cache || state.cache === undefined,
     },
     {
       id: 'delete',

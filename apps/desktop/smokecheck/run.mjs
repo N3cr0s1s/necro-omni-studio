@@ -135,6 +135,18 @@ cpSync(join(desktop, 'exportcheck', 'fixture'), project, { recursive: true });
 }
 
 /*
+ * Something in `cache/` to reclaim.
+ *
+ * The sidecar reports the folder and skips its contents, and the folder only exists once something has
+ * been derived — so a fresh fixture has no cache at all and "clear it" is correctly unavailable.
+ * Stating the condition here rather than waiting for a derivation keeps the check about the thing it
+ * is checking: whether the size the sidecar reports reaches the row a user right-clicks.
+ */
+const cacheDroppings = join(project, 'cache', 'proxy');
+mkdirSync(cacheDroppings, { recursive: true });
+writeFileSync(join(cacheDroppings, 'stand-in.bin'), Buffer.alloc(64 * 1024, 7));
+
+/*
  * The fixture's audio, synthesized as `exportcheck` does — the file is not in the repository, so a
  * copy of the fixture alone leaves the audio clip pointing at nothing and the sidecar rightly answers
  * 404 when the waveform is asked for. That is the harness being wrong, not the application.
@@ -1192,6 +1204,44 @@ try {
   else fail('nothing in the browser offers to import media');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
+
+  /*
+   * Emptying the derived cache, per §4 — the one folder the spec calls disposable.
+   *
+   * The whole chain is only observable here: the sidecar reports a size, a hook reads it, a pure
+   * describer prices it, and the row carries the price. Each of those is unit-tested and none of them
+   * can say whether the four are joined up — which is the failure this harness exists to catch, and
+   * the one that put `clearCache` in the codebase untouched for the life of the project.
+   */
+  const cacheRow = page.getByRole('treeitem', { name: /^cache/i }).first();
+  if ((await cacheRow.count()) === 0) {
+    const tree = (await page.getByRole('tree', { name: 'Project folder' }).innerText()).replace(/\s+/g, ' ');
+    fail(`the browser shows no cache folder — the tree reads ${JSON.stringify(tree.slice(0, 200))}`);
+  } else {
+    await cacheRow.click({ button: 'right', force: true });
+    await page.waitForTimeout(900);
+    const clearRow = page.getByRole('menuitem', { name: /Clear derived cache/i });
+    const label = (await clearRow.count()) > 0 ? await clearRow.innerText() : '';
+    // The price in brackets is the point: an unpriced row means the size never arrived, which is the
+    // chain being broken somewhere between the sidecar and the menu.
+    if (/\(.+\)/.test(label)) {
+      pass(`the browser offers to clear the derived cache — ${label.trim()}`);
+
+      // And that pressing it reaches the disk. The row appearing proves the size arrived; only the
+      // folder emptying proves the other direction is joined up too.
+      await clearRow.click();
+      await page.waitForTimeout(2500);
+      if (existsSync(join(cacheDroppings, 'stand-in.bin'))) {
+        fail('clearing the derived cache left its files where they were');
+      } else {
+        pass('and clearing it empties the folder on disk');
+      }
+    } else {
+      fail(`the derived cache cannot be cleared from the browser — the row reads ${JSON.stringify(label)}`);
+      await page.keyboard.press('Escape');
+    }
+    await page.waitForTimeout(400);
+  }
 
   /*
    * The step a drop depends on and no component test can reach.
