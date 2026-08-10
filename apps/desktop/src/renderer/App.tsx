@@ -46,6 +46,8 @@ import {
   canMoveTrack,
   moveTrack,
   nextTrackId,
+  clipsPastTheirSource,
+  describeSourceOverruns,
   removeMarker,
   removeTrack,
   renameTrack,
@@ -96,6 +98,7 @@ import {
   SkipBackIcon,
   KeyboardIcon,
   RedoIcon,
+  TriangleAlertIcon,
   UndoIcon,
   SkipForwardIcon,
   Trash2Icon,
@@ -185,6 +188,7 @@ import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { describeCacheStats, useDerivedCache } from './derived-cache.js';
 import { useMediaDurations } from './use-media-durations.js';
+import { useSourceBounds } from './use-source-bounds.js';
 import { gpuStatusNote, useGpuStatus } from './use-gpu-status.js';
 import { retryRequest } from './retry-generation.js';
 import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
@@ -299,6 +303,14 @@ export function App(): ReactNode {
   const store = useMemo(() => createDocumentStore(emptyProject('Untitled')), []);
   const [document, setDocument] = useState<TimelineDocument>(() => store.getDocument());
   useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
+
+  /*
+   * How long each source is, which the trims have asked for since M2 and nobody supplied.
+   *
+   * Placed before the drag that uses it: without these bounds every trim ran unchecked, so an edge
+   * could be dragged past the end of a shot and the refusal written for exactly that never fired.
+   */
+  const sourceBounds = useSourceBounds(document, sidecar);
 
   const audio = usePlaybackAudio({ document, sidecar });
   /*
@@ -521,6 +533,7 @@ export function App(): ReactNode {
   // The drag owns the document while a gesture is in flight, so the timeline renders its live preview
   // and the store records exactly one entry when the pointer is released.
   const drag = useClipDrag({
+    sources: sourceBounds.resolver,
     document,
     viewport,
     snapEnabled: snap,
@@ -952,6 +965,12 @@ export function App(): ReactNode {
    * generation that was waiting on a mask propagation looked like one that had stopped.
    */
   const gpuNote = gpuStatusNote(useGpuStatus(runtime.gpu));
+
+  /** One line about any clip that asks for more material than its source holds. */
+  const overrunNote = useMemo(
+    () => describeSourceOverruns(clipsPastTheirSource(document, sourceBounds.resolver)),
+    [document, sourceBounds.resolver],
+  );
 
   // The browser's footer. The cache size is re-read as proxies land, because a number that only
   // updated on relaunch would be wrong for exactly as long as it mattered.
@@ -2487,6 +2506,17 @@ export function App(): ReactNode {
       <StatusBar activities={activities} notices={notices}>
         {/* Before the export timing, because it explains why something is not moving — which is read
             first when something is not moving. */}
+        {/*
+          A clip that outruns its own media, which nothing said before: the frame shows whatever the
+          decoder has left, and black at the end of a shot looks exactly like a shot meant to end on
+          black. Named rather than repaired — shortening the clip would be an edit nobody asked for.
+        */}
+        {overrunNote !== undefined && (
+          <span className="flex items-center gap-1.5 font-mono text-amber-500">
+            <TriangleAlertIcon className="size-3.5" />
+            {overrunNote}
+          </span>
+        )}
         {gpuNote !== undefined && <span className="font-mono text-muted-foreground">{gpuNote}</span>}
         {exportRun.timing !== undefined && (
           <span className="font-mono text-muted-foreground">{describeTiming(exportRun.timing)}</span>

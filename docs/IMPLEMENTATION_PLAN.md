@@ -4596,3 +4596,32 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   had not started. The lesson underneath all three is the same as the one about the mechanical `exact`
   edit — **read the log before forming a theory.** "Longer clips are heavier" got the direction right and
   the cause wrong, and `dmesg` had the answer from the first failure onward.
+
+- 2026-08-10: The trim guard had no data, found by making the bug it prevents.
+
+  Writing the promo's edit produced a document whose shots ran a second past their four-second beds, and
+  the application drew it without a word. Chasing that turned up something larger than a missing badge.
+
+  **`SourceBoundsResolver` has existed since M2, every trim consults it, and nothing ever supplied one.**
+  `options.sources` was undefined at every call site in the shell, which the contract documents as
+  "proceed unchecked" — so `trimClip`'s refusal, the `source-exhausted` error, and the message naming how
+  many frames were missing could never fire. An edge could be dragged well past the end of a shot and the
+  clip simply showed whatever the decoder had left.
+
+  The guard was written, tested, and never connected to the thing it protects. That is the same shape as
+  the keyframe value, the clip transform, the mask sampler, the pass budget and the GPU readout — the
+  sixth time on this list, and the first one where the *engine* was complete and only the **input** was
+  missing. Worth naming as its own variety: not "nothing calls it" but "everything calls it, with
+  nothing".
+
+  `useSourceBounds` probes each distinct video and audio source once and hands the trims a resolver.
+  Audio keeps its duration in *seconds* in the cache and is converted where the clip is in hand, because
+  the rate belongs to the clip — `source.sourceRate` is what that clip's `sourceIn` counts in, and a
+  hard-coded 30 would be wrong for every other rate.
+
+  And the document itself is now swept: `clipsPastTheirSource` reports a clip asking for material that
+  does not exist, honouring retimes so a shot at 0.5× is not falsely accused, and leaving stills alone
+  because holding one frame is what a still is *for*. Reported, not repaired — shortening the clip would
+  be an edit nobody asked for, and one that cannot be undone from a state the user never saw. Three ways
+  in exist that no trim can catch: a hand-written project, a relink to a shorter take, and a source
+  replaced on disk.

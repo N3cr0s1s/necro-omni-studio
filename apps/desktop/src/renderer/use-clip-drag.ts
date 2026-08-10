@@ -31,6 +31,7 @@ import {
   snapEdgeDelta,
   snapSpanTranslation,
   snapThresholdFrames,
+  type SourceBoundsResolver,
   trimGroup,
   withLinkedClips,
 } from '@nos/editing';
@@ -120,10 +121,19 @@ export interface ClipDragOptions {
   /** Snap candidates include the playhead, which is where a user aligns a cut most often. */
   readonly playhead: FrameIndex;
   readonly commit: (label: string, next: TimelineDocument) => void;
+  /**
+   * How long each source is, so a trim stops at the end of its media.
+   *
+   * The trims have consulted a resolver since M2 and nothing ever supplied one — every trim ran with
+   * `sources` undefined, which the contract documents as "proceed unchecked", so the refusal written for
+   * dragging an edge past the end of a shot could never fire. Optional because that remains the honest
+   * behaviour before the probes land.
+   */
+  readonly sources?: SourceBoundsResolver | undefined;
 }
 
 export function useClipDrag(options: ClipDragOptions): ClipDrag {
-  const { document, viewport, snapEnabled, selected, playhead, commit } = options;
+  const { document, viewport, snapEnabled, selected, playhead, commit, sources } = options;
 
   const [drag, setDrag] = useState<DragState | undefined>(undefined);
   const [preview, setPreview] = useState<TimelineDocument | undefined>(undefined);
@@ -137,8 +147,8 @@ export function useClipDrag(options: ClipDragOptions): ClipDrag {
 
   // Read inside the window listeners, which are attached once per gesture and must not close over a
   // stale document or zoom.
-  const latest = useRef({ drag, viewport, snapEnabled, document, playhead, selected });
-  latest.current = { drag, viewport, snapEnabled, document, playhead, selected };
+  const latest = useRef({ drag, viewport, snapEnabled, document, playhead, selected, sources });
+  latest.current = { drag, viewport, snapEnabled, document, playhead, selected, sources };
 
   const begin = useCallback(
     (kind: DragKind, clip: ClipId, event: ReactPointerEvent<HTMLElement>) => {
@@ -396,6 +406,7 @@ function applyTrim(
     snapEnabled: boolean;
     viewport: TimelineViewport;
     playhead: FrameIndex;
+    sources?: SourceBoundsResolver | undefined;
   },
 ): Result<DragOutcome, EditError> {
   const located = locateClip(state.document, state.clip);
@@ -416,7 +427,15 @@ function applyTrim(
       )
     : { delta: deltaFrames, snappedTo: undefined };
 
-  const request = { document: state.document, clip: state.clip, edge, delta: snap.delta };
+  const request = {
+    document: state.document,
+    clip: state.clip,
+    edge,
+    delta: snap.delta,
+    // The bounds the trim has always asked for. Without them a drag past the end of a shot succeeded
+    // and the clip showed whatever the decoder had left.
+    ...(context.sources === undefined ? {} : { options: { sources: context.sources } }),
+  };
   const trimmed = trimGroup(request);
   if (trimmed.ok) {
     return { ok: true, value: { document: trimmed.value, snappedTo: snap.snappedTo, crossfades: [] } };
