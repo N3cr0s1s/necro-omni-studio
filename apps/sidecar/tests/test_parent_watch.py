@@ -1,7 +1,9 @@
 """Exiting when the editor that started us goes away.
 
-The sidecar is stopped politely on every ordinary close. This covers the ones that are not ordinary —
-the shell killed, crashed, or gone with its machine — after which the sidecar would otherwise keep its
+The sidecar is stopped politely on every ordinary close. This covers the ones that are not
+ordinary —
+the shell killed, crashed, or gone with its machine — after which the sidecar would otherwise
+keep its
 port, its memory and whatever the segmenter left in VRAM, indefinitely.
 """
 
@@ -53,7 +55,7 @@ def test_ignores_anything_written_down_the_pipe() -> None:
 
 
 def test_treats_a_broken_pipe_as_a_dead_parent() -> None:
-    """A read that raises means the same thing as one that ends: there is nobody at the other end."""
+    """A read that raises means the same as one that ends: nobody is at the other end."""
 
     class _Broken(io.RawIOBase):
         def read(self, _size: int = -1) -> bytes:  # type: ignore[override]
@@ -67,7 +69,7 @@ def test_treats_a_broken_pipe_as_a_dead_parent() -> None:
 def test_the_watcher_never_holds_up_a_shutdown() -> None:
     """A daemon thread, so a read that will never return cannot keep the process alive.
 
-    Without this a sidecar stopping for its own reasons would hang on a parent that is still running.
+    Without this a sidecar stopping for its own reasons would hang on a parent still running.
     """
     stream = _Blocking()
     thread = watch_parent(stream, lambda: None)

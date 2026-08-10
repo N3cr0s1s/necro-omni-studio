@@ -4380,3 +4380,47 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   today's work, all line length. Two are fixed and none were added. The Python suite (156 tests) does
   run and passes — it is the linter alone that nothing calls, which is exactly how a check stops being
   a check.
+
+- 2026-08-10: `ruff` and the Python suite are part of `verify` now.
+
+  Named as a gap last entry, closed here. Eleven line-length findings on `main` were fixed — and the
+  first attempt at fixing them is the part worth recording: a script that re-wrapped every long line by
+  width **broke the code**, splitting a `#` comment across two lines and leaving the continuation as a
+  bare identifier. Reverted and done by hand. *Formatting is not a text operation on a file; it is one
+  on a syntax.*
+
+  `verify` now ends with `lint:py` and `test:py`. The Python tests were being run by hand every cycle,
+  which is the same arrangement as a check nobody runs — it works exactly until the day someone is in a
+  hurry. Twenty-three seconds is a fair price for not needing to remember.
+
+- 2026-08-10: Zooming the preview.
+
+  The preview letterboxes into whatever room the panel has, which is right and was the only thing on
+  offer — so the frame was almost never at its own size. On a 1080p project in a half-window panel that
+  is around two thirds, and at two thirds you cannot judge a mask edge, a title's kerning or the grain a
+  shader just added, which is most of what this application is for. The mockups' `fit · 68%` is the same
+  observation: the number matters because it says what you are **not** seeing.
+
+  **The drawing buffer stays at the project resolution.** Rendering more pixels because someone zoomed
+  would make the preview disagree with the export, which is the guarantee §6.7 rests on. What changes is
+  how large that buffer is *drawn*, so zooming shows the frame's real pixels bigger and never invents
+  any.
+
+  One transform over the canvas **and** the mask overlay, which is what keeps segmentation correct for
+  free: a click's rectangle arithmetic is against what the user actually sees, so a point lands where it
+  was put at any zoom. That did need one real change — the picture is measured with `offsetWidth` now
+  rather than `getBoundingClientRect`, because a rect is the *transformed* box and the overlay, drawn at
+  that size inside the transform, would have been scaled twice.
+
+  The gestures avoid the ones already spoken for: `Ctrl`+wheel because a bare wheel scrolls the panel,
+  and the **middle** button to pan because the primary places mask points and the secondary opens menus
+  — on the very panel where masks are drawn. Double-click returns to fit.
+
+  The pan is bounded by the overhang, so the picture cannot be dragged off into an empty box with no
+  clue how to get back. At fit the overhang is zero, which is why zooming out re-centres without being
+  told to.
+
+  `NaN` is the one value clamped specially, and the test says why: it has no order, so `Math.min` and
+  `Math.max` pass it straight through, and it reaches CSS as an invalid transform that makes the picture
+  vanish with nothing logged. Infinity needs no special case, and pretending it did would have hidden
+  the one value that does.

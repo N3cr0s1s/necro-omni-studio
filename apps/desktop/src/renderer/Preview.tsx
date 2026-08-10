@@ -13,6 +13,15 @@ import type { EffectRegistry } from '@nos/effects';
 import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
 import { passBudgetNote, prepareFrame } from './frame-render.js';
+import { describeZoom, usePreviewZoom } from './use-preview-zoom.js';
+
+/**
+ * How much one wheel notch changes the zoom.
+ *
+ * A quarter, so getting from fit to a pixel-level look is a handful of notches rather than one — the
+ * point of zooming here is to *arrive* at a scale worth judging, and a coarse step jumps over it.
+ */
+const ZOOM_STEP = 1.25;
 import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { MaskSource } from './mask-source.js';
 
@@ -82,6 +91,19 @@ export function Preview({
 }: PreviewProps): ReactNode {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [picture, setPicture] = useState<{ width: number; height: number } | undefined>(undefined);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [panning, setPanning] = useState(false);
+  /*
+   * The box the picture is panned within, so a drag cannot carry it off the panel.
+   *
+   * Read from the stage rather than stored: the panel is resizable, and a bound computed once would
+   * let the picture escape the moment the window changed.
+   */
+  const stage = {
+    width: stageRef.current?.clientWidth ?? 0,
+    height: stageRef.current?.clientHeight ?? 0,
+  };
+  const zoom = usePreviewZoom(stage);
   const compositorRef = useRef<GlCompositor | undefined>(undefined);
   const [stats, setStats] = useState<RenderStats | undefined>(undefined);
   /** Items the plan carried, so "nothing is visible" can be told apart from "nothing was planned". */
@@ -163,12 +185,21 @@ export function Preview({
     if (globalThis.ResizeObserver === undefined) return;
 
     const measure = (): void => {
-      const box = canvas.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0) {
+      /*
+       * `offsetWidth`, not `getBoundingClientRect`.
+       *
+       * The two agreed until the picture could be zoomed: a rect is the *transformed* box, so at 2×
+       * it reports twice the size — and the overlay, which is drawn at this size and sits inside the
+       * same transformed element, would then be scaled twice. Layout units are the honest measurement
+       * here, and they are what the transform is applied to.
+       */
+      const width = canvas.offsetWidth;
+      const height = canvas.offsetHeight;
+      if (width === 0 || height === 0) {
         setPicture(undefined);
         return;
       }
-      setPicture(containedSize(box.width, box.height, doc.resolution.width, doc.resolution.height));
+      setPicture(containedSize(width, height, doc.resolution.width, doc.resolution.height));
     };
 
     measure();
@@ -193,21 +224,55 @@ export function Preview({
         resolves to `auto`. An absolutely positioned box has a definite containing block and cannot
         overflow its parent or disturb a sibling, so the fault is unavailable rather than corrected.
       */}
-      <div className="relative min-h-0 flex-1">
-        <canvas
-          ref={canvasRef}
-          aria-label="Preview"
-          // Black, and deliberately not a theme role: this is the letterbox around a picture, and a
-          // preview whose surround changed with the theme would misreport what the frame looks like.
-          className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] bg-black object-contain"
-        />
+      <div
+        ref={stageRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        onWheel={(event) => {
+          // Held modifier, because an unmodified wheel over the preview is how a trackpad user
+          // scrolls the panel it sits in, and stealing that would be worse than having no zoom.
+          if (!event.ctrlKey && !event.metaKey) return;
+          zoom.zoomBy(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+        }}
+        onPointerDown={(event) => {
+          // The middle button, which nothing else here claims. The primary one places mask points and
+          // the secondary opens menus, so panning with either would take a gesture that already means
+          // something on the very panel where masks are drawn.
+          if (event.button !== 1) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setPanning(true);
+        }}
+        onPointerMove={(event) => {
+          if (!panning) return;
+          zoom.panBy(event.movementX, event.movementY);
+        }}
+        onPointerUp={() => setPanning(false)}
+        onPointerCancel={() => setPanning(false)}
+        onDoubleClick={() => zoom.reset()}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            // One transform over both, so the overlay cannot drift from the picture it annotates.
+            transform: `translate(${zoom.panX}px, ${zoom.panY}px) scale(${zoom.scale})`,
+            cursor: panning ? 'grabbing' : undefined,
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            aria-label="Preview"
+            // Black, and deliberately not a theme role: this is the letterbox around a picture, and a
+            // preview whose surround changed with the theme would misreport what the frame looks like.
+            className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] bg-black object-contain"
+          />
 
-        {overlay !== undefined && picture !== undefined && (
-          // Centred over the canvas at the picture's own size, which is what `object-fit: contain`
-          // produces. Sharing the canvas's inset rather than guessing at where it sits is what keeps
-          // a placed point on the pixel it was placed on.
-          <div className="absolute inset-3 grid place-items-center">{overlay(picture)}</div>
-        )}
+          {overlay !== undefined && picture !== undefined && (
+            // Centred over the canvas at the picture's own size, which is what `object-fit: contain`
+            // produces. Sharing the canvas's inset rather than guessing at where it sits is what keeps
+            // a placed point on the pixel it was placed on.
+            <div className="absolute inset-3 grid place-items-center">{overlay(picture)}</div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-3 px-3 py-1 font-mono text-xs text-muted-foreground">
@@ -220,6 +285,12 @@ export function Preview({
         {glError === undefined && (
           <>
             <span>{`frame ${frame}`}</span>
+            {/* What the panel is showing the frame at. The word `fit` is what separates "this is all
+                the room there is" from "you asked for this" — without it a user who has never touched
+                the zoom reads 68% as something they did. */}
+            {describeZoom(picture?.width, doc.resolution.width, zoom.scale) !== undefined && (
+              <span>{describeZoom(picture?.width, doc.resolution.width, zoom.scale)}</span>
+            )}
             <span>{`${planned} layers`}</span>
             <span>{`${stats?.passesExecuted ?? 0} passes`}</span>
             {/* Skipped layers are reported rather than hidden: a black preview with no explanation is

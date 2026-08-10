@@ -1,11 +1,14 @@
 """Exiting when the editor that started us goes away.
 
-The sidecar is stopped politely on `before-quit` and `window-all-closed`, which covers every ordinary
+The sidecar is stopped politely on `before-quit` and `window-all-closed`, which covers every
+ordinary
 way an editor closes. It does not cover the editor being killed, crashing, or its machine losing
-power on the way down — and in those cases the sidecar keeps running forever, holding its port, its
+power on the way down — and in those cases the sidecar keeps running forever, holding its port,
+its
 memory, and whatever the segmenter left in VRAM.
 
-That is not a theoretical cost. A development session that killed the shell repeatedly left twenty-two
+That is not a theoretical cost. A development session that killed the shell repeatedly left
+twenty-two
 orphaned sidecars behind, and one of them had taken a port another tool wanted; the symptom was an
 unrelated program failing to start with no useful message.
 
@@ -45,7 +48,8 @@ def watch_parent(
     The thread is a daemon so it can never hold up an ordinary shutdown: if the sidecar is stopping
     for its own reasons, a thread blocked on a read that will never return must not keep it alive.
 
-    `on_orphaned` is injected so this is testable without ending the test runner, and so a caller can
+    `on_orphaned` is injected so this is testable without ending the test runner, and so a caller
+    can
     choose a different way to stop — a future one may want to finish an in-flight encode first.
     """
     source = sys.stdin.buffer if stream is None else stream
@@ -67,8 +71,9 @@ def _wait_for_eof(stream: BinaryIO, on_orphaned: Callable[[], None]) -> None:
             chunk = stream.read(1)
             if chunk == b"":
                 break
-            # Anything actually sent is ignored rather than treated as a command. This pipe exists to
-            # be closed; giving it a second meaning would make an accidental write a control channel.
+            # Anything actually sent is ignored rather than treated as a command. This pipe
+            # exists to be closed; giving it a second meaning would make an accidental write a
+            # control channel.
     except Exception:
         pass
 
