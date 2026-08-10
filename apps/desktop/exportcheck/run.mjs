@@ -168,7 +168,7 @@ try {
   });
 
   // The project reopens by itself; waiting for a clip is waiting for that to have happened.
-  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, undefined, {
     timeout: 30_000,
   });
 
@@ -207,7 +207,7 @@ try {
   });
 
   await page.locator('[role="dialog"]').getByRole('button', { name: 'Export', exact: true }).click();
-  await page.waitForFunction(() => document.body.textContent?.includes('complete') === true, {
+  await page.waitForFunction(() => document.body.textContent?.includes('complete') === true, undefined, {
     timeout: 180_000,
   });
 

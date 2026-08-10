@@ -16,7 +16,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { APP_CLIPS, BEDS, BLOCKS, FPS, TOTAL_FRAMES, shots, titles } from './edit.mjs';
+import { APP_CLIPS, BEDS, BLOCKS, FPS, SECTION_FRAMES, honestLength, shots, titles } from './edit.mjs';
 
 const [, , mediaDirectory, projectDirectory] = process.argv;
 if (mediaDirectory === undefined || projectDirectory === undefined) {
@@ -33,20 +33,37 @@ for (const folder of ['media', 'generated', 'masks', 'effects', 'generators', 'n
  * pointing at a scratch directory outside the project is one that stops opening the moment the
  * directory is cleared — which is exactly what a scratch directory is for.
  */
-const wanted = new Map();
-for (const name of BEDS) wanted.set(`bed_${name}.mp4`, join(mediaDirectory, `${name}.mp4`));
-for (const name of APP_CLIPS) wanted.set(`app_${name}.mp4`, join(mediaDirectory, `${name}.mp4`));
+/*
+ * The cut is built from what is *there*, not from what was hoped for.
+ *
+ * A bed that failed to render is not a reason to write a document pointing at a file that does not exist —
+ * that opens onto black, which is the failure this whole evening has been about. So the pools are filtered
+ * to what the media directory holds, the length follows from that, and the script says what it found.
+ */
+const beds = BEDS.filter((name) => existsSync(join(mediaDirectory, 'beds', `${name}.mp4`)));
+const appClips = APP_CLIPS.filter((name) => existsSync(join(mediaDirectory, 'app', `${name}.mp4`)));
 
-const missing = [];
-for (const [target, source] of wanted) {
-  if (existsSync(source)) copyFileSync(source, join(projectDirectory, 'media', target));
-  else missing.push(basename(source));
-}
-if (missing.length > 0) {
-  console.error(`✗ missing media: ${missing.join(', ')}`);
-  console.error('  the edit names every one of these; a document without them opens onto black');
+if (beds.length === 0 && appClips.length === 0) {
+  console.error(`✗ no promo media under ${mediaDirectory} — expected beds/*.mp4 and app/*.mp4`);
   process.exit(1);
 }
+
+for (const name of beds) {
+  copyFileSync(
+    join(mediaDirectory, 'beds', `${name}.mp4`),
+    join(projectDirectory, 'media', `bed_${name}.mp4`),
+  );
+}
+for (const name of appClips) {
+  copyFileSync(
+    join(mediaDirectory, 'app', `${name}.mp4`),
+    join(projectDirectory, 'media', `app_${name}.mp4`),
+  );
+}
+
+const frames = honestLength(beds.length, appClips.length);
+console.log(`  ${beds.length}/${BEDS.length} beds, ${appClips.length}/${APP_CLIPS.length} recordings`);
+console.log(`  the material supports ${frames / FPS}s without a source appearing more often than it should`);
 
 const transform = { x: 0, y: 0, scale: 1, rotation: 0 };
 
@@ -107,9 +124,9 @@ const document = {
   sequence: {
     id: 'main',
     // The section starts, so the cut can be navigated by what it is saying rather than by timecode.
-    markers: BLOCKS.map((block, section) => ({
-      frame: section * (TOTAL_FRAMES / BLOCKS.length),
-      label: block.title,
+    markers: titles({ frames }).map((title, section) => ({
+      frame: section * SECTION_FRAMES,
+      label: title.text,
     })),
     tracks: [
       {
@@ -117,7 +134,7 @@ const document = {
         kind: 'video',
         name: 'V1 · picture',
         height: 84,
-        clips: shots().map(shotClip),
+        clips: shots({ beds, appClips, frames }).map(shotClip),
       },
       {
         id: 'A1',
@@ -138,7 +155,7 @@ const document = {
         kind: 'text',
         name: 'T1 · titles',
         height: 46,
-        clips: titles().map(titleClip),
+        clips: titles({ frames }).map(titleClip),
       },
     ],
   },
@@ -150,13 +167,13 @@ writeFileSync(join(projectDirectory, 'project.json'), `${JSON.stringify(document
 // narration later is a generation rather than a retyping.
 writeFileSync(
   join(projectDirectory, 'notes', 'script.md'),
-  `# Necro Omni Studio — promó narráció\n\n${BLOCKS.map(
-    (block, index) => `## ${index + 1}. ${block.title}\n\n${block.line}\n`,
-  ).join('\n')}`,
+  `# Necro Omni Studio — promó narráció\n\n${BLOCKS.slice(0, titles({ frames }).length)
+    .map((block, index) => `## ${index + 1}. ${block.title}\n\n${block.line}\n`)
+    .join('\n')}`,
 );
 
-const shotCount = shots().length;
+const cut = shots({ beds, appClips, frames });
 console.log(`✓ ${projectDirectory}`);
 console.log(
-  `  ${shotCount} shots, ${titles().length} titles, ${TOTAL_FRAMES} frames (${TOTAL_FRAMES / FPS}s)`,
+  `  ${cut.length} shots, ${titles({ frames }).length} titles, ${frames} frames (${frames / FPS}s)`,
 );

@@ -79,7 +79,7 @@ try {
   shell = await launchShell({ desktop, dataDir: userData, visible: true });
   const page = shell.browser.contexts()[0].pages().at(-1);
 
-  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, undefined, {
     timeout: 60_000,
   });
   await page.waitForTimeout(12_000);

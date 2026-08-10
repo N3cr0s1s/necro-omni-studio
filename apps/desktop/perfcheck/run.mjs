@@ -217,7 +217,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
 
-  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, undefined, {
     timeout: 30_000,
   });
 

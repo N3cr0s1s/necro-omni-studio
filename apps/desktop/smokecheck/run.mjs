@@ -187,7 +187,7 @@ try {
     if (response.status() >= 400) errors.push(`${response.status()}: ${response.url().slice(0, 160)}`);
   });
 
-  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, undefined, {
     timeout: 30_000,
   });
   pass('the shell opens the project it last had open');
@@ -1436,7 +1436,7 @@ let crashed;
 try {
   crashed = await launch(userData);
   const page = crashed.browser.contexts()[0].pages().at(-1);
-  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, {
+  await page.waitForFunction(() => document.querySelectorAll('[data-clip-id]').length > 0, undefined, {
     timeout: 30_000,
   });
   const discardFirst = page.getByRole('button', { name: 'Discard' });
