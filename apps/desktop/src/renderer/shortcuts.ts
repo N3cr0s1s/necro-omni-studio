@@ -11,16 +11,23 @@ import { shortcutFor } from '@nos/ui';
  * reference sheet is believed, so one that lists a chord nothing listens for is worse than no sheet
  * at all — the user presses it, nothing happens, and they stop trusting the rest of the page.
  *
- * The bindings live in four hooks, grouped here by what the user is doing rather than by which hook
+ * The bindings live in five hooks, grouped here by what the user is doing rather than by which hook
  * owns the listener: nobody looking for "how do I nudge one frame" thinks of it as the transport's.
  *
  * - `use-transport.ts` — play, step, home
  * - `use-timeline-view.ts` — undo, redo, fit
  * - `use-clip-edits.ts` — the clipboard, split, enable, remove
  * - `use-work-range.ts` — marks and markers
+ * - `use-mode-keys.ts` — snap, ripple, loop
  *
- * All four ignore keys while a text field has focus, which is why the sheet says so once rather than
+ * All five ignore keys while a text field has focus, which is why the sheet says so once rather than
  * repeating it on every row.
+ *
+ * The last group is different in kind and says so: those keys belong to a **focused element** rather
+ * than to the window. They were left out for exactly the reason `Alt`-drag was once left out — the
+ * bindings existed, worked, and were reachable only by someone who had read the source. A keyframe's
+ * value could be nudged from the keyboard and an effect reordered without a pointer, and nothing
+ * anywhere said so.
  */
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
@@ -119,6 +126,48 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ['Alt', 'M'], action: 'Remove the marker here' },
       { keys: ['Alt', '←'], action: 'Go to the previous marker' },
       { keys: ['Alt', '→'], action: 'Go to the next marker' },
+    ],
+  },
+  {
+    /*
+     * Three groups rather than one "focused item", because they are three listeners.
+     *
+     * A marker and the variant picker both want `Enter`, and lumping them under one scope would have
+     * hidden that from the collision check — which is the only reason the check is worth running. They
+     * do nothing until the thing they act on has been clicked or tabbed to, which is what the scope
+     * says and why they are not folded into Editing above.
+     */
+    title: 'Keyframe marker',
+    scope: 'keyframe',
+    shortcuts: [
+      { keys: ['←'], action: 'Move one frame', note: 'Shift for ten' },
+      { keys: ['→'], action: 'Move one frame later' },
+      { keys: ['↑'], action: 'Raise the value', note: 'a hundredth of the lane per press' },
+      { keys: ['↓'], action: 'Lower the value' },
+      { keys: ['Enter'], action: 'Cycle the easing', note: 'Space does the same' },
+      { keys: ['Delete'], action: 'Remove the marker', note: 'Backspace too' },
+    ],
+  },
+  {
+    title: 'Effect stack row',
+    scope: 'effect-stack',
+    shortcuts: [
+      {
+        keys: ['Alt', '↑'],
+        action: 'Move the effect up',
+        note: 'the only way to reorder without a pointer, and order is render order',
+      },
+      { keys: ['Alt', '↓'], action: 'Move the effect down' },
+    ],
+  },
+  {
+    title: 'Variant picker',
+    scope: 'variants',
+    shortcuts: [
+      { keys: ['←'], action: 'Compare the previous variant' },
+      { keys: ['→'], action: 'Compare the next variant' },
+      { keys: ['Enter'], action: 'Keep the one being auditioned' },
+      { keys: ['Escape'], action: 'Stop showing the takes', note: 'the files stay in the project' },
     ],
   },
   {

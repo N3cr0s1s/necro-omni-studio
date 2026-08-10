@@ -31,9 +31,29 @@ export interface Shortcut {
   readonly command?: string;
 }
 
+/**
+ * Which listener owns a group's bindings.
+ *
+ * `window` is the default and the common case: the key works wherever the pointer is, suppressed only
+ * in a text field. Anything else names a focused element — a keyframe marker, an effect row, the
+ * variant picker — and is free-form because only the application knows what its focusable things are.
+ *
+ * Modelled rather than left to prose because the collision check depends on it. `←` moves a keyframe,
+ * steps to the previous variant **and** steps the playhead; three bindings on one key and not a clash,
+ * because no two of them are listening at the same moment. Without scopes the check reports three
+ * false alarms, and the only way past a false alarm is to stop believing the check.
+ *
+ * The corollary is what makes it worth having: two groups that *share* a scope really do compete, and
+ * a single lumped `focus` would have hidden that a keyframe marker and the variant picker both wanted
+ * `Enter`. They are separate scopes because they are separate listeners.
+ */
+export type ShortcutScope = string;
+
 export interface ShortcutGroup {
   readonly title: string;
   readonly shortcuts: readonly Shortcut[];
+  /** Defaults to `window`, which is what most groups are. */
+  readonly scope?: ShortcutScope;
 }
 
 /**
@@ -63,17 +83,27 @@ export function allShortcuts(groups: readonly ShortcutGroup[]): readonly Shortcu
  * one of them cannot be performed, and which one wins depends on listener order — so it is a bug that
  * presents as "that shortcut does nothing" long after it was introduced.
  *
- * A chord genuinely shared by two actions in different contexts is not a collision this can see, so a
- * caller that has such a pair should say so in the `note` rather than work around this.
+ * **Within a scope.** A chord shared by a window binding and a focused element's is not a collision:
+ * they are never both listening. This used to advise callers to explain such a pair in the `note`,
+ * which did not help — the check reported it anyway, and the only way past a false alarm is to stop
+ * believing the check.
  */
 export function conflictingShortcuts(
   groups: readonly ShortcutGroup[],
 ): ReadonlyMap<string, readonly string[]> {
   const byChord = new Map<string, string[]>();
-  for (const shortcut of allShortcuts(groups)) {
-    const chord = shortcut.keys.join('+').toLowerCase();
-    byChord.set(chord, [...(byChord.get(chord) ?? []), shortcut.action]);
+  for (const group of groups) {
+    for (const shortcut of group.shortcuts) {
+      // Scoped key, plain chord in the message: the caller is told `Enter`, not `focus:enter`.
+      const chord = shortcut.keys.join('+').toLowerCase();
+      const key = `${group.scope ?? 'window'}\u0000${chord}`;
+      byChord.set(key, [...(byChord.get(key) ?? []), shortcut.action]);
+    }
   }
 
-  return new Map([...byChord].filter(([, actions]) => actions.length > 1));
+  return new Map(
+    [...byChord]
+      .filter(([, actions]) => actions.length > 1)
+      .map(([key, actions]) => [key.split('\u0000')[1]!, actions]),
+  );
 }

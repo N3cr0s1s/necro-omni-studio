@@ -4251,3 +4251,34 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   It declines **every** modifier rather than just Ctrl: `Alt+M` removes a marker and `Shift+S` splits
   every track, so a mode key firing on any chord ending in its letter would quietly steal from them.
+
+- 2026-08-10: Twelve bindings that existed and were undocumented, and the check that had to learn about scope.
+
+  Swept every control naming a key — eleven tooltips — against the handlers. All match now; the one
+  that did not was yesterday's `Snap (N)`. Then swept the other way, for keys that **work** and are in
+  no sheet, which this project treats as not existing at all. Three vocabularies turned up, every one
+  of them the only keyboard route to what it does:
+
+  - A focused **keyframe marker**: arrows move it in time and in value, `Shift` for ten frames, `Enter`
+    or `Space` cycles the easing, `Delete` removes it.
+  - A focused **effect stack row**: `Alt`+arrows reorder, and order is render order.
+  - The **variant picker**: arrows compare, `Enter` keeps, `Escape` stops showing the takes.
+
+  This is the same finding as `Alt`-drag once was — implemented, working, reachable only by someone who
+  had read the source.
+
+  **And the sheet's collision check had to learn what a scope is.** Adding them tripped
+  `binds each chord to exactly one action`, correctly on its own terms: `←` now moves a keyframe, steps
+  a variant *and* steps the playhead. That is three bindings on one key and **not** a clash, because no
+  two of them are listening at the same moment. The old doc advised explaining such a pair in the
+  `note` — which does not help, since the check reports it anyway, and the only way past a false alarm
+  is to stop believing the check.
+
+  So `ShortcutGroup` carries a scope and collisions are compared within one. The **first attempt was
+  wrong in an instructive way**: a single `focus` scope made the check pass, and it passed by hiding a
+  real clash — a keyframe marker and the variant picker both wanted `Enter`. Scopes are per *listener*
+  now, which is what they actually are, and the sheet reads better for it: `Keyframe marker`,
+  `Effect stack row`, `Variant picker` say where you must be for the key to do anything.
+
+  A coarse scope would have bought a green check by making the check blind. That is the failure this
+  whole line of work exists to prevent, arrived at from the other direction.

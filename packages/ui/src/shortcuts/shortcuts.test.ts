@@ -57,3 +57,49 @@ describe('conflicts', () => {
     expect(conflictingShortcuts(groups).size).toBe(0);
   });
 });
+
+/*
+ * Scopes, and why the collision check needs them.
+ *
+ * `←` moves a keyframe, steps to the previous variant and steps the playhead. Three bindings on one
+ * key and not a clash, because no two of them are listening at the same moment — and a check that
+ * reported it as one would be switched off, which is the only way a check ever stops finding things.
+ */
+describe('scoped collisions', () => {
+  const groups = (scopeB: string | undefined) => [
+    { title: 'Window', shortcuts: [{ keys: ['←'], action: 'Step back one frame' }] },
+    {
+      title: 'Something focused',
+      ...(scopeB === undefined ? {} : { scope: scopeB }),
+      shortcuts: [{ keys: ['←'], action: 'Move a keyframe' }],
+    },
+  ];
+
+  it('does not report a chord shared across scopes', () => {
+    expect([...conflictingShortcuts(groups('keyframe')).entries()]).toEqual([]);
+  });
+
+  it('still reports one shared within a scope', () => {
+    // The corollary, and the reason the scopes are per listener rather than one lumped "focus": a
+    // keyframe marker and the variant picker both wanting Enter is a real clash.
+    const clashing = [
+      {
+        title: 'Focused',
+        scope: 'keyframe',
+        shortcuts: [
+          { keys: ['Enter'], action: 'Cycle the easing' },
+          { keys: ['Enter'], action: 'Keep the variant' },
+        ],
+      },
+    ];
+    expect([...conflictingShortcuts(clashing).keys()]).toEqual(['enter']);
+  });
+
+  it('treats a group with no scope as the window, which is what most are', () => {
+    expect([...conflictingShortcuts(groups(undefined)).keys()]).toEqual(['←']);
+  });
+
+  it('names the chord plainly, not the key it was bucketed under', () => {
+    expect([...conflictingShortcuts(groups(undefined)).keys()]).not.toContain('window\u0000←');
+  });
+});
