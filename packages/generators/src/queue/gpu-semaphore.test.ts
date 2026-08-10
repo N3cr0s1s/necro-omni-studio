@@ -233,3 +233,45 @@ describe('withGpu', () => {
     expect(peak).toBe(1);
   });
 });
+
+/*
+ * The snapshot's identity, which is a contract and not an implementation detail.
+ *
+ * `getStatus` built a fresh object per call. Every existing test passed, because they all compare by
+ * value — and the first consumer to treat this as what it is, a subscribable store, could not use it:
+ * React's `useSyncExternalStore` decides whether to re-render by comparing snapshots *by identity*, so
+ * a store that never returns the same object twice reports a change on every render.
+ *
+ * A store that publishes to listeners owes them a stable value between publishes.
+ */
+describe('the status snapshot', () => {
+  it('is the same object until something changes', () => {
+    const semaphore = createGpuSemaphore();
+    expect(semaphore.getStatus()).toBe(semaphore.getStatus());
+  });
+
+  it('is a new object once something has', async () => {
+    const semaphore = createGpuSemaphore();
+    const before = semaphore.getStatus();
+    const lease = await semaphore.acquire('segmentation', 'mask_0');
+
+    expect(semaphore.getStatus()).not.toBe(before);
+    expect(semaphore.getStatus()).toBe(semaphore.getStatus());
+
+    lease.release();
+    expect(semaphore.getStatus()).not.toBe(before);
+  });
+
+  it('hands listeners the very object a later read returns', async () => {
+    // Otherwise a subscriber that stores what it was given disagrees with one that asks — the two
+    // halves of the same store reporting different values for the same moment.
+    const semaphore = createGpuSemaphore();
+    const seen: unknown[] = [];
+    semaphore.subscribe((status) => seen.push(status));
+
+    const lease = await semaphore.acquire('export', 'out.mp4');
+    expect(seen.at(-1)).toBe(semaphore.getStatus());
+    lease.release();
+    expect(seen.at(-1)).toBe(semaphore.getStatus());
+  });
+});

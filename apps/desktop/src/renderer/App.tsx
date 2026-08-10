@@ -174,6 +174,7 @@ import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { describeCacheStats, useDerivedCache } from './derived-cache.js';
+import { gpuStatusNote, useGpuStatus } from './use-gpu-status.js';
 import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
 import { RelinkDialog } from './RelinkDialog.js';
 import { type ClipMenuAction, clipMenuItems } from './clip-menu.js';
@@ -868,6 +869,14 @@ export function App(): ReactNode {
    * able to report and empty it all along with nothing asking.
    */
   const derivedCache = useDerivedCache(sidecar);
+
+  /*
+   * What the one GPU is doing, per §7's semaphore and mockup 1e's "shown, not hidden".
+   *
+   * Serialization has worked since the queue was written; only its state was invisible, so a
+   * generation that was waiting on a mask propagation looked like one that had stopped.
+   */
+  const gpuNote = gpuStatusNote(useGpuStatus(runtime.gpu));
 
   // The browser's footer. The cache size is re-read as proxies land, because a number that only
   // updated on relaunch would be wrong for exactly as long as it mattered.
@@ -2360,6 +2369,9 @@ export function App(): ReactNode {
       </div>
 
       <StatusBar activities={activities} notices={notices}>
+        {/* Before the export timing, because it explains why something is not moving — which is read
+            first when something is not moving. */}
+        {gpuNote !== undefined && <span className="font-mono text-muted-foreground">{gpuNote}</span>}
         {exportRun.timing !== undefined && (
           <span className="font-mono text-muted-foreground">{describeTiming(exportRun.timing)}</span>
         )}

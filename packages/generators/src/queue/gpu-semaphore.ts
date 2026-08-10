@@ -70,7 +70,7 @@ export function createGpuSemaphore(now: () => number = () => Date.now()): GpuSem
   const listeners = new Set<(status: GpuStatus) => void>();
   let holder: { consumer: GpuConsumer; label: string } | undefined;
 
-  function status(): GpuStatus {
+  function build(): GpuStatus {
     return {
       ...(holder !== undefined ? { holder: { ...holder } } : {}),
       waiting: queue.map((request) => ({
@@ -81,8 +81,25 @@ export function createGpuSemaphore(now: () => number = () => Date.now()): GpuSem
     };
   }
 
+  /*
+   * The current snapshot, held rather than rebuilt per call.
+   *
+   * `getStatus` used to construct a fresh object every time, which is fine for a caller that reads it
+   * once and wrong for the thing a subscribe/getSnapshot pair *is*: React's `useSyncExternalStore`
+   * compares snapshots by identity to decide whether to re-render, so a store that never returns the
+   * same object twice reports a change on every render — an infinite loop rather than a stale value.
+   *
+   * A store that publishes to listeners owes them a stable value between publishes. Rebuilt in
+   * `publish` and nowhere else, so the identity changes exactly when the state does.
+   */
+  let snapshot: GpuStatus = build();
+
+  function status(): GpuStatus {
+    return snapshot;
+  }
+
   function publish(): void {
-    const snapshot = status();
+    snapshot = build();
     for (const listener of [...listeners]) listener(snapshot);
   }
 

@@ -4105,3 +4105,40 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   wired at `App.tsx:2163`, and §5.8's variant ceiling is `AppSettings.variantMaximum`. Neither became
   wasted work. **The sweep is worth running before the build, not after** — its cheapest use is not
   finding gaps but refusing to open ones that are already closed.
+
+- 2026-08-10: The GPU semaphore was invisible, and two harnesses were driving yesterday's build.
+
+  Read the mockups in the design project this time rather than working from the spec alone — 1a–1e are
+  the design, 1f–1h are labelled alternatives. One thing in them was not built. **1e says it in as many
+  words: "while the segmentation worker holds the GPU semaphore, generator jobs wait — *shown, not
+  hidden*".** It was hidden. `describeGpuStatus` carries `GPU busy · segmentation` in its own doc
+  comment as the readout "for the title bar", is tested, and was rendered nowhere — so a queued
+  generation sat at *queued* with nothing anywhere saying a mask propagation had the card. The waiting
+  was correct and unexplained, which reads as the application having hung.
+
+  Serialization itself was never broken: one semaphore per window, and the queue, the export and
+  segmentation all go through it. Only the readout was missing. It is silent while the GPU is idle
+  **and** nothing waits — a permanent `GPU idle` says the same thing during every second of editing,
+  and a status area that is always full is one nobody reads when it finally changes.
+
+  **A contract found by using the thing as what it is.** `getStatus()` built a fresh object per call.
+  Every test passed, because they all compare by value — and the first consumer to treat it as a
+  subscribable store could not: `useSyncExternalStore` compares snapshots by *identity*, so a store
+  that never returns the same object twice reports a change on every render. A store that publishes to
+  listeners owes them a stable value between publishes; it is now rebuilt in `publish` and nowhere
+  else, and three tests pin the identity rather than the contents.
+
+  **Then twenty minutes went into the application for a fault in the harness.** `exportcheck` reported
+  the new readout absent. It was there. `exportcheck` and `perfcheck` never built — each carried
+  *"npm run build"* as a line in its header comment, and **a header comment is not a guard**. They were
+  driving whatever `smokecheck` last compiled, which is usually the working tree and is never
+  guaranteed to be.
+
+  `smokecheck` has had this guard for a while, with a comment recording that its absence "hid a whole
+  feature's absence exactly once". So: **the same fix in one harness and not its neighbours, for the
+  third time** — the `ENOTEMPTY` teardown retry did it, the track lock did it, and now this. It lives
+  in `harness/build-first.mjs` now, called by all three, which is the only form of the lesson that
+  survives the next harness being written.
+
+  Worth being exact about the cost: a check that silently drives an old binary does not merely fail to
+  catch things. It **accuses working code**, and the time goes into the wrong place at the worst hour.

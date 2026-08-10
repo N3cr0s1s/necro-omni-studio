@@ -14,7 +14,6 @@
  * asset in the repository and nothing to keep in sync.
  *
  * Usage, from the repository root:
- *   npm --prefix apps/desktop run build
  *   node apps/desktop/exportcheck/run.mjs
  *
  * Exits non-zero if any expectation fails, so it can gate a release.
@@ -36,9 +35,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright';
+import { buildFirst } from '../harness/build-first.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
+
+// Built here rather than asked for in a comment: a header note is not a guard, and this check spent a
+// run reporting a just-written feature as absent because it drove the previous build.
+buildFirst(desktop, { pass: (message) => console.log(`✓ ${message}`), fail });
 
 /**
  * A port nothing else holds.
@@ -169,10 +173,46 @@ try {
   // fixture project is called `exportcheck`, so any button whose label mentions the destination —
   // the overwrite warning's "Save as exportcheck (2).mp4" — matches a loose `Export` too.
   await page.getByRole('button', { name: 'Export', exact: true }).first().click();
+
+  /*
+   * Watch for the GPU readout before starting, not while running.
+   *
+   * §7 serializes three consumers on one semaphore and mockup 1e requires its state to be *shown, not
+   * hidden* — an export holds the card, so this is the one harness that can see the readout at all.
+   * Recorded through an observer rather than polled: this fixture is thirty frames, and a sample taken
+   * after the click can easily land after the lease has already been released. A check that depends on
+   * losing a race is a check that reports the application as broken on a fast machine.
+   */
+  await page.evaluate(() => {
+    const seen = { value: false, bar: [] };
+    const look = () => {
+      if (document.body.textContent?.includes('GPU busy') === true) seen.value = true;
+      const footer = document.querySelector('footer[aria-label="Status"]');
+      const text = footer?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (text !== '' && seen.bar.at(-1) !== text && seen.bar.length < 40) seen.bar.push(text);
+    };
+    look();
+    new MutationObserver(look).observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+    Object.assign(window, { __gpuSeen: seen });
+  });
+
   await page.locator('[role="dialog"]').getByRole('button', { name: 'Export', exact: true }).click();
   await page.waitForFunction(() => document.body.textContent?.includes('complete') === true, {
     timeout: 180_000,
   });
+
+  const gpuShown = await page.evaluate(() => window.__gpuSeen?.value === true);
+  if (gpuShown) console.log('✓ the shell says the GPU is held while an export runs');
+  else {
+    const bar = await page.evaluate(() => window.__gpuSeen?.bar ?? []);
+    fail(
+      `an export held the GPU and the shell said nothing — the status bar read ${JSON.stringify(bar.slice(0, 6))}`,
+    );
+  }
 
   const delivered = join(project, 'renders', 'exportcheck.mp4');
 

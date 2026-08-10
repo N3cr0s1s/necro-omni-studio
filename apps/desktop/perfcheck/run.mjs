@@ -29,7 +29,6 @@
  * tasks at all.
  *
  * Usage, from the repository root:
- *   npm --prefix apps/desktop run build
  *   node apps/desktop/perfcheck/run.mjs
  *
  * Exits non-zero if any expectation fails, so it can gate a release.
@@ -41,9 +40,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright';
+import { buildFirst } from '../harness/build-first.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
+
+// Built here rather than asked for in a comment: a header note is not a guard, and this check spent a
+// run reporting a just-written feature as absent because it drove the previous build.
+buildFirst(desktop, { pass, fail });
 
 /** The spec's target, and the shape of a project that reaches it. */
 const CLIPS = 200;

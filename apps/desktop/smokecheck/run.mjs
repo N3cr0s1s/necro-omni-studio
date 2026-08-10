@@ -28,6 +28,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright';
+import { buildFirst } from '../harness/build-first.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
@@ -164,23 +165,7 @@ const userData = join(work, 'user-data');
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: project }, null, 2));
 
-/*
- * Build before driving anything.
- *
- * `electron .` loads whatever is in `dist/`, so without this the harness happily tests the *last*
- * build and reports a clean run against code that is not the code in the working tree. That is worse
- * than no harness: it is a green result that means nothing, and it hid a whole feature's absence
- * exactly once before this line existed. `NOS_SKIP_BUILD=1` is there for re-running the checks
- * against a build that was just made.
- */
-if (process.env.NOS_SKIP_BUILD !== '1') {
-  const built = spawnSync('npm', ['run', 'build'], { cwd: desktop, stdio: 'inherit' });
-  if (built.status !== 0) {
-    fail('the application does not build — nothing below this line would have meant anything');
-    process.exit(1);
-  }
-  pass('the application builds');
-}
+buildFirst(desktop, { pass, fail });
 
 /** Starts a shell against a given `userData` and connects to it. */
 async function launch(dataDir) {
