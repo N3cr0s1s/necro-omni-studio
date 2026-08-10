@@ -117,6 +117,7 @@ import { cn } from '@nos/ui/lib/utils';
 import {
   type BrowserMenuTarget,
   type MenuBinding,
+  menuBinding,
   type StatusNotice,
   type MarkerEdit,
   type TimelineMenuTarget,
@@ -1615,39 +1616,40 @@ export function App(): ReactNode {
   const transitionDrag = useTransitionDrag({ document, viewport, commit: commitDocument });
 
   const timelineMenu: MenuBinding<TimelineMenuTarget> = useMemo(
-    () => ({
-      items: (target) =>
-        clipMenuItems({
-          document,
-          clip: target.clip,
-          track: target.track,
-          selectionSize: selected.size,
-          canPaste: clipEdits.canPaste,
-          hasAttributes: clipEdits.attributeSummary !== undefined,
-          offline: target.clip !== undefined && availability.isOffline(target.clip),
-          canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
-          // Computed from the same function the action calls, so the row cannot promise a fade the
-          // edit then refuses. Zero means the cut cannot carry one at all, and the row says so by
-          // being offered without a length rather than vanishing.
-          ...(target.clip !== undefined
-            ? (() => {
-                const side = crossfadeSideFor(document, target.clip);
-                if (side === undefined) return {};
-                const room = maxCrossfadeAtCut(document, target.clip, side);
-                const frames = Math.min(defaultCrossfadeFrames(document.frameRate), room);
-                return frames >= 2 ? { crossfadeFrames: frames } : {};
-              })()
-            : {}),
-          ...(target.track !== undefined
-            ? {
-                canMoveTrackUp: canMoveTrack(document, target.track, -1),
-                canMoveTrackDown: canMoveTrack(document, target.track, 1),
-              }
-            : {}),
-          ripple,
-        }),
-      onChoose: (target, action) => runClipMenuAction(target, action as ClipMenuAction),
-    }),
+    () =>
+      menuBinding<TimelineMenuTarget, ClipMenuAction>(
+        (target) =>
+          clipMenuItems({
+            document,
+            clip: target.clip,
+            track: target.track,
+            selectionSize: selected.size,
+            canPaste: clipEdits.canPaste,
+            hasAttributes: clipEdits.attributeSummary !== undefined,
+            offline: target.clip !== undefined && availability.isOffline(target.clip),
+            canLink: linkablePair(document, [...selected] as ClipId[]) !== undefined,
+            // Computed from the same function the action calls, so the row cannot promise a fade the
+            // edit then refuses. Zero means the cut cannot carry one at all, and the row says so by
+            // being offered without a length rather than vanishing.
+            ...(target.clip !== undefined
+              ? (() => {
+                  const side = crossfadeSideFor(document, target.clip);
+                  if (side === undefined) return {};
+                  const room = maxCrossfadeAtCut(document, target.clip, side);
+                  const frames = Math.min(defaultCrossfadeFrames(document.frameRate), room);
+                  return frames >= 2 ? { crossfadeFrames: frames } : {};
+                })()
+              : {}),
+            ...(target.track !== undefined
+              ? {
+                  canMoveTrackUp: canMoveTrack(document, target.track, -1),
+                  canMoveTrackDown: canMoveTrack(document, target.track, 1),
+                }
+              : {}),
+            ripple,
+          }),
+        runClipMenuAction,
+      ),
     [clipEdits, document, ripple, runClipMenuAction, selected],
   );
 
@@ -1779,14 +1781,15 @@ export function App(): ReactNode {
   ]);
 
   const browserMenu: MenuBinding<BrowserMenuTarget> = useMemo(
-    () => ({
-      items: (target) =>
-        browserMenuItems({
-          path: target.path === '' ? undefined : target.path,
-          isDirectory: target.isDirectory,
-        }),
-      onChoose: (target, action) => runBrowserMenuAction(target, action as BrowserMenuAction),
-    }),
+    () =>
+      menuBinding<BrowserMenuTarget, BrowserMenuAction>(
+        (target) =>
+          browserMenuItems({
+            path: target.path === '' ? undefined : target.path,
+            isDirectory: target.isDirectory,
+          }),
+        runBrowserMenuAction,
+      ),
     [runBrowserMenuAction],
   );
 

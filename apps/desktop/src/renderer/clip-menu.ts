@@ -112,7 +112,7 @@ export const CLIP_MENU_ACTIONS = [
 
 export type ClipMenuAction = (typeof CLIP_MENU_ACTIONS)[number];
 
-export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem[] {
+export function clipMenuItems(state: ClipMenuState): readonly ActionMenuItem<ClipMenuAction>[] {
   const target = state.clip;
   const located = target === undefined ? undefined : locateClip(state.document, target);
   const linked = located === undefined ? false : linkedPartner(located.clip) !== undefined;

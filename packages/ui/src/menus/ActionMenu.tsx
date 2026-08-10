@@ -29,8 +29,18 @@ import {
  * flipped the menu by guessing its height from a row count.
  */
 
-export interface ActionMenuItem {
-  readonly id: string;
+/**
+ * `Id` is the caller's own vocabulary of actions, and naming it is what makes a menu safe to extend.
+ *
+ * A menu is two halves that have to agree: the rows that offer an action and the code that runs one.
+ * With `string` on both sides they agree only by inspection — a new row with a mistyped id compiles,
+ * renders, and throws when a user clicks it, which is the one moment nobody is watching a console.
+ * Passing the union through instead makes that a build error at the row, where the mistake is.
+ *
+ * Defaulted to `string`, so a menu whose actions are not worth naming stays a one-line prop.
+ */
+export interface ActionMenuItem<Id extends string = string> {
+  readonly id: Id;
   readonly label: string;
   /** Shown leading. A menu of bare words is slower to scan than one you can recognise by shape. */
   readonly icon?: LucideIcon;
@@ -55,16 +65,37 @@ export interface ActionMenuItem {
  * `T` is the panel's own idea of what was clicked: a path and a flag for the browser, a clip and a
  * track for the timeline. Neither this file nor `ActionMenu` looks inside it.
  */
-export interface MenuBinding<T> {
+export interface MenuBinding<T, Id extends string = string> {
   /** Called per render of the thing that owns the menu. An empty list means no menu on that thing. */
-  readonly items: (target: T) => readonly ActionMenuItem[];
-  readonly onChoose: (target: T, action: string) => void;
+  readonly items: (target: T) => readonly ActionMenuItem<Id>[];
+  readonly onChoose: (target: T, action: Id) => void;
 }
 
-export interface ActionMenuProps {
+/**
+ * Builds a binding from a typed item list and a handler that takes the same union.
+ *
+ * `MenuBinding` is invariant in `Id` — it both produces ids and consumes them — so a binding over a
+ * union is not assignable to one over `string`, and the panels that *hold* a menu are declared over
+ * `string` because they neither know nor care what the actions are. This is the one place that gap is
+ * crossed, and the assertion inside it is sound by construction: `ActionMenu` only ever reports an id
+ * it took from the very list `items` returned, so the value arriving at `onChoose` is always one of
+ * the caller's own.
+ *
+ * Going through here rather than asserting at each call site is the whole point. The assertion was
+ * previously written inline at two of them, which meant the property it depends on was restated —
+ * unexamined — everywhere a menu was wired up, and a third menu would have restated it again.
+ */
+export function menuBinding<T, Id extends string>(
+  items: (target: T) => readonly ActionMenuItem<Id>[],
+  onChoose: (target: T, action: Id) => void,
+): MenuBinding<T> {
+  return { items, onChoose: (target, action) => onChoose(target, action as Id) };
+}
+
+export interface ActionMenuProps<Id extends string = string> {
   /** Built by the caller from whatever was clicked. An empty list means no menu at all. */
-  readonly items: readonly ActionMenuItem[];
-  readonly onChoose: (id: string) => void;
+  readonly items: readonly ActionMenuItem<Id>[];
+  readonly onChoose: (id: Id) => void;
   /**
    * The element the menu belongs to. It *becomes* the trigger rather than being wrapped in one, so
    * adding a menu to a row never changes that row's place in the layout.
@@ -73,7 +104,12 @@ export interface ActionMenuProps {
   readonly label?: string;
 }
 
-export function ActionMenu({ items, onChoose, children, label = 'Actions' }: ActionMenuProps): ReactNode {
+export function ActionMenu<Id extends string = string>({
+  items,
+  onChoose,
+  children,
+  label = 'Actions',
+}: ActionMenuProps<Id>): ReactNode {
   // No items means nothing to show. Returning the child untouched is better than opening an empty
   // popup, which reads as a bug rather than as "there is nothing to do here".
   if (items.length === 0) return children;
@@ -90,12 +126,12 @@ export function ActionMenu({ items, onChoose, children, label = 'Actions' }: Act
   );
 }
 
-function ActionMenuRow({
+function ActionMenuRow<Id extends string>({
   item,
   onChoose,
 }: {
-  readonly item: ActionMenuItem;
-  readonly onChoose: (id: string) => void;
+  readonly item: ActionMenuItem<Id>;
+  readonly onChoose: (id: Id) => void;
 }): ReactNode {
   const Icon = item.icon;
 

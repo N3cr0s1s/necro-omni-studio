@@ -3913,3 +3913,36 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Then run against the mutant, as everything here now is: inverting one condition in `withoutFade`
   drops both sides to 128 and fails exactly the two new checks, and the control still passes — which
   is what says the control is measuring the other thing rather than the same thing twice.
+
+- 2026-08-10: Adding a menu row was unsafe, and the sweep that showed it.
+
+  The reachability sweep came back clean — every operation `@nos/editing` exports has a caller outside
+  it, and every field of `ClipFade`, `shape` and `shapeBezier` included, has a control. So the gap this
+  time was not a missing feature but a **missing guarantee**.
+
+  A context menu is two halves that have to agree: the rows that offer an action, and the code that
+  runs one. `ActionMenuItem.id` was `string`, `MenuBinding.onChoose` took `string`, and the two were
+  joined at the app by `action as ClipMenuAction`. The `switch` downstream ends in a `never` check —
+  which looks like proof and is not, because the exhaustiveness it proves is over a union the value
+  had merely been *asserted* into. **A new row with a mistyped id compiled, rendered, and threw when
+  clicked** — the one moment nobody is watching a console.
+
+  Both lists happened to be in sync. Nothing was keeping them there.
+
+  `ActionMenuItem<Id>`, `MenuBinding<T, Id>` and `ActionMenuProps<Id>` now carry the caller's own
+  vocabulary, defaulted to `string` so a menu not worth naming stays a one-line prop. A mistyped row is
+  a build error *at the row*, with TypeScript suggesting the name that was meant.
+
+  **The cast could not be deleted, only moved — so it moved somewhere it can be argued.** `MenuBinding`
+  both produces ids and consumes them, so it is invariant in `Id`, and the panels that hold a menu are
+  declared over `string` because they neither know nor care what the actions are. Making `Timeline`,
+  `MediaBrowser` and `ClipBody` generic would remove the assertion entirely; it would also make three
+  large components generic to state something none of them uses. `menuBinding()` crosses the gap in one
+  named place where the property it depends on is true by construction: `ActionMenu` only ever reports
+  an id it took from the list `items` returned. Written inline at two call sites, that property was
+  restated unexamined at each, and a third menu would have restated it again.
+
+  The other direction — a declared action no row ever offers — is a dead `switch` case rather than a
+  crash, so it is a test rather than a type: three states between them reach every row, and each
+  member of `CLIP_MENU_ACTIONS` must appear. Both guards were run against mutants. A mistyped id fails
+  to compile; a row deleted from the list fails `offers link somewhere`.

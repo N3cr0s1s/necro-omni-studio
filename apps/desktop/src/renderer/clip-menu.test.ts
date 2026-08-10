@@ -16,7 +16,7 @@ import {
   trackId,
 } from '@nos/core';
 import type { ActionMenuItem } from '@nos/ui';
-import { type ClipMenuState, clipMenuItems } from './clip-menu.js';
+import { CLIP_MENU_ACTIONS, type ClipMenuState, clipMenuItems } from './clip-menu.js';
 
 /**
  * What a right-click offers.
@@ -366,5 +366,40 @@ describe('crossfading at a cut', () => {
 
   it('carries its shortcut, since this is a keyboard gesture first', () => {
     expect(item(clipMenuItems(state({ crossfadeFrames: 15 })), 'crossfade-at-cut')?.shortcut).toBeDefined();
+  });
+});
+
+/*
+ * Both halves of the menu's vocabulary, checked against each other.
+ *
+ * The list of actions and the rows that offer them are separate declarations, and the switch that
+ * runs a choice is a third. Two of the three are now held together by the type — a row whose id is
+ * not in the union no longer compiles, and the switch is exhaustive over the union — but nothing
+ * says a *declared* action is ever actually offered.
+ *
+ * That direction matters less at runtime and more when reading: a member no row emits is a case in
+ * the switch that can never run, and the next person to touch it has to work out from scratch
+ * whether it is dead or whether the row that offered it was lost in an edit.
+ */
+describe('the vocabulary', () => {
+  const everyOffered = new Set(
+    [
+      // A right-click on a clip, on a lane, and on empty timeline: between them these reach every
+      // row the menu has, including the ones that appear only when the caller supplies a reason.
+      state({ offline: true, crossfadeFrames: 12, canLink: true, canMoveTrackUp: true }),
+      state({ track: trackId('v1') }),
+      state({ clip: undefined, selectionSize: 0 }),
+    ].flatMap((each) => clipMenuItems(each).map((entry) => entry.id)),
+  );
+
+  it.each(CLIP_MENU_ACTIONS)('offers %s somewhere', (action) => {
+    expect(everyOffered.has(action)).toBe(true);
+  });
+
+  it('offers nothing it has not declared', () => {
+    // The compiler already refuses an unknown id at the row. Asserted anyway, because the type is
+    // only as good as the annotation on `clipMenuItems`, and an annotation is one edit from gone.
+    const declared = new Set<string>(CLIP_MENU_ACTIONS);
+    expect([...everyOffered].filter((id) => !declared.has(id))).toEqual([]);
   });
 });

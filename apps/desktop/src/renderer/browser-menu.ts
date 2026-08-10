@@ -55,7 +55,7 @@ export function isProjectDocument(path: string): boolean {
   return path === 'project.json';
 }
 
-export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuItem[] {
+export function browserMenuItems(state: BrowserMenuState): readonly ActionMenuItem<BrowserMenuAction>[] {
   const path = state.path;
   const protectedEntry = path !== undefined && (isReservedFolder(path) || isProjectDocument(path));
   const reason = protectedEntry ? ' — the project needs this one' : '';
