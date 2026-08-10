@@ -14,6 +14,7 @@ import {
   type FileOperation,
   type FolderEntry,
   type ProjectInfo,
+  type RecentProject,
   type RecoverySnapshot,
   type SidecarInfo,
   isOpenableLink,
@@ -222,24 +223,87 @@ function libraryRoot(): string {
   return join(app.getPath('userData'), 'generators');
 }
 
+/**
+ * How many projects are worth remembering.
+ *
+ * Enough to cover the handful someone moves between in a week, and short enough that the list is read
+ * rather than scanned. A history that fills the empty state is a second file picker.
+ */
+const RECENT_LIMIT = 8;
+
 async function rememberProject(root: string): Promise<void> {
   try {
     await mkdir(app.getPath('userData'), { recursive: true });
-    await writeFile(sessionFile(), `${JSON.stringify({ lastProject: root }, null, 2)}\n`, 'utf8');
+    // Most recent first, and each path once — reopening the same project must not push the others out.
+    const recent = [root, ...(await recentPaths()).filter((path) => path !== root)].slice(0, RECENT_LIMIT);
+    await writeFile(
+      sessionFile(),
+      `${JSON.stringify({ lastProject: root, recentProjects: recent }, null, 2)}\n`,
+      'utf8',
+    );
   } catch {
     // Failing to remember is not a reason to fail to open. The next launch shows the picker, which is
     // the behaviour this replaces rather than something worse.
   }
 }
 
-async function lastProject(): Promise<string | undefined> {
+async function readSession(): Promise<{ lastProject?: unknown; recentProjects?: unknown }> {
   try {
-    const parsed: unknown = JSON.parse(await readFile(sessionFile(), 'utf8'));
-    const last = (parsed as { lastProject?: unknown }).lastProject;
-    return typeof last === 'string' && last !== '' ? last : undefined;
+    return JSON.parse(await readFile(sessionFile(), 'utf8')) as Record<string, unknown>;
   } catch {
     // No file on a first run, and a corrupt one is the same answer: there is nothing to reopen.
-    return undefined;
+    return {};
+  }
+}
+
+async function lastProject(): Promise<string | undefined> {
+  const last = (await readSession()).lastProject;
+  return typeof last === 'string' && last !== '' ? last : undefined;
+}
+
+/**
+ * The remembered paths, newest first.
+ *
+ * Falls back to `lastProject` for a session file written before the list existed, so the first launch
+ * after an update still offers the project the user was working on rather than an empty history.
+ */
+async function recentPaths(): Promise<readonly string[]> {
+  const session = await readSession();
+  const stored = Array.isArray(session.recentProjects)
+    ? session.recentProjects.filter((path): path is string => typeof path === 'string' && path !== '')
+    : [];
+  if (stored.length > 0) return stored;
+
+  const last = session.lastProject;
+  return typeof last === 'string' && last !== '' ? [last] : [];
+}
+
+/**
+ * The recent projects, each with whether it is still there.
+ *
+ * A folder that has been moved or deleted is **reported rather than dropped**, for the reason the
+ * generator registry shows an unrunnable generator greyed with its reason: a project vanishing from
+ * the list silently is indistinguishable from the application having forgotten it, and the user is
+ * left wondering which. Shown and unavailable is an answer; absent is a mystery.
+ */
+async function recentProjects(): Promise<readonly RecentProject[]> {
+  const paths = await recentPaths();
+  return Promise.all(
+    paths.map(async (root) => ({
+      root,
+      // The folder's own name. A project has no title outside its document, and reading every
+      // `project.json` to build a menu would make the empty state wait on eight files.
+      name: basename(root),
+      available: await readable(root),
+    })),
+  );
+}
+
+async function readable(root: string): Promise<boolean> {
+  try {
+    return (await stat(root)).isDirectory();
+  } catch {
+    return false;
   }
 }
 
@@ -492,6 +556,8 @@ function registerHandlers(): void {
     }
     return results;
   });
+
+  ipcMain.handle(IPC.recentProjects, async (): Promise<readonly RecentProject[]> => recentProjects());
 
   ipcMain.handle(IPC.watcherStatus, (): WatcherStatus => session.watcherState);
 

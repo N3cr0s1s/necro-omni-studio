@@ -86,7 +86,6 @@ import {
   ExternalLinkIcon,
   FileCode2Icon,
   FileJsonIcon,
-  FolderOpenIcon,
   FolderPlusIcon,
   PauseIcon,
   PlayIcon,
@@ -138,6 +137,7 @@ import type { MeterReading } from '@nos/audio';
 import type { Transport } from './use-transport.js';
 import { useKeyframeLanes } from './KeyframeLanes.js';
 import { ManifestAuthoring } from './ManifestAuthoring.js';
+import { RecentProjects } from './RecentProjects.js';
 import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
@@ -521,6 +521,14 @@ export function App(): ReactNode {
     commit: commitDocument,
   });
 
+  /*
+   * Bumped whenever a project opens, so the reopen list picks up the new order.
+   *
+   * A counter rather than the project: the list needs to know that *something* changed, and taking the
+   * project would make it re-read on every field of it that happens to differ.
+   */
+  const [openedCount, setOpenedCount] = useState(0);
+
   const openProject = useCallback(async () => {
     const api = bridge();
     if (api === undefined) {
@@ -531,7 +539,28 @@ export function App(): ReactNode {
     const opened = await api.openProject();
     if (opened === undefined) return;
     await adopt(opened, api);
+    setOpenedCount((count) => count + 1);
   }, [adopt]);
+
+  /**
+   * Opens a remembered project by path, skipping the picker.
+   *
+   * A folder that has gone since simply does not open, and the list already says which those are — so
+   * there is nothing to report here that the row has not said. Reporting it anyway would be an error
+   * dialog about a decision the user made weeks ago.
+   */
+  const openProjectAt = useCallback(
+    async (root: string) => {
+      const api = bridge();
+      if (api === undefined) return;
+
+      const opened = await api.loadProject(root);
+      if (opened === undefined) return;
+      await adopt(opened, api);
+      setOpenedCount((count) => count + 1);
+    },
+    [adopt],
+  );
 
   /*
    * The shell needs to know whether there is unsaved work *before* the user tries to close, because a
@@ -2082,6 +2111,8 @@ export function App(): ReactNode {
           sidecar={sidecar}
           dirty={store.getSnapshot().dirty}
           onOpen={() => void openProject()}
+          onOpenPath={(root) => void openProjectAt(root)}
+          openedCount={openedCount}
           onSave={() => void save()}
           onExport={openExport}
           autosaveStatus={autosave.status}
@@ -2513,6 +2544,8 @@ function TitleBar({
   sidecar,
   dirty,
   onOpen,
+  onOpenPath,
+  openedCount,
   onSave,
   onExport,
   autosaveStatus,
@@ -2526,6 +2559,9 @@ function TitleBar({
   readonly sidecar: SidecarInfo | undefined;
   readonly dirty: boolean;
   readonly onOpen: () => void;
+  readonly onOpenPath: (root: string) => void;
+  /** Changes when a project opens, so the reopen list re-reads. */
+  readonly openedCount: number;
   readonly onSave: () => void;
   readonly onExport: () => void;
   readonly autosaveStatus: AutosaveStatus;
@@ -2579,10 +2615,7 @@ function TitleBar({
         <ClapperboardIcon />
         Story
       </Button>
-      <Button variant="ghost" size="sm" onClick={onOpen}>
-        <FolderOpenIcon />
-        Open project
-      </Button>
+      <RecentProjects onOpen={onOpen} onOpenPath={onOpenPath} revision={openedCount} />
       <Button variant="ghost" size="sm" onClick={onSave} disabled={project === undefined}>
         <SaveIcon />
         Save

@@ -55,6 +55,7 @@ export const IPC = {
   sidecarInfo: 'sidecar:info',
   /** The project this application last had open, remembered across launches. */
   lastProject: 'project:last',
+  recentProjects: 'project:recent',
   /** The generator library shared by every project, per §5.6. */
   listLibrary: 'library:list',
   readLibraryFile: 'library:read',
@@ -127,6 +128,20 @@ export interface ProjectInfo {
   readonly name: string;
   /** Contents of `project.json`, or `undefined` for a folder that has none yet. */
   readonly document?: string;
+}
+
+/**
+ * One entry in the reopen list.
+ *
+ * `available` rather than filtering: a project whose folder has been moved is reported and shown
+ * unavailable, because a row vanishing on its own is indistinguishable from the application having
+ * forgotten it.
+ */
+export interface RecentProject {
+  readonly root: string;
+  /** The folder's name, which is what a project is called. */
+  readonly name: string;
+  readonly available: boolean;
 }
 
 /**
@@ -331,6 +346,8 @@ export interface DesktopBridge {
    * which is the same answer the picker gives, in one place.
    */
   lastProject(): Promise<string | undefined>;
+  /** Projects opened before, newest first, each saying whether its folder is still there. */
+  recentProjects(): Promise<readonly RecentProject[]>;
   revealInFolder(path: string): Promise<void>;
   /**
    * Opens a link in the user's browser.

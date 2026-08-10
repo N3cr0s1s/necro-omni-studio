@@ -79,6 +79,7 @@ const bridge: DesktopBridge = {
   onSidecarStatus: (listener) => subscribe(IPC_EVENTS.sidecarStatus, listener),
   sidecarInfo: () => ipcRenderer.invoke(IPC.sidecarInfo),
   lastProject: () => ipcRenderer.invoke(IPC.lastProject),
+  recentProjects: () => ipcRenderer.invoke(IPC.recentProjects),
   revealInFolder: (path) => ipcRenderer.invoke(IPC.revealInFolder, path),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   backendFetch: (path, init) => ipcRenderer.invoke(IPC.backendFetch, path, init),

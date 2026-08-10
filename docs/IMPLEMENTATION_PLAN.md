@@ -4345,3 +4345,38 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   One round trip for a folder of two hundred takes instead of two hundred, and the client's whole
   concurrency-limiting apparatus — three workers pulling from a queue — deleted along with the
   problem it was managing.
+
+- 2026-08-10: Getting back into a project without the folder picker.
+
+  §4 makes a project a folder, and the consequence was that the **only** way in was the system dialog:
+  every launch, and every switch between two projects being cut in the same week, began by navigating
+  to a place the shell already knew. It has remembered the last project since it learned to reopen —
+  it simply never remembered more than one, and never showed what it had.
+
+  `session.json` now carries a list, newest first, capped at eight: enough for the handful someone
+  moves between in a week, short enough that the list is read rather than scanned. A history that fills
+  the screen is a second file picker.
+
+  **A moved folder is shown and refused, not dropped.** The same rule the generator registry follows
+  for an unrunnable generator: a row vanishing on its own is indistinguishable from the application
+  having forgotten it, and the user is left wondering which. Shown and unavailable is an answer;
+  absent is a mystery.
+
+  A split control, not a menu that swallows the picker. `Open project` stays where it was and does what
+  it did — a user who has learned where it is should not have to learn again, and the smoke check finds
+  it by that name. The history is a quieter affordance beside it, **hidden entirely** when there is
+  none: a disabled control says "there is something here you cannot have", and on a first run there
+  genuinely is not.
+
+  The list falls back to `lastProject` when the session file predates it, so the first launch after an
+  update offers the project someone was working on rather than an empty history.
+
+  Both halves are checked in the running window, because both are facts about the assembled
+  application: that opening a project *wrote it down*, and that the control which reads it *appeared*.
+
+- 2026-08-10: A gap in `verify` worth naming.
+
+  `ruff` is not part of `npm run verify`, and it had drifted: eleven findings on `main` before any of
+  today's work, all line length. Two are fixed and none were added. The Python suite (156 tests) does
+  run and passes — it is the linter alone that nothing calls, which is exactly how a check stops being
+  a check.

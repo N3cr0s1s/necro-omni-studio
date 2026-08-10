@@ -1337,6 +1337,26 @@ try {
     );
   }
 
+  /*
+   * Getting back into a project without the folder picker.
+   *
+   * A project is a folder, so the only route in was the system dialog — every launch, and every switch
+   * between two projects being cut the same week. Checked here because both halves are facts about the
+   * assembled application: what the shell wrote down, and whether the control that reads it appeared.
+   */
+  const session = JSON.parse(readFileSync(join(userData, 'session.json'), 'utf8'));
+  if (Array.isArray(session.recentProjects) && session.recentProjects.includes(project)) {
+    pass('opening a project records it among the recent ones');
+  } else {
+    fail(`the opened project was not remembered — session.json holds ${JSON.stringify(session)}`);
+  }
+
+  if ((await page.getByRole('button', { name: 'Recent projects' }).count()) > 0) {
+    pass('and the shell offers them beside the picker');
+  } else {
+    fail('nothing offers the remembered projects, so the picker is still the only way in');
+  }
+
   if (errors.length > 0) {
     fail(`the renderer raised ${errors.length}: ${errors[0]}`);
     for (const extra of errors.slice(1, 4)) console.error(`  also: ${extra}`);
