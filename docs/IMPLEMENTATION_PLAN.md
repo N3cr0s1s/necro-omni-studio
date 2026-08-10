@@ -4080,3 +4080,28 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Not automatic either. A cache that emptied itself on a size threshold would re-derive every proxy in
   the project at the least convenient moment, which is precisely when someone is working with large
   sources. It is offered, priced, and left to the person.
+
+- 2026-08-10: What the empty-folder bug actually did to a new project, and the invariant behind it.
+
+  Running the fix against its mutant in the real window produced the sentence the bug had been showing
+  all along: a project folder created seconds earlier, with all seven of §4's directories in it,
+  reported **"this project folder is empty"**. A new project is nothing *but* empty directories, and
+  the tree was built from files alone — so the state the bug hurt most was the very first one a user
+  meets.
+
+  The sharper form of it: `applyChanges` has always produced directory entries, because the watcher
+  reports `isDirectory` and it is carried straight through. Only the initial walk dropped them. **The
+  browser therefore disagreed with itself about the same folder depending on how it had heard of it** —
+  "New folder" made one appear, and reopening the project made it vanish while it sat on disk the whole
+  time. That reads as the folder having failed to be created. The invariant is now a test: the walk and
+  the watcher must produce the same entries for a folder with nothing in it.
+
+  Both directions are guarded end to end. A brand-new empty project is its own shell in `smokecheck`,
+  because no harness had ever produced one — every other check writes a session file pointing at a
+  fixture that already has content, which is exactly the shape that hid this for the life of the
+  project.
+
+  Checked before building, twice, and both times the answer was "it already exists": track resizing is
+  wired at `App.tsx:2163`, and §5.8's variant ceiling is `AppSettings.variantMaximum`. Neither became
+  wasted work. **The sweep is worth running before the build, not after** — its cheapest use is not
+  finding gaps but refusing to open ones that are already closed.

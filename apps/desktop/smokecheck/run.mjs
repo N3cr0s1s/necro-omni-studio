@@ -1492,6 +1492,50 @@ try {
 }
 
 /*
+ * A brand-new project: an empty folder and nothing else.
+ *
+ * §4 says a project *is* a folder, and a folder with no `project.json` is a new project rather than an
+ * error — so this is the shape of every project on its first open, and no harness had ever produced
+ * one. What a user needs to see is the layout: `media/` to import into, `renders/` for what comes out.
+ *
+ * It is checked here because it is where the browser was wrong. The tree was built from files alone,
+ * so directories were known only by being the parent of something — and a **new project is nothing but
+ * empty directories**. It showed a bare `project.json` and no way to tell that the rest even existed.
+ */
+const freshProject = join(work, 'brand-new');
+mkdirSync(freshProject, { recursive: true });
+
+const freshProjectData = join(work, 'brand-new-user-data');
+mkdirSync(freshProjectData, { recursive: true });
+writeFileSync(join(freshProjectData, 'session.json'), JSON.stringify({ lastProject: freshProject }, null, 2));
+
+let brandNew;
+try {
+  brandNew = await launch(freshProjectData);
+  const page = brandNew.browser.contexts()[0].pages().at(-1);
+  await page.waitForTimeout(9000);
+
+  const tree = await page
+    .getByRole('tree', { name: 'Project folder' })
+    .innerText()
+    .catch(() => '');
+  const shown = tree.replace(/\s+/g, ' ');
+
+  // `media/` and `renders/` specifically: one is where footage goes in and the other is where the film
+  // comes out, and between them they are what makes an empty project legible as a project.
+  if (/\bmedia\b/.test(shown) && /\brenders\b/.test(shown)) {
+    pass('a brand-new project shows the folders it was created with');
+  } else {
+    fail(
+      `a new project's folders are invisible in the browser — the tree reads ${JSON.stringify(shown.slice(0, 200))}`,
+    );
+  }
+} finally {
+  await brandNew?.browser.close().catch(() => undefined);
+  if (brandNew !== undefined) stop(brandNew.child);
+}
+
+/*
  * A project whose `project.json` will not load.
  *
  * The most destructive path this shell has had. It used to make the project current *before* reading

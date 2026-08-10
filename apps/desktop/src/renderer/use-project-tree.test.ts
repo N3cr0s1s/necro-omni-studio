@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildTree } from '@nos/media';
+import { assetPath } from '@nos/core';
+import { applyChanges, buildTree } from '@nos/media';
 import type { DesktopBridge } from '../main/ipc-contract.js';
 import { walkProject } from './use-project-tree.js';
 
@@ -82,5 +83,28 @@ describe('walking the project folder', () => {
     );
     expect(truncated).toBe(true);
     expect(entries).toHaveLength(2);
+  });
+});
+
+/*
+ * The two ways an entry list is built, which have to agree.
+ *
+ * `applyChanges` has always produced directory entries — the watcher reports `isDirectory` and it is
+ * carried straight through. The initial walk did not. So the browser disagreed with itself about the
+ * same folder depending on how it had heard of it: **"New folder" made one appear, and reopening the
+ * project made it vanish** while it sat on disk the whole time. That reads as the folder having failed
+ * to be created.
+ */
+describe('the walk and the watcher', () => {
+  it('agree about a folder with nothing in it', async () => {
+    const walked = await walkProject(
+      bridgeOver({ '': [{ name: 'notes', kind: 'folder' as const }], notes: [] }),
+    );
+    const watched = applyChanges([], [{ kind: 'added', path: assetPath('notes'), isDirectory: true }]);
+
+    expect(walked.entries.map((entry) => entry.path)).toEqual(watched.map((entry) => entry.path));
+    expect(buildTree([...walked.entries]).children.map((child) => child.name)).toEqual(
+      buildTree([...watched]).children.map((child) => child.name),
+    );
   });
 });
