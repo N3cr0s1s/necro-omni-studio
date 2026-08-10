@@ -3946,3 +3946,33 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   crash, so it is a test rather than a type: three states between them reach every row, and each
   member of `CLIP_MENU_ACTIONS` must appear. Both guards were run against mutants. A mistyped id fails
   to compile; a row deleted from the list fails `offers link somewhere`.
+
+- 2026-08-10: The lock protected three of six panels, and the sweep that found it had gone quiet.
+
+  Counting how many times a function name is defined — the sweep this project's real bugs keep coming
+  from — turned up `replaceClip` in three files and `withFade` in two. The interesting one was not on
+  that list at all: **`replaceEffects` in `ClipInspector.tsx`**, a fourth hand-rolled copy of "write
+  this clip back", found by widening the sweep to `tracks.map(` rather than to a name.
+
+  It asked nobody about the **track lock**. So a track locked precisely to stop it changing could
+  still have effects added, reordered and deleted, and their parameters edited, from the panel three
+  feet to the right of the timeline that refused every gesture. Two more turned up beside it:
+
+  - `KeyframeLanes.replaceParam` — the *effect* parameter lanes, three hundred lines below `mapClip`
+    in the same file, missed when `mapClip` was fixed. On a locked track the opacity markers refused
+    and the Film Grain markers beside them, drawn by the same component and looking identical, did not.
+  - `AudioMix.replaceAudioChannel` — a locked audio track's clips could still be re-levelled and
+    re-panned.
+
+  **Why the earlier sweep stopped seeing them.** It looked for `updateClip` having *no caller*. Fixing
+  two of the copies gave it callers, and the signal went quiet while three copies remained. **A check
+  keyed on "is this used at all" cannot count how many places still do not use it** — which is the
+  argument for the widened form, and for a test per panel rather than one for "the lanes".
+
+  All three now go through `updateClip`, which is the single place that knows what a lock means. The
+  inspector *says so* through `onReject`: silently discarding the edit would leave the user pressing a
+  control that visibly does nothing, which reads as a broken button rather than as a locked track. The
+  lanes stay silent deliberately — a marker that snaps back is its own feedback, and the document is
+  what draws it.
+
+  Each fix was run against its mutant: restore the hand-rolled version and the new test fails.

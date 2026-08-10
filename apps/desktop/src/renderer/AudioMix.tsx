@@ -12,10 +12,11 @@ import {
   keyframeId,
   locateClip,
   staticNumber,
+  ok,
 } from '@nos/core';
 import { GAIN_FLOOR_DB, dbToGain, formatDb, gainToDb } from '@nos/audio';
 import { AudioLinesIcon, DiamondIcon, RotateCcwIcon, SlidersHorizontalIcon } from 'lucide-react';
-import { type TrackMixChange, setTrackMix } from '@nos/editing';
+import { type TrackMixChange, setTrackMix, updateClip } from '@nos/editing';
 import { Button } from '@nos/ui/components/ui/button';
 import { Label } from '@nos/ui/components/ui/label';
 import { Slider } from '@nos/ui/components/ui/slider';
@@ -349,6 +350,10 @@ function toggleAnimation(current: AnimatableNumber, valueNow: number, idPrefix: 
  *
  * Exported because the keyframe lanes write the same two channels, and two copies of "find the clip,
  * replace one field" would drift the moment either grew a rule.
+ *
+ * Through `updateClip`, which is what makes the **track lock** apply here. Rebuilt by hand, this
+ * honoured no lock at all — so a locked audio track's clips could still be re-levelled and re-panned
+ * from the mix section, which is precisely the change a lock is put on to prevent.
  */
 export function replaceAudioChannel(
   document: TimelineDocument,
@@ -356,23 +361,6 @@ export function replaceAudioChannel(
   channel: 'gain' | 'pan',
   value: AnimatableNumber,
 ): TimelineDocument {
-  const located = locateClip(document, clip.id);
-  if (located === undefined) return document;
-
-  return {
-    ...document,
-    sequence: {
-      ...document.sequence,
-      tracks: document.sequence.tracks.map((track) =>
-        track.id !== located.track.id
-          ? track
-          : ({
-              ...track,
-              clips: (track.clips as readonly Clip[]).map((entry) =>
-                entry.id === clip.id ? { ...entry, [channel]: value } : entry,
-              ),
-            } as (typeof document.sequence.tracks)[number]),
-      ),
-    },
-  };
+  const updated = updateClip(document, clip.id, (entry) => ok({ ...entry, [channel]: value } as Clip));
+  return updated.ok ? updated.value : document;
 }

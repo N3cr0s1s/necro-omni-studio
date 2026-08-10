@@ -561,6 +561,52 @@ describe('writing a clip back', () => {
     expect(untouched.length).toBe(before.sequence.tracks.length - 1);
   });
 
+  /*
+   * The same lock, on an *effect* parameter lane.
+   *
+   * The transform lanes went through the shared helper and the effect lanes did not — a second copy
+   * three hundred lines below the first, in the same file, missed when the first was fixed. So on a
+   * locked track the opacity markers refused and the Film Grain markers beside them, drawn by the same
+   * component and looking identical, did not.
+   *
+   * Fixing two copies of three is what silences the sweep that finds them, which is the argument for
+   * a test per lane kind rather than one for "the lanes".
+   */
+  it('refuses on a locked track for an effect parameter too', async () => {
+    const withEffect = documentWith(
+      videoClip({
+        effects: [
+          {
+            id: effectInstanceId('fx1'),
+            effect: effectId('film_grain'),
+            enabled: true,
+            params: { amount: curve(0, 1) },
+          },
+        ],
+      }),
+    );
+    const locked = {
+      ...withEffect,
+      sequence: {
+        ...withEffect.sequence,
+        tracks: withEffect.sequence.tracks.map((track) =>
+          track.kind === 'video' ? { ...track, locked: true } : track,
+        ) as TimelineDocument['sequence']['tracks'],
+      },
+    };
+
+    const { onChange, result } = mountLanes(locked);
+    await userEvent.click(screen.getByLabelText(/amount keyframe at frame 0/));
+    result().edit({ value: 0.25 });
+
+    const paramOf = (doc: TimelineDocument) =>
+      (locateClip(doc, clipId('c1'))!.clip as VideoClip).effects[0]?.params['amount'];
+    const after = onChange.mock.calls.at(-1)?.[1] as TimelineDocument | undefined;
+
+    // Unchanged, whether the panel committed the same document back or committed nothing at all.
+    expect(after === undefined ? paramOf(locked) : paramOf(after)).toEqual(paramOf(locked));
+  });
+
   it('refuses on a locked track, which the timeline already enforced everywhere else', async () => {
     const locked = {
       ...animated(),

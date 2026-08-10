@@ -18,14 +18,17 @@ import {
   keyframeId,
   keyframeCount,
   locateClip,
+  ok,
 } from '@nos/core';
 import { type EffectRegistry, defaultParams, describeEntryProblem } from '@nos/effects';
 import {
   addTransition,
+  describeEditError,
   describeTransitionError,
   removeTransition,
   setTransitionParams,
   transitionsOf,
+  updateClip,
 } from '@nos/editing';
 import type { MaskId } from '@nos/core';
 import type { ClipSection } from './panel-tabs.js';
@@ -201,7 +204,9 @@ export function ClipInspector({
   });
 
   const apply = (label: string, next: readonly EffectInstance[]): void => {
-    onChange(label, replaceEffects(document, located.clip, next));
+    const result = updateClip(document, located.clip.id, (clip) => ok({ ...clip, effects: next } as Clip));
+    if (result.ok) onChange(label, result.value);
+    else onReject?.(describeEditError(result.error));
   };
 
   // Absent means every section, which is what a caller with one column wants and what this was before
@@ -855,21 +860,4 @@ function reorder(stack: readonly EffectInstance[], from: number, to: number): re
   if (moved === undefined) return stack;
   next.splice(to, 0, moved);
   return next;
-}
-
-function replaceEffects(
-  document: TimelineDocument,
-  clip: Clip,
-  effects: readonly EffectInstance[],
-): TimelineDocument {
-  return {
-    ...document,
-    sequence: {
-      ...document.sequence,
-      tracks: document.sequence.tracks.map((track) => ({
-        ...track,
-        clips: track.clips.map((entry) => (entry.id === clip.id ? { ...entry, effects } : entry)),
-      })) as TimelineDocument['sequence']['tracks'],
-    },
-  };
 }

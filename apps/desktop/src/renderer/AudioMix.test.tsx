@@ -358,3 +358,42 @@ describe('the track under the clip', () => {
     expect(trackRegion().queryByRole('button', { name: /animate/i })).toBeNull();
   });
 });
+
+/*
+ * A locked track, from the mix.
+ *
+ * `replaceAudioChannel` rebuilt the tracks itself and asked nobody, so a locked audio track's clips
+ * could still be re-levelled and re-panned from this panel — which is exactly the change a lock is put
+ * on to prevent. It goes through `updateClip` now, and the fader returns to where the document says it
+ * is, because it is drawn from the document.
+ */
+describe('a locked track', () => {
+  const locked = (): TimelineDocument => {
+    const base = documentWith(audioClip());
+    return {
+      ...base,
+      sequence: {
+        ...base.sequence,
+        tracks: base.sequence.tracks.map((track) =>
+          track.kind === 'audio' ? ({ ...track, locked: true } as AudioTrack) : track,
+        ),
+      },
+    };
+  };
+
+  it('refuses a change to the clip gain', () => {
+    const onChange = vi.fn();
+    const clip = audioClip();
+    render(<AudioMix document={locked()} clip={clip} playhead={0} onChange={onChange} />);
+
+    fireEvent.change(slider('Gain in decibels'), { target: { value: '-6' } });
+
+    // Committed with the document unchanged rather than not committed at all: the panel does not know
+    // the lock, and the operation refusing is what makes the value snap back.
+    const next = onChange.mock.calls.at(-1)?.[1] as TimelineDocument | undefined;
+    if (next !== undefined) {
+      const located = locateClip(next, clipId('a1'));
+      expect(located?.clip.kind === 'audio' ? located.clip.gain : undefined).toEqual(clip.gain);
+    }
+  });
+});

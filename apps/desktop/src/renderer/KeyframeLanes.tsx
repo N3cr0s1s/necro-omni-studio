@@ -501,6 +501,15 @@ function readParam(
   return value !== undefined && isAnimated(value as AnimatableNumber) ? (value as AnimatedParam) : undefined;
 }
 
+/**
+ * Writes one effect parameter back.
+ *
+ * Through `mapClip`, and therefore through `updateClip`, for the same two reasons that function was
+ * changed — and this one was missed at the time, three hundred lines below it in the same file. It
+ * rebuilt **every** track, so a keyframe drag on one clip invalidated the memo on all of them; and it
+ * **asked nobody about the lock**, so the effect lanes of a locked track stayed fully editable while
+ * the transform lanes beside them, drawn by the same component, did not.
+ */
 function replaceParam(
   document: TimelineDocument,
   clipId: string,
@@ -508,25 +517,12 @@ function replaceParam(
   paramKey: string,
   value: AnimatableNumber,
 ): TimelineDocument {
-  return {
-    ...document,
-    sequence: {
-      ...document.sequence,
-      tracks: document.sequence.tracks.map((track) => ({
-        ...track,
-        clips: track.clips.map((entry) =>
-          entry.id !== clipId
-            ? entry
-            : {
-                ...entry,
-                effects: entry.effects.map((instance) =>
-                  instance.id !== instanceId
-                    ? instance
-                    : { ...instance, params: { ...instance.params, [paramKey]: value } },
-                ),
-              },
-        ),
-      })) as TimelineDocument['sequence']['tracks'],
-    },
-  };
+  return mapClip(document, clipId, (clip) => ({
+    ...clip,
+    effects: clip.effects.map((instance) =>
+      instance.id !== instanceId
+        ? instance
+        : { ...instance, params: { ...instance.params, [paramKey]: value } },
+    ),
+  }));
 }

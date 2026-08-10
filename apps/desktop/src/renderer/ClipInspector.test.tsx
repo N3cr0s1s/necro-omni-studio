@@ -75,6 +75,18 @@ function documentWith(clips: readonly VideoClip[]): TimelineDocument {
 }
 
 const single = () => documentWith([videoClip('c1', 0, 100)]);
+const onALockedTrack = (): TimelineDocument => {
+  const base = single();
+  return {
+    ...base,
+    sequence: {
+      ...base.sequence,
+      tracks: base.sequence.tracks.map((track) =>
+        track.id === TRACKS.video ? ({ ...track, locked: true } as Track) : track,
+      ),
+    },
+  };
+};
 const adjacent = () => documentWith([videoClip('c1', 0, 100), videoClip('c2', 100, 200)]);
 
 interface Harness {
@@ -600,5 +612,39 @@ describe('effects that could not be loaded', () => {
     // One bad file must not take the others with it — the same rule the loader follows.
     await openPicker([{ file: 'broken.json', detail: 'is not valid JSON' }]);
     expect(screen.getByRole('button', { name: 'Film Grain' })).toBeTruthy();
+  });
+});
+
+/*
+ * A locked track, from this panel.
+ *
+ * The lock is enforced by `@nos/editing`, so every gesture on the timeline respects it. This panel
+ * wrote the effect stack back by rebuilding the tracks itself, which asked nobody — so a track a user
+ * had locked precisely to stop it changing could still have effects added, reordered and deleted, and
+ * its parameters keyframed, from three feet to the right.
+ *
+ * Refused *and said out loud*. Silently discarding the edit would leave the user pressing a control
+ * that visibly does nothing, which reads as a broken button rather than as a locked track.
+ */
+describe('a locked track', () => {
+  it('refuses an effect added from the registry', async () => {
+    const user = userEvent.setup();
+    const { onChange, onReject } = renderInspector(onALockedTrack());
+
+    await user.click(screen.getByRole('button', { name: /Add effect from registry/ }));
+    await user.click(screen.getByRole('button', { name: 'Film Grain' }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onReject).toHaveBeenCalled();
+  });
+
+  it('says which track is locked, rather than that something went wrong', async () => {
+    const user = userEvent.setup();
+    const { onReject } = renderInspector(onALockedTrack());
+
+    await user.click(screen.getByRole('button', { name: /Add effect from registry/ }));
+    await user.click(screen.getByRole('button', { name: 'Film Grain' }));
+
+    expect(String(onReject.mock.calls.at(-1)?.[0])).toMatch(/lock/i);
   });
 });
