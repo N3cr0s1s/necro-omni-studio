@@ -46,6 +46,7 @@ export const IPC = {
   appSettings: 'app:settings',
   updateAppSettings: 'app:update-settings',
   chooseFilesToImport: 'project:choose-import',
+  chooseExportPath: 'project:choose-export-path',
   copyIntoProject: 'project:copy-in',
   /** Lists a project subtree. */
   listFolder: 'project:list',
@@ -284,6 +285,17 @@ export interface DesktopBridge {
   /** Applies a change and answers with what was actually stored, validated. */
   updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   chooseFilesToImport(): Promise<readonly string[]>;
+  /**
+   * Asks where to write an export, and answers with a **project-relative** path.
+   *
+   * Project-relative because that is what `ExportSettings.outputPath` is and what the sidecar resolves;
+   * a destination outside the project is not expressible and is refused rather than silently rewritten.
+   * `undefined` means the dialog was cancelled and the **empty string** means a destination outside the
+   * project. Two different things, kept apart: a cancel needs nothing said, and a choice outside the
+   * folder needs a reason. A picker that quietly moved the file somewhere else would be worse than one
+   * that says no.
+   */
+  chooseExportPath(suggested: string): Promise<string | undefined>;
   /**
    * Copies chosen files to project-relative destinations, returning the ones that landed.
    *

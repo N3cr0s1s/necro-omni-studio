@@ -2109,6 +2109,24 @@ export function App(): ReactNode {
           onCancel={exportRun.cancel}
           onClose={() => setExportSettings(undefined)}
           onReveal={() => void bridge()?.revealInFolder(exportSettings.outputPath)}
+          /*
+           * The Browse button has been on this dialog since it was written, with nothing behind it: it
+           * rendered, and clicking it did nothing. A choice outside the project is refused rather than
+           * rewritten, and said out loud — `outputPath` is project-relative and the sidecar resolves it
+           * that way, so a destination elsewhere is not expressible.
+           */
+          onBrowse={() => {
+            void bridge()
+              ?.chooseExportPath(exportSettings.outputPath)
+              .then((chosen) => {
+                if (chosen === undefined) return;
+                if (chosen === '') {
+                  setError('an export has to land inside the project folder');
+                  return;
+                }
+                setExportSettings({ ...exportSettings, outputPath: chosen });
+              });
+          }}
           // The folder as the watcher last reported it. The encoder overwrites, and the dialog offers
           // the same destination every time it opens, so without this a second export silently
           // replaced the first.

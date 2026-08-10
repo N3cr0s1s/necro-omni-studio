@@ -4657,3 +4657,29 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   two chances to disagree about the same document. The mark defers to `offline`: a missing file outruns its
   source by the clip's whole length, so the missing file is the fault and the length is a consequence, and
   two marks for one problem is one too many.
+
+- 2026-08-10: A button with nothing behind it.
+
+  The export dialog has carried a **Browse** button beside its destination field since it was written. It
+  renders unconditionally, and `onBrowse` was never supplied by anyone — so it appeared, and clicking it
+  did nothing at all. Not a missing feature but a *lying* one: every other gap of this shape at least had
+  the decency to be invisible.
+
+  Found by the sweep that finally works on props. Earlier attempts keyed on `name:` and missed JSX
+  entirely; searching for `prop={` against the interfaces in `packages/ui` is what surfaced it, and the
+  same pass confirmed `existingFiles`, `onTrackResize` and `snapIndicator` *are* wired — which is the
+  half of a sweep that stops it becoming a source of invented work.
+
+  `chooseExportPath` is the channel behind it: a save dialog defaulted into `renders/`, answered as a
+  **project-relative** path because that is what `ExportSettings.outputPath` is and what the sidecar
+  resolves.
+
+  **Its two failures are kept apart, and that took a correction.** `toProjectRelative` answers `undefined`
+  both for a path outside the project and — via a cancelled dialog — for no path at all, so the first
+  version could not tell a decision from a mistake. The channel now returns `undefined` for a cancel and
+  the empty string for a destination outside the folder: a cancel needs nothing said, and a choice
+  outside needs a reason. Refused rather than rewritten, because a picker that quietly moves the file
+  somewhere else is worse than one that says no.
+
+  And the trim guard from the previous entry is now verified in the running window: `smokecheck` drags the
+  audio clip's out-point well past the end of its one-second tone and asserts the clip did not grow.

@@ -85,3 +85,28 @@ describe('pushed events', () => {
     }
   });
 });
+
+/*
+ * The export destination picker.
+ *
+ * The Browse button beside the destination field has been on the export dialog since it was written, and
+ * nothing ever supplied its callback — so it rendered, and clicking it did nothing at all. Adding the
+ * channel is most of the fix; the part worth a test is that its two failure outcomes stay distinct.
+ */
+describe('choosing where an export lands', () => {
+  it('has a channel, so the button has something behind it', () => {
+    expect(IPC.chooseExportPath).toBeDefined();
+  });
+
+  it('names its channel under the project namespace, like its neighbours', () => {
+    // The names are a surface too: a channel that does not say which subsystem it belongs to is one
+    // nobody finds when they are looking for it.
+    expect(IPC.chooseExportPath.startsWith('project:')).toBe(true);
+  });
+
+  it('is unique among the channels', () => {
+    // Two handlers on one name is a silent overwrite, and which one wins depends on registration order.
+    const names = Object.values(IPC);
+    expect(new Set(names).size).toBe(names.length);
+  });
+});

@@ -492,6 +492,39 @@ function registerHandlers(): void {
     return chosen.canceled ? [] : chosen.filePaths;
   });
 
+  ipcMain.handle(IPC.chooseExportPath, async (_event, suggested: unknown): Promise<string | undefined> => {
+    /*
+     * A save dialog, answered as a project-relative path.
+     *
+     * The Browse button beside the destination field has existed since the export dialog was written and
+     * nothing ever supplied its callback — so it rendered, and clicking it did nothing at all. A visible
+     * control that silently does nothing is the failure this codebase treats as a defect everywhere else.
+     *
+     * Defaulted into `renders/`, which is where §4 puts deliveries, and constrained to the project:
+     * `ExportSettings.outputPath` is project-relative and the sidecar resolves it that way, so a
+     * destination elsewhere is not expressible. Refused rather than rewritten — a picker that quietly
+     * moves the file somewhere else is worse than one that says no.
+     */
+    const root = requireProject();
+    const fallback = typeof suggested === 'string' && suggested !== '' ? suggested : 'renders/export.mp4';
+
+    const chosen = await dialog.showSaveDialog({
+      title: 'Export to',
+      defaultPath: join(root, fallback),
+      filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (chosen.canceled || chosen.filePath === undefined || chosen.filePath === '') return undefined;
+
+    /*
+     * Two outcomes, kept apart. `undefined` is "the user cancelled" and the empty string is "they chose
+     * somewhere outside the project" — which needs saying, where a cancel needs nothing said at all.
+     * `toProjectRelative` answers `undefined` for both, so collapsing them here would leave the caller
+     * unable to tell a decision from a mistake.
+     */
+    return toProjectRelative(root, chosen.filePath) ?? '';
+  });
+
   ipcMain.handle(IPC.copyIntoProject, async (_event, placements: unknown): Promise<readonly string[]> => {
     if (!Array.isArray(placements)) return [];
     const root = requireProject();
