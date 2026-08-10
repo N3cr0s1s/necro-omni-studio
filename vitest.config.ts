@@ -21,6 +21,8 @@ export default defineConfig({
       'apps/desktop/harness/**/*.test.mjs',
       // The README capture's fixture, which is a hand-written document and can therefore be wrong.
       'apps/desktop/capture/**/*.test.mjs',
+      // The promo's edit decision list, whose arithmetic has to come out to exactly three minutes.
+      'apps/desktop/promo/**/*.test.mjs',
     ],
     environment: 'node',
     // A DOM gap rather than a preference: Base UI constructs a `PointerEvent`, which jsdom does not
