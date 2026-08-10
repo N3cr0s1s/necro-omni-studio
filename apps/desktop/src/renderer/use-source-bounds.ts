@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { type Clip, type TimelineDocument, clipSource, frameRateToNumber, trackClips } from '@nos/core';
+import {
+  type Clip,
+  type FrameRate,
+  type TimelineDocument,
+  clipSource,
+  frameRateToNumber,
+  trackClips,
+} from '@nos/core';
 import type { SourceBoundsResolver } from '@nos/editing';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 
@@ -89,14 +96,7 @@ export function useSourceBounds(
         boundsFor: (clip: Clip) => {
           const source = clipSource(clip);
           if (source === undefined) return undefined;
-
-          const probed = lengths.get(String(source.asset));
-          if (probed === undefined) return undefined;
-          if (probed.frames !== undefined) return { totalFrames: probed.frames };
-          if (probed.seconds === undefined) return undefined;
-
-          // Converted at the clip's own source rate, which is the rate its `sourceIn` counts in.
-          return { totalFrames: Math.floor(probed.seconds * frameRateToNumber(source.sourceRate)) };
+          return boundsFrom(lengths.get(String(source.asset)), source.sourceRate);
         },
       },
     }),
@@ -157,4 +157,27 @@ async function probe(sidecar: SidecarInfo, asset: string): Promise<ProbedLength 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A probed length expressed in the frames a *clip* counts in.
+ *
+ * Separated from the hook because it is the part with a decision in it, and the decision is easy to get
+ * wrong: the rate belongs to the clip, not to the file. `source.sourceRate` is what that clip's
+ * `sourceIn` and every trim delta on it are measured in, so a hard-coded 30 would be right for a web
+ * project and wrong for every other rate in the same document.
+ *
+ * A video's own frame count wins outright — it is the exact number, with no conversion to be wrong
+ * about. Seconds are the fallback, and they are floored: reporting one frame more than exists would
+ * un-guard the last frame, which is precisely the frame a trim runs into.
+ */
+export function boundsFrom(probed: ProbedLength | undefined, rate: FrameRate): SourceBounds | undefined {
+  if (probed === undefined) return undefined;
+  if (probed.frames !== undefined) return { totalFrames: probed.frames };
+  if (probed.seconds === undefined) return undefined;
+
+  const frames = Math.floor(probed.seconds * frameRateToNumber(rate));
+  // A source shorter than one frame bounds nothing usable, and answering zero would refuse every edit
+  // on it rather than leaving it unchecked as an unprobed source is.
+  return frames > 0 ? { totalFrames: frames } : undefined;
 }
