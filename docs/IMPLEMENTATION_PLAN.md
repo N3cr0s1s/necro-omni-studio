@@ -4223,3 +4223,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   Unlike `planValidUntil` and the duplicate `snapPoints`, using it would be **correct** — it is merely
   redundant with `runs.filter(...)`. So the comment was the defect, not the field. A doc that names a
   UI which does not exist reads as a feature someone forgot to finish.
+
+- 2026-08-10: Looped playback, and a key the application had been promising.
+
+  The mockups put a `loop` beside the in and out points, and the reason is the ordinary way a cut gets
+  judged: you watch the same four seconds twenty times. Playback **stopped** at the out point, so each
+  viewing cost a press of play *and* dragging the playhead back — two gestures between every look at
+  the thing being decided. The transport's own comment already called the range "the spec's bound on
+  looped playback" while nothing looped.
+
+  `loopFrom` is a **frame, not a flag**. What "the loop" means — the in point when a range is marked,
+  the top of the sequence otherwise — is the shell's decision, and this hook does not know a work range
+  exists. `playbackStart` sits beside `playbackEnd` so the two cannot come to disagree about what the
+  marks mean, which would give the loop one range and the export another.
+
+  The subtlety is the **anchor**. Playback advances from a wall-clock start time, so moving the frame
+  back without resetting it leaves elapsed time counting from the original start — the very next tick
+  is still past the end and the loop collapses into a stutter at the out point. The audio has to be
+  re-seeked for the same reason, or the picture returns to the in point while the sound plays on. Both
+  are one mutant apart: deleting the re-anchor fails exactly the test written for it.
+
+  **And a control was advertising a chord nothing listened for.** The Snap toggle's tooltip said
+  `Snap (N)`; no handler took `n`, and the shortcut sheet — whose own doc says every entry was read off
+  the handler that implements it — did not list snap at all. So the sheet was honest and the *toggle*
+  was not. Snap, ripple and loop now have `N`, `R` and `L` through one `useModeKeys`, which takes a map
+  so a fourth mode is an entry there and a row in the sheet.
+
+  It declines **every** modifier rather than just Ctrl: `Alt+M` removes a marker and `Shift+S` splits
+  every track, so a mode key firing on any chord ending in its letter would quietly steal from them.

@@ -35,6 +35,7 @@ import {
   LogInIcon,
   LogOutIcon,
   MagnetIcon,
+  RepeatIcon,
   MaximizeIcon,
   ScissorsIcon,
   Trash2Icon,
@@ -154,6 +155,9 @@ export interface TimelineProps {
   readonly onToggleSnap?: () => void;
   readonly onToggleScrubAudio?: () => void;
   readonly onToggleRipple?: () => void;
+  /** True while playback returns to the in point instead of stopping at the out. */
+  readonly loopEnabled?: boolean;
+  readonly onToggleLoop?: () => void;
   readonly onZoom?: (framesPerPixel: number, anchorPx: number) => void;
   /** Scrolls the view by a pixel delta. Without it the timeline cannot be moved at all. */
   readonly onScrollBy?: (deltaPx: number) => void;
@@ -535,6 +539,7 @@ function TimelineToolbar({
   snapEnabled,
   scrubAudioEnabled,
   rippleEnabled,
+  loopEnabled,
   viewport,
   totalFrames,
   clipCount: clips,
@@ -542,6 +547,7 @@ function TimelineToolbar({
   onToggleSnap,
   onToggleScrubAudio,
   onToggleRipple,
+  onToggleLoop,
   onFit,
   onAddTrack,
   onMarkIn,
@@ -571,6 +577,22 @@ function TimelineToolbar({
       >
         <ArrowRightLeftIcon />
         Ripple
+      </Toggle>
+      {/* Beside the other two modes rather than on the transport, because it is one: it changes what
+          reaching the out point does, and it belongs with the switches that change what a gesture
+          means. The title says which way round it is, for the same reason Ripple's does. */}
+      <Toggle
+        size="sm"
+        pressed={loopEnabled === true}
+        onPressedChange={() => onToggleLoop?.()}
+        title={
+          loopEnabled === true
+            ? 'Loop on: playback returns to the in point instead of stopping'
+            : 'Loop off: playback stops at the out point'
+        }
+      >
+        <RepeatIcon />
+        Loop
       </Toggle>
 
       {onToggleScrubAudio !== undefined && (

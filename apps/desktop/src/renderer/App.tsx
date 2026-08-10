@@ -142,7 +142,8 @@ import { createTextClip } from './TextInspector.js';
 import { Preview } from './Preview.js';
 import { usePlaybackAudio } from './use-audio-engine.js';
 import { useTransport, useTransportKeys } from './use-transport.js';
-import { playbackEnd, useWorkRange } from './use-work-range.js';
+import { useModeKeys } from './use-mode-keys.js';
+import { playbackEnd, playbackStart, useWorkRange } from './use-work-range.js';
 import { describeAutosave, useAutosave } from './use-autosave.js';
 import { WorkspaceTabs } from '@nos/ui';
 import { EffectAuthoring } from './EffectAuthoring.js';
@@ -291,8 +292,17 @@ export function App(): ReactNode {
   useEffect(() => store.subscribe(() => setDocument(store.getDocument())), [store]);
 
   const audio = usePlaybackAudio({ document, sidecar });
+  /*
+   * Looping, per the mockups' `loop` beside the in and out points.
+   *
+   * A session preference rather than a document field: whether you are currently watching a cut over
+   * and over is not a property of the cut, and it would be a strange thing to find in a `project.json`
+   * a colleague opened.
+   */
+  const [looping, setLooping] = useState(false);
   const transport = useTransport({
     frameRate: document.frameRate,
+    ...(looping ? { loopFrom: playbackStart(document) } : {}),
     // Playback stops at the out point when one is marked. The range is the spec's bound on looped
     // playback as well as the export default, and honouring it in only one of the two would make the
     // preview disagree with the file it is supposed to be previewing.
@@ -300,6 +310,23 @@ export function App(): ReactNode {
     audio,
   });
   useTransportKeys(transport);
+
+  /*
+   * The mode switches, which had no keys — and Snap's tooltip claimed one.
+   *
+   * Declared as a map so a fourth mode is an entry here and a row in the sheet, rather than another
+   * listener competing for the window.
+   */
+  useModeKeys(
+    useMemo(
+      () => ({
+        n: () => setSnap((value) => !value),
+        r: () => setRipple((value) => !value),
+        l: () => setLooping((value) => !value),
+      }),
+      [],
+    ),
+  );
   const playhead = transport.frame;
 
   // Autosave writes a recovery *sibling*, never `project.json`: an autosave that overwrote the file
@@ -2331,6 +2358,8 @@ export function App(): ReactNode {
                       : {})}
                     onToggleSnap={() => setSnap((value) => !value)}
                     onToggleRipple={() => setRipple((value) => !value)}
+                    loopEnabled={looping}
+                    onToggleLoop={() => setLooping((value) => !value)}
                     onZoom={view.zoomAt}
                     onScrollBy={view.scrollBy}
                     onFit={view.fit}

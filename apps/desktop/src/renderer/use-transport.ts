@@ -29,6 +29,19 @@ export interface TransportOptions {
   readonly frameRate: FrameRate;
   /** One past the last frame. Playback stops here rather than running into empty timeline. */
   readonly endFrame: number;
+  /**
+   * Where playback returns to when it reaches the end, or absent to stop there.
+   *
+   * The mockups put a `loop` beside the in and out points, and the reason is the ordinary way a cut
+   * gets judged: you watch the same four seconds twenty times. Stopping at the out point meant
+   * pressing play again for each of them, and the playhead had to be dragged back first — two
+   * gestures between every viewing of the thing being decided.
+   *
+   * A frame rather than a flag, so the caller decides what "the loop" means. It is the in point when
+   * a range is marked and the start of the sequence otherwise, and that choice belongs to the shell:
+   * this hook does not know that a work range exists.
+   */
+  readonly loopFrom?: FrameIndex | undefined;
   readonly initialFrame?: FrameIndex;
   /**
    * Audio playback, when there is any.
@@ -49,15 +62,15 @@ export interface TransportOptions {
 }
 
 export function useTransport(options: TransportOptions): Transport {
-  const { frameRate, endFrame, audio } = options;
+  const { frameRate, endFrame, loopFrom, audio } = options;
   const [frame, setFrame] = useState<FrameIndex>(options.initialFrame ?? frameIndex(0));
   const [playing, setPlaying] = useState(false);
 
   // The wall-clock anchor for the current run: the moment playback started and the frame it started
   // from. Both reset on every seek, or a seek mid-playback would be undone on the next tick.
   const anchor = useRef({ startedAtMs: 0, startFrame: 0 });
-  const latest = useRef({ endFrame, frameRate, audio });
-  latest.current = { endFrame, frameRate, audio };
+  const latest = useRef({ endFrame, frameRate, loopFrom, audio });
+  latest.current = { endFrame, frameRate, loopFrom, audio };
 
   const seek = useCallback((next: FrameIndex) => {
     const clamped = frameIndex(Math.max(0, Math.min(latest.current.endFrame, next)));
@@ -70,9 +83,11 @@ export function useTransport(options: TransportOptions): Transport {
     setPlaying((current) => {
       if (current) return current;
       setFrame((at) => {
-        // Restart from the beginning when parked at the end, which is what a play button is expected to
-        // do rather than sitting there doing nothing.
-        const from = at >= latest.current.endFrame ? frameIndex(0) : at;
+        // Restart when parked at the end, which is what a play button is expected to do rather than
+        // sitting there doing nothing. Back to the loop point when there is one: with a range marked,
+        // "play again" means the range, not the top of the sequence.
+        const restart = latest.current.loopFrom ?? frameIndex(0);
+        const from = at >= latest.current.endFrame ? restart : at;
         anchor.current = { startedAtMs: performance.now(), startFrame: from };
         latest.current.audio?.play(from);
         return from;
@@ -112,6 +127,23 @@ export function useTransport(options: TransportOptions): Transport {
       const next = fromAudio ?? startFrame + advanced;
 
       if (next >= latest.current.endFrame) {
+        const back = latest.current.loopFrom;
+        if (back !== undefined && back < latest.current.endFrame) {
+          /*
+           * Round the loop rather than stop.
+           *
+           * The anchor is reset to *now* and the audio re-seeked, exactly as `seek` does — a loop that
+           * only moved the frame would leave the wall clock counting from the original start, so the
+           * second pass would jump straight back to the end. And the audio engine has to be told, or
+           * the picture returns to the in point while the sound plays on past the out.
+           */
+          anchor.current = { startedAtMs: performance.now(), startFrame: back };
+          latest.current.audio?.seek(back);
+          setFrame(back);
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+
         latest.current.audio?.stop();
         setFrame(frameIndex(latest.current.endFrame));
         setPlaying(false);

@@ -60,6 +60,19 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     ],
   },
   {
+    /*
+     * The switches, which had no keys at all — while the Snap toggle's own tooltip said `Snap (N)`.
+     * A control naming a chord nothing listens for is the exact failure this sheet exists to prevent,
+     * committed by the application itself.
+     */
+    title: 'Modes',
+    shortcuts: [
+      { keys: ['N'], action: 'Snap on or off', note: 'edges, markers, the playhead' },
+      { keys: ['R'], action: 'Ripple on or off', note: 'what Delete does' },
+      { keys: ['L'], action: 'Loop on or off', note: 'return to the in point instead of stopping' },
+    ],
+  },
+  {
     title: 'Clipboard',
     shortcuts: [
       { keys: ['Ctrl', 'X'], action: 'Cut', command: 'cut' },

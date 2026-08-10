@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { type FrameIndex, type TimelineDocument, formatFrames } from '@nos/core';
+import { type FrameIndex, type TimelineDocument, formatFrames, frameIndex } from '@nos/core';
 import {
   addMarker,
   clearWorkRange,
@@ -208,4 +208,15 @@ function useRangeKeys(actions: WorkRangeActions): void {
 export function playbackEnd(document: TimelineDocument, sequenceEnd: number): number {
   const range = document.sequence.workRange;
   return range === undefined ? sequenceEnd : range.start + range.duration;
+}
+
+/**
+ * Where looped playback returns to: the in point, or the top of the sequence.
+ *
+ * The pair of `playbackEnd`, and written beside it so the two cannot come to disagree about what the
+ * marked range means. A loop that ran from frame zero to the out point would be a different thing from
+ * the range the same marks give the export.
+ */
+export function playbackStart(document: TimelineDocument): FrameIndex {
+  return document.sequence.workRange?.start ?? frameIndex(0);
 }
