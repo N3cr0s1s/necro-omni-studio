@@ -1298,6 +1298,56 @@ try {
   }
 
   /*
+   * A trim stopped at the end of its media.
+   *
+   * `SourceBoundsResolver` has existed since M2 and every trim consults it — and nothing in the shell
+   * ever supplied one, so `options.sources` was undefined at every call site and the refusal written for
+   * dragging an edge past the end of a shot could never fire. The fix is one prop and a probe cache,
+   * which is exactly the kind of wiring that typechecks and does nothing.
+   *
+   * Driven on the audio clip because its source is a one-second tone: its 30-frame clip already uses the
+   * whole file, so *any* rightward drag on its out-point is asking for material that does not exist.
+   */
+  const boundedClip = page.locator('[data-track-id="A1"] [data-clip-id]').first();
+  const boundedBox = await boundedClip.boundingBox();
+  if (boundedBox === null) {
+    fail('there is no audio clip to trim against its source');
+  } else {
+    const before = JSON.parse(readFileSync(join(project, 'project.json'), 'utf8'));
+    const lengthOf = (document) => {
+      const track = document.sequence.tracks.find((entry) => entry.id === 'A1');
+      return track?.clips?.[0]?.span?.duration ?? 0;
+    };
+
+    // Grabbed on the out-point handle and dragged well past the end of the file.
+    await page.mouse.move(boundedBox.x + boundedBox.width - 3, boundedBox.y + boundedBox.height / 2);
+    await page.mouse.down();
+    for (let step = 1; step <= 10; step += 1) {
+      await page.mouse.move(
+        boundedBox.x + boundedBox.width - 3 + step * 30,
+        boundedBox.y + boundedBox.height / 2,
+      );
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(1200);
+
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(1500);
+    const after = JSON.parse(readFileSync(join(project, 'project.json'), 'utf8'));
+
+    if (lengthOf(after) > lengthOf(before)) {
+      fail(
+        `a trim ran past the end of its source — the clip grew from ${lengthOf(before)} to ${lengthOf(after)} frames`,
+      );
+    } else {
+      pass('a trim stops at the end of its media');
+    }
+
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(600);
+  }
+
+  /*
    * The markers, as a list rather than a ruler you scroll.
    *
    * A tab is one entry in `PANEL_TABS`, which is the point of that list being data — so what is worth
