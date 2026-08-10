@@ -41,12 +41,16 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright';
 import { buildFirst } from '../harness/build-first.mjs';
+import { armCleanup, track } from '../harness/children.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
 
 // Built here rather than asked for in a comment: a header note is not a guard, and this check spent a
 // run reporting a just-written feature as absent because it drove the previous build.
+// Armed before anything is spawned: a crash between the two is the window that gets left behind.
+armCleanup();
+
 buildFirst(desktop, { pass, fail });
 
 /** The spec's target, and the shape of a project that reaches it. */
@@ -184,16 +188,18 @@ const port = await freePort();
  * and never need a mapped window; three per run, several runs an hour, is a window stealing focus
  * from whoever is using the machine. `NOS_WATCH=1` shows them for when a run has to be seen.
  */
-const electron = spawn(
-  'npx',
-  ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${userData}`],
-  // `ignore`, not `pipe`: an unread pipe keeps this process alive after the child is killed.
-  {
-    cwd: desktop,
-    stdio: 'ignore',
-    detached: true,
-    env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
-  },
+const electron = track(
+  spawn(
+    'npx',
+    ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${userData}`],
+    // `ignore`, not `pipe`: an unread pipe keeps this process alive after the child is killed.
+    {
+      cwd: desktop,
+      stdio: 'ignore',
+      detached: true,
+      env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
+    },
+  ),
 );
 
 let browser;

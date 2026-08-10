@@ -176,6 +176,7 @@ import { useStoredLayout } from './use-layout.js';
 import type { MaskChoice } from './ClipInspector.js';
 import { describeProxies, useProxies } from './use-proxies.js';
 import { describeCacheStats, useDerivedCache } from './derived-cache.js';
+import { useMediaDurations } from './use-media-durations.js';
 import { gpuStatusNote, useGpuStatus } from './use-gpu-status.js';
 import { retryRequest } from './retry-generation.js';
 import { allFiles, availabilityOf, describeAvailability, filesOnDisk, planImport } from '@nos/media';
@@ -898,6 +899,14 @@ export function App(): ReactNode {
    * able to report and empty it all along with nothing asking.
    */
   const derivedCache = useDerivedCache(sidecar);
+
+  /*
+   * How long each piece of media is, for the browser's rows.
+   *
+   * Probed after the tree rather than with it: a duration lives in the container, so folding it into
+   * the walk would make opening a project wait on an ffprobe of every asset in it.
+   */
+  const mediaDurations = useMediaDurations(tree.tree, sidecar);
 
   /*
    * What the one GPU is doing, per §7's semaphore and mockup 1e's "shown, not hidden".
@@ -2099,6 +2108,7 @@ export function App(): ReactNode {
           >
             <MediaBrowser
               tree={tree.tree ?? buildTree([])}
+              durations={mediaDurations}
               projectOpen={project !== undefined}
               onImportFiles={(dropped) => {
                 /*

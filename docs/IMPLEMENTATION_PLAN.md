@@ -4282,3 +4282,54 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
 
   A coarse scope would have bought a green check by making the check blind. That is the failure this
   whole line of work exists to prevent, arrived at from the other direction.
+
+- 2026-08-10: A hundred and twenty windows, closed by hand.
+
+  Reported by the user, and it was mine. Every harness spawns Electron detached so it can be stopped as
+  a group, and that worked **whenever the harness reached its own cleanup**. A `finally` does not run
+  when the process is killed from outside, when `browser.close()` hangs on a window that has stopped
+  answering, or when a run is cut short — and each of those leaves a real application window on screen.
+  They accumulate silently, because the next run starts a fresh one and reports green.
+
+  Three orphaned shells were still up when I looked, from runs twenty-eight, fifteen and four minutes
+  old.
+
+  Cleanup is attached to the **process** now, not to a block: `exit`, the signals, `uncaughtException`
+  and `unhandledRejection`, all going through one `harness/children.mjs`. Two things it got wrong first,
+  both found by testing it rather than reasoning about it:
+
+  - **Untracking on `exit` left three of twelve alive.** What is spawned is `npx electron`, a node
+    wrapper that starts the real shell and leaves; its exit says nothing about whether a window is on
+    screen. The pid is kept for the life of the run now — killing a group that has already gone raises
+    `ESRCH`, which is the outcome wanted anyway.
+  - **The stale-run reaper matched my own shell.** Keying on `--user-data-dir=/tmp/nos-*check-` alone
+    matches the command that *launches* a harness, anything grepping its output, and anything a person
+    types about it. It would have killed the terminal that started it. The process must now *be*
+    Electron or its wrapper, and that decision is the one piece of harness code with unit tests —
+    because it is the only code here that terminates processes it did not start.
+
+  `SIGKILL` on the harness itself is the case nothing in-process can cover, so the next run reaps
+  anything older than half an hour. That turns an unbounded pile into at most one stale window. The age
+  test is what makes it safe to do unconditionally: without it, a run started while another was going
+  would kill the other one's shell and report its death as the application's.
+
+  Verified by interrupting a real run: twelve shells up, `SIGTERM`, zero left.
+
+- 2026-08-10: How long each piece of media is, in the browser.
+
+  The mockups show `interview_a.mp4  04:12` and the rows carried a name and nothing else, so choosing
+  between four takes meant opening each one in turn — the detail panel has known the duration all
+  along, one file at a time.
+
+  A duration is not on the filesystem. It is inside the container, and reading it means asking the
+  sidecar to probe, so folding it into the directory walk would make **opening a project** wait on an
+  ffprobe of every asset in it. It arrives after the tree and independently of it: a hook returns a map
+  and a row has no duration until its own answer lands.
+
+  Three at a time, with one worker per slot taking the next path as it finishes rather than fixed
+  batches — a batch waits for its slowest member, so one long file would stall two idle slots. Paths
+  already asked about are remembered across tree rebuilds, or every watcher event would re-probe the
+  whole project.
+
+  A file that cannot be read shows **nothing**, not a dash: a row reading `—` beside rows reading times
+  draws the eye to exactly the files that cannot be cut.

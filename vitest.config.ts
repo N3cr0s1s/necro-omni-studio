@@ -16,6 +16,9 @@ export default defineConfig({
       'packages/*/src/**/*.test.tsx',
       'apps/desktop/src/**/*.test.ts',
       'apps/desktop/src/**/*.test.tsx',
+      // The harnesses' own shared code. It is plain `.mjs` and outside `src`, and it decides which
+      // processes to kill — which is not a decision that should be the only untested one here.
+      'apps/desktop/harness/**/*.test.mjs',
     ],
     environment: 'node',
     // A DOM gap rather than a preference: Base UI constructs a `PointerEvent`, which jsdom does not

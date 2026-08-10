@@ -468,3 +468,43 @@ describe('files dragged in from outside', () => {
     expect(screen.getByRole('tree', { name: 'Project folder' })).toBeDefined();
   });
 });
+
+/*
+ * How long each piece of media is.
+ *
+ * The one fact worth having while scanning a folder of takes, and the rows carried none — choosing
+ * between four interviews meant opening each in turn. It arrives from a probe long after the tree
+ * does, so a row simply has none until its answer lands.
+ */
+describe('durations', () => {
+  /** `media/` is open by default, so its files are on screen without a click. */
+  const rowFor = (name: string) =>
+    screen.getAllByRole('treeitem').find((item) => item.textContent?.includes(name))!;
+
+  it('shows the length beside a media file', () => {
+    renderBrowser({ durations: new Map([['media/interview_a.mp4', '4:12']]) });
+
+    expect(within(rowFor('interview_a.mp4')).getByText('4:12')).toBeDefined();
+  });
+
+  it('shows nothing for a file whose probe has not landed', () => {
+    // Not a dash. A row reading `—` beside rows reading times draws the eye to the files that cannot
+    // be cut, which is the opposite of what the column is for.
+    renderBrowser({ durations: new Map([['media/interview_a.mp4', '4:12']]) });
+
+    expect(within(rowFor('broll_city.mov')).queryByText(/\d+:\d\d/)).toBeNull();
+  });
+
+  it('shows nothing at all when no probe has answered yet', () => {
+    renderBrowser();
+
+    expect(screen.queryByText('4:12')).toBeNull();
+  });
+
+  it('leaves a folder´s own trailing count alone', () => {
+    // Directories say how many items they hold; a duration must not displace that.
+    renderBrowser({ durations: new Map([['media/interview_a.mp4', '4:12']]) });
+
+    expect(within(rowFor('notes')).getByText('2')).toBeDefined();
+  });
+});

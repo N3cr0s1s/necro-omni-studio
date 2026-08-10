@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright';
 import { buildFirst } from '../harness/build-first.mjs';
+import { armCleanup, track } from '../harness/children.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
@@ -165,6 +166,9 @@ const userData = join(work, 'user-data');
 mkdirSync(userData, { recursive: true });
 writeFileSync(join(userData, 'session.json'), JSON.stringify({ lastProject: project }, null, 2));
 
+// Armed before anything is spawned: a crash between the two is the window that gets left behind.
+armCleanup();
+
 buildFirst(desktop, { pass, fail });
 
 /** Starts a shell against a given `userData` and connects to it. */
@@ -175,15 +179,17 @@ async function launch(dataDir) {
    * and never need a mapped window; three per run, several runs an hour, is a window stealing focus
    * from whoever is using the machine. `NOS_WATCH=1` shows them for when a run has to be seen.
    */
-  const child = spawn(
-    'npx',
-    ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${dataDir}`],
-    {
-      cwd: desktop,
-      stdio: 'ignore',
-      detached: true,
-      env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
-    },
+  const child = track(
+    spawn(
+      'npx',
+      ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${dataDir}`],
+      {
+        cwd: desktop,
+        stdio: 'ignore',
+        detached: true,
+        env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
+      },
+    ),
   );
   let connected;
   for (let attempt = 0; attempt < 60 && connected === undefined; attempt += 1) {

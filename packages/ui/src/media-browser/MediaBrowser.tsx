@@ -68,6 +68,14 @@ export interface BrowserMenuTarget {
 export interface MediaBrowserProps {
   readonly tree: DirectoryNode;
   /**
+   * How long each piece of media is, by path, for the rows that have one.
+   *
+   * Supplied rather than derived: a duration is inside the container, not on the filesystem, so it
+   * arrives from a probe long after the tree does. A row with no entry simply shows none — which is
+   * also the honest state for a note, a shader or a file the sidecar could not read.
+   */
+  readonly durations?: ReadonlyMap<string, string> | undefined;
+  /**
    * Whether a project is open at all.
    *
    * The tree cannot carry this: an empty project and no project both arrive as a directory with no
@@ -143,6 +151,7 @@ const DEFAULT_EXPANDED: readonly string[] = ['media', 'generated', 'notes'];
 
 export function MediaBrowser({
   tree,
+  durations,
   projectOpen,
   onImportFiles,
   watcher,
@@ -282,6 +291,7 @@ export function MediaBrowser({
                   {...(onRename !== undefined ? { onRename } : {})}
                   {...(onMove !== undefined ? { onMove } : {})}
                   renaming={renamingPath === row.node.path}
+                  {...(durations !== undefined ? { durations } : {})}
                 />
               ))
             )}
@@ -497,8 +507,10 @@ function TreeRow({
   renaming = false,
   onRename,
   onMove,
+  durations,
 }: {
   readonly row: Row;
+  readonly durations?: ReadonlyMap<string, string> | undefined;
   readonly expanded: boolean;
   readonly selected: boolean;
   readonly onToggle: (path: string) => void;
@@ -633,7 +645,7 @@ function TreeRow({
           <span className="truncate">{node.name}</span>
         )}
 
-        <RowMeta node={node} />
+        <RowMeta node={node} {...(durations !== undefined ? { durations } : {})} />
       </div>
     </ActionMenu>
   );
@@ -686,9 +698,29 @@ function RowNameField({
  * retention policy, so the user cleans it by hand), the others their item count. `cache/` is
  * labelled derived so it reads as safe to delete.
  */
-function RowMeta({ node }: { readonly node: TreeNode }): ReactNode {
+function RowMeta({
+  node,
+  durations,
+}: {
+  readonly node: TreeNode;
+  readonly durations?: ReadonlyMap<string, string> | undefined;
+}): ReactNode {
   if (node.kind === 'file') {
-    return null;
+    /*
+     * How long it is, once a probe has said.
+     *
+     * The one fact worth having while scanning a folder of takes, and the row carried none: choosing
+     * between four interviews meant opening each in turn. Nothing where there is no answer yet, and
+     * nothing for a note or a shader — a row reading `—` beside rows reading times would draw the eye
+     * to the files that cannot be cut.
+     *
+     * Not the byte size. A file's length is what an edit is made of; its size on disk is a fact about
+     * the codec, and putting both on one row would make the useful one harder to find.
+     */
+    const duration = durations?.get(node.path);
+    return duration === undefined ? null : (
+      <span className="ml-auto font-mono text-xs text-muted-foreground tabular-nums">{duration}</span>
+    );
   }
 
   if (node.name === 'cache') {
