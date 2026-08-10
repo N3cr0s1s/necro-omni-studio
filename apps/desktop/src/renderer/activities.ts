@@ -32,6 +32,14 @@ export interface GeneratorActions {
    * that would refuse is worse than offering none.
    */
   readonly onRetry?: ((group: JobGroupId) => void) | undefined;
+  /**
+   * Shows a finished run's output in the file manager, or absent where there is no shell to ask.
+   *
+   * The third of the mockup's `retry · cancel · reveal in folder`. A generation that succeeded leaves
+   * files in `generated/` under names nobody chose — a seed and a key — and the only way to reach one
+   * was to hunt for it in the browser by timestamp.
+   */
+  readonly onReveal?: ((path: string) => void) | undefined;
 }
 
 export function generatorActivities(
@@ -53,6 +61,20 @@ export function generatorActivities(
         ? [{ id: `retry:${run.id}`, label: 'Run again', run: () => actions.onRetry!(group.id) }]
         : [];
 
+    /*
+     * The first output, on a run that produced one.
+     *
+     * The first rather than all of them: a run declares one primary output and any companions — a
+     * video and its poster frame — and three buttons named `Show` would ask the user to know which
+     * key is which. Revealing the primary puts them in the folder holding every one of them, which is
+     * the thing they were actually after.
+     */
+    const output = run.outputs[0];
+    const reveal =
+      run.status === 'complete' && output !== undefined && actions.onReveal !== undefined
+        ? [{ id: `reveal:${run.id}`, label: 'Show in folder', run: () => actions.onReveal!(output.path) }]
+        : [];
+
     return {
       id: `run:${run.id}`,
       kind: 'generate',
@@ -68,7 +90,7 @@ export function generatorActivities(
           : { label: 'seed', value: String(run.seed) },
         ...(group === undefined ? [] : paramFacts(group.params)),
       ],
-      ...(retry.length > 0 ? { actions: retry } : {}),
+      ...(retry.length > 0 || reveal.length > 0 ? { actions: [...retry, ...reveal] } : {}),
       ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
       ...(run.finishedAt !== undefined ? { finishedAt: run.finishedAt } : {}),
     } satisfies Activity;

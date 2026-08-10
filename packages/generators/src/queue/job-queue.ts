@@ -76,7 +76,18 @@ export interface JobGroup {
 export interface QueueSnapshot {
   readonly groups: readonly JobGroup[];
   readonly runs: readonly JobRun[];
-  /** Runs not yet finished, for the `2 jobs` chip in the title bar. */
+  /**
+   * Runs not yet finished.
+   *
+   * The mockups put this in a `2 jobs` chip on the title bar; issue #22 moved background work to a
+   * persistent status bar instead, and the count surfaces there — so nothing reads this today.
+   *
+   * Kept rather than removed, unlike `planValidUntil` and the duplicate `snapPoints`: those promised
+   * something that was **not true**, and wiring either up would have made the application worse. This
+   * one is merely redundant with `runs.filter(...)`, and a consumer that used it would be right. The
+   * comment is what needed fixing — a field whose doc names a UI that does not exist reads as a
+   * feature someone forgot to finish.
+   */
   readonly activeCount: number;
 }
 
@@ -164,7 +175,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
   const inFlight = new Set<Promise<void>>();
   const listeners = new Set<(snapshot: QueueSnapshot) => void>();
 
-  function snapshot(): QueueSnapshot {
+  function build(): QueueSnapshot {
     const runList = [...runs.values()];
     return {
       groups: [...groups.values()],
@@ -175,8 +186,29 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
     };
   }
 
+  /*
+   * The current snapshot, held rather than rebuilt per call.
+   *
+   * The same contract the GPU semaphore was given, and for the same reason — applied here at the same
+   * time deliberately, because "the same fix in one place and not its neighbour" is the way this
+   * project's defects keep arriving, and these two are the same shape in the same package.
+   *
+   * A `subscribe` + `getSnapshot` pair is a store, and React's `useSyncExternalStore` compares
+   * snapshots by **identity**: one that never returns the same object twice reports a change on every
+   * render, which is a loop rather than a stale value. Today's consumer copies into state in an
+   * effect and is unaffected; the next one to reach for the correct hook would not have been.
+   *
+   * Safe to rebuild only here because every mutation publishes — `updateRun`, `enqueue`,
+   * `dismissGroup` and `clear` all end in one, and `recomputeGroup` has a single caller that does.
+   */
+  let current: QueueSnapshot = build();
+
+  function snapshot(): QueueSnapshot {
+    return current;
+  }
+
   function publish(): void {
-    const current = snapshot();
+    current = build();
     for (const listener of [...listeners]) listener(current);
   }
 

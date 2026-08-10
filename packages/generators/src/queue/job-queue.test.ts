@@ -472,3 +472,39 @@ describe('changing project', () => {
     expect(latest.groups).toEqual([]);
   });
 });
+
+/*
+ * The snapshot's identity, as a contract.
+ *
+ * Given the same treatment as the GPU semaphore's, at the same time and on purpose: these are two
+ * `subscribe` + `getSnapshot` pairs in one package, and the way this project's defects arrive is a fix
+ * applied to one and not its neighbour. Every existing test here compares by value and would have gone
+ * on passing while the first consumer to use `useSyncExternalStore` looped.
+ */
+describe('the snapshot´s identity', () => {
+  it('is the same object until something changes', () => {
+    const { queue } = setup();
+    expect(queue.getSnapshot()).toBe(queue.getSnapshot());
+  });
+
+  it('is a new object once a group has been enqueued', () => {
+    const { queue } = setup();
+    const before = queue.getSnapshot();
+
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+
+    expect(queue.getSnapshot()).not.toBe(before);
+    expect(queue.getSnapshot()).toBe(queue.getSnapshot());
+  });
+
+  it('hands listeners the very object a later read returns', () => {
+    // Otherwise a subscriber that keeps what it was given disagrees with one that asks — the two
+    // halves of the same store reporting different values for the same moment.
+    const { queue } = setup();
+    const seen: unknown[] = [];
+    queue.subscribe((snapshot) => seen.push(snapshot));
+
+    queue.enqueue({ manifest: manifest(), params: {}, target });
+    expect(seen.at(-1)).toBe(queue.getSnapshot());
+  });
+});

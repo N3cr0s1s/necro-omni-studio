@@ -1712,10 +1712,21 @@ export function App(): ReactNode {
     [library.registry, runtime],
   );
 
+  /**
+   * Opens the file manager on a project-relative asset.
+   *
+   * The bridge takes a path and the queue records one, so this is a conversion and a call. It exists
+   * as its own callback rather than inline so the identity is stable across renders — the activity
+   * list is rebuilt from it on every queue tick.
+   */
+  const revealAsset = useCallback((path: string) => {
+    void bridge()?.revealInFolder(path);
+  }, []);
+
   const activities = useMemo(
     () =>
       orderActivities([
-        ...generatorActivities(runtime.snapshot, { onRetry: retryGroup }),
+        ...generatorActivities(runtime.snapshot, { onRetry: retryGroup, onReveal: revealAsset }),
         ...exportActivity(exportRun.progress),
         ...derivationActivity(proxies.pending.length, proxies.ready),
         ...segmentationActivity(masks.session?.running === true, masks.session?.progress, masks.error),

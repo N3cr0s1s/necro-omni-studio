@@ -169,3 +169,58 @@ describe('acting on a run', () => {
     expect(generatorActivities(failed())[0]?.actions).toBeUndefined();
   });
 });
+
+/*
+ * Reaching what a generation made.
+ *
+ * The third of the mockup's `retry · cancel · reveal in folder`, and it costs one entry now that
+ * `actions` exists — which is the test of that design rather than a claim about it.
+ *
+ * A finished run leaves files in `generated/` under names nobody chose, a seed and an output key, and
+ * the only way to reach one was to hunt for it in the browser by timestamp.
+ */
+describe('reaching a run´s output', () => {
+  const done = (outputs: JobRun['outputs']): QueueSnapshot =>
+    snapshot(
+      [group({ id: 'g1' as JobGroup['id'], status: 'complete' })],
+      [
+        run({
+          id: 'r1' as JobRun['id'],
+          group: 'g1' as JobGroup['id'],
+          status: 'complete',
+          outputs,
+        }),
+      ],
+    );
+
+  const primary = [
+    { key: 'video', type: 'video', path: 'generated/t2v_0117_seed4471.mp4' },
+    { key: 'poster', type: 'image', path: 'generated/t2v_0117_seed4471.png' },
+  ] as unknown as JobRun['outputs'];
+
+  it('offers to show a finished run in the file manager', () => {
+    const [activity] = generatorActivities(done(primary), { onReveal: () => undefined });
+    expect(activity?.actions?.map((action) => action.label)).toEqual(['Show in folder']);
+  });
+
+  it('reveals the first output, not one button per file', () => {
+    // A video and its poster frame are one result. Three buttons named `Show` would ask the user to
+    // know which output key is which, and the folder holds all of them anyway.
+    const seen: string[] = [];
+    const [activity] = generatorActivities(done(primary), { onReveal: (path) => seen.push(path) });
+    activity?.actions?.[0]?.run();
+    expect(seen).toEqual(['generated/t2v_0117_seed4471.mp4']);
+  });
+
+  it('offers nothing for a run that produced no files', () => {
+    expect(generatorActivities(done([]), { onReveal: () => undefined })[0]?.actions).toBeUndefined();
+  });
+
+  it('offers nothing while the run is still going', () => {
+    const going = snapshot(
+      [group({ id: 'g1' as JobGroup['id'] })],
+      [run({ id: 'r1' as JobRun['id'], group: 'g1' as JobGroup['id'], status: 'running', outputs: primary })],
+    );
+    expect(generatorActivities(going, { onReveal: () => undefined })[0]?.actions).toBeUndefined();
+  });
+});

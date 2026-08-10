@@ -4195,3 +4195,31 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   the reason is shown had to be scoped to the popover — the bar's summary says it too, so the loose
   query matched twice. **That was the component being right and the test being sloppy**, which is worth
   writing down because it is the failure that most often gets "fixed" in the wrong file.
+
+- 2026-08-10: The third job action, and the neighbour fixed at the same time.
+
+  **`Show in folder`**, the last of the mockup's `retry · cancel · reveal in folder`. A generation that
+  succeeded leaves files in `generated/` under names nobody chose — a seed and an output key — and the
+  only way to reach one was hunting the browser by timestamp. It cost one entry in `activities.ts`,
+  which is the test of yesterday's `actions` slot rather than a claim about it.
+
+  The **first** output, not one button per file. A run declares a primary output and its companions —
+  a video and its poster frame — and three buttons all named `Show` would ask the user to know which
+  key is which. Revealing the primary opens the folder holding every one of them, which is the thing
+  they were after.
+
+  **And the job queue got the semaphore's snapshot fix, at the same time and on purpose.** These are
+  two `subscribe` + `getSnapshot` pairs in one package; `getSnapshot` rebuilt per call in both. Today's
+  consumer copies into state in an effect and is unaffected, so nothing was broken — but the next one
+  to reach for the *correct* hook would have looped, exactly as the GPU readout did. Every existing
+  test compares by value and would have gone on passing.
+
+  This is the fourth time the phrase has been written here, so it is now a rule rather than an
+  observation: **when a fix lands, look for the neighbour with the same shape before moving on.** The
+  teardown retry, the track lock, the harness build guard, and now this.
+
+  One thing deliberately *not* deleted: `QueueSnapshot.activeCount` is computed and read by nothing,
+  and its comment named a `2 jobs` chip on the title bar that issue #22 replaced with the status bar.
+  Unlike `planValidUntil` and the duplicate `snapPoints`, using it would be **correct** — it is merely
+  redundant with `runs.filter(...)`. So the comment was the defect, not the field. A doc that names a
+  UI which does not exist reads as a feature someone forgot to finish.
