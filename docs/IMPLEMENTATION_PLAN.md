@@ -4489,3 +4489,42 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   The larger lesson is the one that cost the time: *a mechanical fix applied across files that contain
   hand-reasoned exceptions will delete the reasoning.* Both directions of this change were wrong in the
   same way, and the file said so in a comment before I started.
+
+- 2026-08-10: A README, from photographs of the running application (issue #39).
+
+  The issue asked for pictures and a video **of the app**, a centred title, and no invented prose. So
+  the pictures had to be *of the app*: a mockup, or a drawing of one, would be the thing the issue asked
+  not to have. `apps/desktop/capture/` drives the real shell exactly as the checks do and photographs
+  what appears.
+
+  **The project it photographs is synthesized, not committed.** A screenshot of an empty timeline says
+  nothing about an editor, and committing sample footage to prove that would be paying for the picture
+  twice — ffmpeg makes four shots and a tone, and the document naming them is a module of its own
+  because a hand-written document can be wrong. It is now checked by the suite, which is how the first
+  one's four faults were found in a millisecond instead of by watching a launch time out: on disk a
+  constant parameter is a bare number and `{ kind: 'static', value: 0 }` is the *in-memory* shape.
+
+  **Three corrections to the capture, each from looking at the result rather than assuming it.**
+  A forced click at a wide clip's centre lands on the drag zone, so the first two pictures showed an
+  unselected clip and a panel saying so — the label's corner selects. A double-click renames a clip
+  rather than opening its lanes; the disclosure the body already offers does that, and only exists on a
+  clip that *has* an animation. And recording real-time playback produced a black preview and `1 layers
+  still decoding` across the dissolve — true of the first play of an unwarmed timeline, and a picture of
+  the decoder rather than of the editor. A warm-up pass did not help, because each play seeks and
+  decodes again. Stepping ten frames at a time is paced by the screenshot, so every recorded frame is
+  one the compositor had finished, and the walk covers the whole cut instead of its first two seconds.
+
+  A GIF as well as the mp4, because GitHub renders an `<img>` inline and does not reliably play a
+  `<video>` pointing into the repository. Two ffmpeg passes with a generated palette: the default
+  216-colour web palette bands a dark interface, and a dark interface is the entire subject. 637 KB.
+
+  `harness/shell.mjs` came out of this — the capture was the fourth thing to need "spawn Electron on a
+  free port and retry the connection", and the three copies had already drifted in attempt counts and
+  intervals.
+
+  **And it found a performance regression of my own making.** `perfcheck` reported a 50 ms block once
+  and passed on re-run, so the number was not the evidence — but the cause was there to find:
+  `StoreSnapshot.steps` walked the whole history on **every publish**, and a publish happens per pointer
+  move during a coalesced drag. It is a lazy getter now, cached per snapshot: lazy alone would hand back
+  a new array per read, and the shell memoizes its history controls on that identity. An intermittent
+  number was a true signal about work on the wrong path.

@@ -263,3 +263,39 @@ describe('markSaved and reset', () => {
     expect(snapshot.dirty).toBe(false);
   });
 });
+
+/*
+ * The step list is lazy, and stable once read.
+ *
+ * A snapshot is built on every publish, and a publish happens per pointer move during a coalesced
+ * drag — so walking the history here is work on the one path with a 16 ms budget, for a list almost
+ * nothing reads. Lazy is only half of it: a getter that recomputed would hand back a new array per
+ * read, and the shell memoizes on this value's identity.
+ */
+describe('the history steps on a snapshot', () => {
+  it('are the same array on every read of one snapshot', () => {
+    const store = createDocumentStore(makeDocument());
+    store.commit('split', (document) => document);
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.steps).toBe(snapshot.steps);
+  });
+
+  it('are rebuilt for the next snapshot, so a new step appears', () => {
+    const store = createDocumentStore(makeDocument());
+    const before = store.getSnapshot().steps.length;
+
+    store.commit('move clip', (document) => ({ ...document, name: 'moved' }));
+
+    expect(store.getSnapshot().steps.length).toBe(before + 1);
+    expect(store.getSnapshot().steps.at(-1)?.label).toBe('move clip');
+  });
+
+  it('marks the present at offset zero', () => {
+    const store = createDocumentStore(makeDocument());
+    store.commit('move clip', (document) => ({ ...document, name: 'moved' }));
+
+    const present = store.getSnapshot().steps.filter((step) => step.offset === 0);
+    expect(present).toHaveLength(1);
+  });
+});

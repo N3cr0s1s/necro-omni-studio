@@ -21,30 +21,19 @@
  *
  * Exits non-zero if any expectation fails, so it can gate a release.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:net';
-import { chromium } from 'playwright';
 import { buildFirst } from '../harness/build-first.mjs';
-import { armCleanup, track } from '../harness/children.mjs';
+import { armCleanup } from '../harness/children.mjs';
+import { launchShell, stopShell } from '../harness/shell.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..');
 
 /** A port nothing else holds, asked of the operating system rather than picked. */
-async function freePort() {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address();
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
 let failures = 0;
 function fail(message) {
@@ -173,43 +162,7 @@ buildFirst(desktop, { pass, fail });
 
 /** Starts a shell against a given `userData` and connects to it. */
 async function launch(dataDir) {
-  const port = await freePort();
-  /*
-   * Hidden unless someone asks to watch. The harnesses drive a real shell over the debugging port
-   * and never need a mapped window; three per run, several runs an hour, is a window stealing focus
-   * from whoever is using the machine. `NOS_WATCH=1` shows them for when a run has to be seen.
-   */
-  const child = track(
-    spawn(
-      'npx',
-      ['electron', '.', `--remote-debugging-port=${port}`, '--no-sandbox', `--user-data-dir=${dataDir}`],
-      {
-        cwd: desktop,
-        stdio: 'ignore',
-        detached: true,
-        env: { ...process.env, NOS_HEADLESS: process.env.NOS_WATCH === '1' ? '0' : '1' },
-      },
-    ),
-  );
-  let connected;
-  for (let attempt = 0; attempt < 60 && connected === undefined; attempt += 1) {
-    try {
-      connected = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    }
-  }
-  if (connected === undefined) throw new Error('the shell never exposed a debugging port');
-  return { child, browser: connected };
-}
-
-/** The group, not the process: Electron spawns renderers and a sidecar. */
-function stop(child) {
-  try {
-    process.kill(-child.pid, 'SIGTERM');
-  } catch {
-    child.kill('SIGTERM');
-  }
+  return launchShell({ desktop, dataDir });
 }
 
 const started = await launch(userData);
@@ -1418,7 +1371,7 @@ try {
   await browser.close().catch(() => undefined);
   // The group, not the process: Electron spawns renderers and a sidecar, and killing only the parent
   // leaves them holding the port for the next run.
-  stop(electron);
+  stopShell(electron);
   if (failures > 0) console.error(`  the run is left in ${work}`);
 }
 
@@ -1465,7 +1418,7 @@ try {
   if (existsSync(recoveryFile)) pass('an edit is written to the recovery file');
   else fail('no recovery file was written within forty seconds of an edit');
 
-  stop(crashed.child);
+  stopShell(crashed.child);
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   const after = await launch(userData);
@@ -1496,7 +1449,7 @@ try {
   }
 
   await after.browser.close().catch(() => undefined);
-  stop(after.child);
+  stopShell(after.child);
 } finally {
   await crashed?.browser.close().catch(() => undefined);
 }
@@ -1550,7 +1503,7 @@ try {
   else fail(`a fresh start raised ${raised.length}: ${raised[0]}`);
 } finally {
   await fresh?.browser.close().catch(() => undefined);
-  if (fresh !== undefined) stop(fresh.child);
+  if (fresh !== undefined) stopShell(fresh.child);
 }
 
 /*
@@ -1594,7 +1547,7 @@ try {
   }
 } finally {
   await brandNew?.browser.close().catch(() => undefined);
-  if (brandNew !== undefined) stop(brandNew.child);
+  if (brandNew !== undefined) stopShell(brandNew.child);
 }
 
 /*
@@ -1675,7 +1628,7 @@ try {
   }
 } finally {
   await broken?.browser.close().catch(() => undefined);
-  if (broken !== undefined) stop(broken.child);
+  if (broken !== undefined) stopShell(broken.child);
   // Retried: the shell is still shutting down and may write into the folder while it is being
   // removed, which surfaces as ENOTEMPTY and would fail a run that actually passed.
   if (failures === 0) rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

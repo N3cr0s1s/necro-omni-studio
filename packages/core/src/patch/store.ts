@@ -231,6 +231,19 @@ export function createDocumentStore(
 const UNSAVED = {} as TimelineDocument;
 
 function buildSnapshot(history: HistoryState<TimelineDocument>, saved: TimelineDocument): StoreSnapshot {
+  /*
+   * The step list, computed on first read and then held.
+   *
+   * A snapshot is built on **every** publish, and a publish happens per pointer move during a coalesced
+   * drag — so walking the whole history to build two arrays here is work on the one path in this
+   * application with a 16 ms budget. Almost nothing reads it: the title bar's list, when it is open.
+   *
+   * Lazy *and* cached, not merely lazy. A getter that recomputed would hand back a new array on every
+   * read, and the shell memoizes its history controls on this value's identity — so a fresh array per
+   * render is a re-render per render.
+   */
+  let cachedSteps: readonly HistoryStep[] | undefined;
+
   return {
     document: history.present.document,
     canUndo: canUndo(history),
@@ -240,6 +253,9 @@ function buildSnapshot(history: HistoryState<TimelineDocument>, saved: TimelineD
     // Reference equality is sound because every edit produces a new document object.
     dirty: history.present.document !== saved,
     gestureOpen: history.openGesture !== undefined,
-    steps: steps(history),
+    get steps(): readonly HistoryStep[] {
+      cachedSteps ??= steps(history);
+      return cachedSteps;
+    },
   };
 }

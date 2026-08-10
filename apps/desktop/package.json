@@ -30,6 +30,7 @@
     "start": "npm run build && electron .",
     "exportcheck": "node exportcheck/run.mjs",
     "perfcheck": "node perfcheck/run.mjs",
-    "smokecheck": "node smokecheck/run.mjs"
+    "smokecheck": "node smokecheck/run.mjs",
+    "capture": "node capture/run.mjs"
   }
 }
