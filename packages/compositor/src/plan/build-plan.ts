@@ -21,6 +21,7 @@ import {
   framesToSeconds,
   trackClips,
   clamp01,
+  PASS_WARNING_THRESHOLD,
 } from '@nos/core';
 import type {
   EffectPass,
@@ -360,8 +361,13 @@ export function resolveUniforms(
  *
  * The spec asks for a *warning* above eight passes, not a refusal: a heavy stack is a legitimate
  * choice on a short clip, and the user is the one who knows whether the trade is worth it.
+ *
+ * The threshold is `@nos/core`'s, re-exported rather than restated. It had been written out three
+ * times — here, in the document module, and as a default parameter on the clip body — so the badge on
+ * a clip and the warning on a frame could have disagreed about what the spec says, silently, from a
+ * one-line edit.
  */
-export const PASS_WARNING_THRESHOLD = 8;
+export { PASS_WARNING_THRESHOLD };
 
 export function exceedsPassBudget(plan: RenderPlan): boolean {
   return plan.passCount > PASS_WARNING_THRESHOLD;

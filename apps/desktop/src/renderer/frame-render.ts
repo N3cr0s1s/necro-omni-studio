@@ -1,6 +1,6 @@
 import type { EffectRegistry } from '@nos/effects';
 import type { FrameIndex, TimelineDocument } from '@nos/core';
-import { type RenderPlan, buildRenderPlan } from '@nos/compositor';
+import { type RenderPlan, PASS_WARNING_THRESHOLD, buildRenderPlan, exceedsPassBudget } from '@nos/compositor';
 import type { MediaTextures, TextRasterProblem } from './media-textures.js';
 import type { MaskSource } from './mask-source.js';
 import { textCacheKeyFor, textClipsOf } from './text-plan.js';
@@ -77,4 +77,26 @@ export async function prepareFrame(media: MediaTextures, request: FrameRequest):
   await media.prepare(plan.items, wait === true ? { wait: true } : {});
 
   return { plan, textProblems };
+}
+
+/**
+ * What the preview should say about a frame's cost, or nothing when it is within budget.
+ *
+ * §8 asks for a warning above eight passes and the compositor has answered that question since M4 —
+ * `exceedsPassBudget` was written, tested, and **called by nothing**, so the budget existed everywhere
+ * except on screen. The timeline badges a *clip* whose own stack is heavy, which is a different
+ * question with a different answer: three clips of four passes each earn no badge between them and
+ * still cost twelve passes on the frame being drawn. The frame is what the budget is about.
+ *
+ * A warning and not a refusal, per the spec: a heavy stack is a legitimate choice on a short clip, and
+ * the user is the one who knows whether the trade is worth it. So it names the number and the budget
+ * and stops — "12 passes, above the 8-pass budget" leaves the decision where it belongs, where
+ * "too many effects" would be an instruction.
+ *
+ * Pure, and separate from the component, for the reason `preview-fit` is: the preview needs a real
+ * WebGL2 context to render at all, so anything only reachable through it is effectively untestable.
+ */
+export function passBudgetNote(plan: RenderPlan | undefined): string | undefined {
+  if (plan === undefined || !exceedsPassBudget(plan)) return undefined;
+  return `${plan.passCount} passes, above the ${PASS_WARNING_THRESHOLD}-pass budget`;
 }

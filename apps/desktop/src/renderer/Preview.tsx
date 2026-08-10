@@ -12,7 +12,7 @@ import {
 import type { EffectRegistry } from '@nos/effects';
 import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { createMediaTextures } from './media-textures.js';
-import { prepareFrame } from './frame-render.js';
+import { passBudgetNote, prepareFrame } from './frame-render.js';
 import type { SidecarInfo } from '../main/ipc-contract.js';
 import type { MaskSource } from './mask-source.js';
 
@@ -86,6 +86,8 @@ export function Preview({
   const [stats, setStats] = useState<RenderStats | undefined>(undefined);
   /** Items the plan carried, so "nothing is visible" can be told apart from "nothing was planned". */
   const [planned, setPlanned] = useState(0);
+  /** The spec's §8 pass budget, as a sentence, or absent while the frame is within it. */
+  const [passBudget, setPassBudget] = useState<string | undefined>(undefined);
   const [textProblems, setTextProblems] = useState<readonly { clip: string; detail: string }[]>([]);
   const [glError, setGlError] = useState<string | undefined>(undefined);
 
@@ -147,6 +149,7 @@ export function Preview({
       const current = compositorRef.current;
       if (current === undefined) return;
       setPlanned(plan.items.length);
+      setPassBudget(passBudgetNote(plan));
       setStats(current.render(plan, null));
     });
   }, [doc, frame, effects, media, masks]);
@@ -225,6 +228,17 @@ export function Preview({
               <span className="flex items-center gap-1.5">
                 <TriangleAlertIcon className="size-3.5" />
                 {`${stats?.layersSkipped} layers still decoding`}
+              </span>
+            )}
+            {/*
+              A warning rather than an error, which is what §8 asks for: a heavy stack is a legitimate
+              choice on a short clip. It sits beside the pass count it is about, so the number and the
+              judgement on it are read together.
+            */}
+            {passBudget !== undefined && (
+              <span className="flex items-center gap-1.5 text-amber-500">
+                <TriangleAlertIcon className="size-3.5" />
+                {passBudget}
               </span>
             )}
             {textProblems.length > 0 && (

@@ -13,7 +13,8 @@ import {
 } from '@nos/core';
 import { contentCacheKey } from '@nos/text';
 import { BUILTIN_EFFECTS, createEffectRegistry } from '@nos/effects';
-import { prepareFrame } from './frame-render.js';
+import { type RenderPlan, PASS_WARNING_THRESHOLD } from '@nos/compositor';
+import { passBudgetNote, prepareFrame } from './frame-render.js';
 import type { MediaTextures } from './media-textures.js';
 import type { MaskSource } from './mask-source.js';
 import { createTextClip } from './TextInspector.js';
@@ -179,5 +180,38 @@ describe('what the preview and the export share', () => {
     });
 
     expect(exported.plan).toEqual(preview.plan);
+  });
+});
+
+/*
+ * The spec's §8 effect-stack budget, which had been computed and never shown.
+ *
+ * `exceedsPassBudget` was written, tested and called by nothing, so the number existed everywhere
+ * except on screen. The clip badge on the timeline answers a different question: three clips of four
+ * passes each earn no badge between them and still cost twelve passes on the frame being drawn.
+ */
+describe('the pass budget', () => {
+  const planOf = (passCount: number) => ({ passCount, items: [] }) as unknown as RenderPlan;
+
+  it('says nothing about a frame within the budget', () => {
+    expect(passBudgetNote(planOf(PASS_WARNING_THRESHOLD))).toBeUndefined();
+  });
+
+  it('says nothing when there is no plan yet', () => {
+    expect(passBudgetNote(undefined)).toBeUndefined();
+  });
+
+  it('names the count and the budget once the frame is over it', () => {
+    // Both numbers, because the count alone does not say whether it is a problem and the budget alone
+    // does not say by how much it is missed.
+    const note = passBudgetNote(planOf(PASS_WARNING_THRESHOLD + 4));
+    expect(note).toContain(String(PASS_WARNING_THRESHOLD + 4));
+    expect(note).toContain(String(PASS_WARNING_THRESHOLD));
+  });
+
+  it('warns rather than instructs, since the spec asks for a warning and not a refusal', () => {
+    // A heavy stack is a legitimate choice on a short clip. "Too many effects" would be telling the
+    // user what to do about a trade only they can price.
+    expect(passBudgetNote(planOf(20))?.toLowerCase()).not.toContain('too many');
   });
 });

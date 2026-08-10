@@ -110,6 +110,31 @@ const project = join(work, 'smokecheck');
 cpSync(join(desktop, 'exportcheck', 'fixture'), project, { recursive: true });
 
 /*
+ * A title heavy enough to exceed §8's eight-pass budget, written into the copy rather than driven
+ * through the picker.
+ *
+ * Nine adds through the UI is nine chances for the harness to be measuring something else — a picker
+ * that toggles, a clip the frame does not show, a stack read from a document that has not come back
+ * down yet. Every one of those failed as "the application shows no warning", which is the harness
+ * being wrong about the setup rather than the application being wrong about the frame. The fixture
+ * states the condition instead, and the window is asked only the question this check is about: does a
+ * frame over the budget say so.
+ */
+{
+  const file = join(project, 'project.json');
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  for (const track of doc.sequence.tracks) {
+    for (const clip of track.clips ?? []) {
+      if (clip.id !== 'title_1') continue;
+      for (let i = 0; i < 9; i += 1) {
+        clip.effects.push({ id: `heavy_${i}`, effect: 'film_grain', enabled: true, params: {} });
+      }
+    }
+  }
+  writeFileSync(file, JSON.stringify(doc, null, 2));
+}
+
+/*
  * The fixture's audio, synthesized as `exportcheck` does — the file is not in the repository, so a
  * copy of the fixture alone leaves the audio clip pointing at nothing and the sidecar rightly answers
  * 404 when the waveform is asked for. That is the harness being wrong, not the application.
@@ -1239,6 +1264,36 @@ try {
     pass('an import cannot write outside the project');
   } else {
     fail(`the import did not refuse a path outside the project — ${escaped}`);
+  }
+
+  /*
+   * The spec's §8 pass budget, on the frame rather than on a clip.
+   *
+   * `exceedsPassBudget` was written, tested, and called by nothing — the budget existed everywhere
+   * except on screen, which is the exact shape of the bugs this harness keeps finding. So the fix is
+   * checked the way those were: in the running window, reading the strip a user reads.
+   *
+   * The frame and not the clip. The timeline badges a heavy *clip* already; what had never been shown
+   * is what the frame costs, which is what §8 is about and which three clips of four passes each
+   * exceed while none of them earns a badge.
+   */
+  await page
+    .getByRole('tab', { name: 'Editor' })
+    .click()
+    .catch(() => undefined);
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(2000);
+
+  const strip = await page.innerText('body').catch(() => '');
+  if (/above the 8-pass budget/.test(strip)) {
+    pass('a frame over the pass budget says so in the preview');
+  } else {
+    // What the strip does say, because a missing warning and a frame that never drew the heavy clip
+    // are different faults with different repairs.
+    const readout = /(\d+) layers\s+(\d+) passes/.exec(strip);
+    fail(
+      `a frame over the budget said nothing about it — the strip reads ${JSON.stringify(readout?.[0] ?? 'no layer/pass readout')}`,
+    );
   }
 
   if (errors.length > 0) {

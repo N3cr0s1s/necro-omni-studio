@@ -16,6 +16,7 @@ import {
   isGenerated,
   linkedPartner,
   passCount,
+  PASS_WARNING_THRESHOLD,
 } from '@nos/core';
 import { Badge } from '@nos/ui/components/ui/badge';
 import { Button } from '@nos/ui/components/ui/button';
@@ -157,7 +158,7 @@ export function ClipBody({
   onTrimStart,
   onTrimEnd,
   onFadeDrag,
-  passWarningThreshold = 8,
+  passWarningThreshold = PASS_WARNING_THRESHOLD,
   expanded = false,
   onToggleExpand,
   menu,

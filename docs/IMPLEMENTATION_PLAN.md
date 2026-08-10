@@ -3976,3 +3976,40 @@ undefined)` triggers a JavaScript _default parameter_ rather than overriding it,
   what draws it.
 
   Each fix was run against its mutant: restore the hand-rolled version and the new test fails.
+
+- 2026-08-10: The pass budget was computed and never shown, and three copies of the number that defines it.
+
+  §8 asks for a warning above eight passes. `exceedsPassBudget` was written, tested, and **called by
+  nothing** — the budget existed everywhere except on screen. The timeline badges a heavy *clip*, which
+  is a different question with a different answer: three clips of four passes each earn no badge
+  between them and still cost twelve passes on the frame being drawn. The frame is what §8 is about.
+
+  It now sits beside the pass count it judges, as a warning and not an error: a heavy stack is a
+  legitimate choice on a short clip. It names the number and the budget and stops — "12 passes, above
+  the 8-pass budget" leaves the decision where it belongs, where "too many effects" would be an
+  instruction.
+
+  `PASS_WARNING_THRESHOLD` was written out **three times** — in the document module, in the compositor,
+  and as a default parameter on the clip body. One definition now, so the badge on a clip and the
+  warning on a frame cannot come to disagree about what the spec says from a one-line edit.
+
+  **Four harness faults, all of which reported themselves as application faults.** The check drove the
+  UI to build a heavy frame, and each attempt failed with a message about the wrong component:
+
+  - `count()` is an immediate query with no auto-wait, so asking for the effect list on the line after
+    the click that opens it reads the DOM one commit early. Reported as *the application has no Film
+    Grain*.
+  - The picker is a **toggle**, and an earlier section leaves it open, so the first click closed it.
+    Reported the same way. A harness that assumes a control's state instead of reading it produces
+    failures about the wrong component.
+  - The fixture's video track is empty; at frame 0 the only layer is the title. Nine effects on "the
+    first clip in the DOM" landed on something the frame does not show, and the strip went on reading
+    `1 passes`. Reported as *a missing warning*.
+  - Nine adds landed as one, and the pacing fix did not help — so the cause was never established.
+
+  The last one is the lesson. **A setup with four ways to be wrong is not a check, it is a second
+  program to debug** — and every one of its failures accused the code under test. The fixture states
+  the condition now, and the window is asked only the question the check is about: does a frame over
+  the budget say so. The nine-adds behaviour is left unexplained on purpose rather than written up as
+  a finding: it was observed through a harness that was demonstrably wrong about three other things,
+  and that is not evidence.
